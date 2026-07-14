@@ -97,13 +97,40 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(populated by the roadmapper)_ | — | Pending |
+| PHYS-01 | Phase 1 | Pending |
+| PHYS-02 | Phase 1 | Pending |
+| PHYS-03 | Phase 1 | Pending |
+| FLIP-01 | Phase 2 | Pending |
+| FLIP-02 | Phase 2 | Pending |
+| FLIP-03 | Phase 2 | Pending |
+| FLIP-04 | Phase 2 | Pending |
+| LNCH-01 | Phase 3 | Pending |
+| LNCH-02 | Phase 3 | Pending |
+| TBL-01 | Phase 3 | Pending |
+| ELEM-01 | Phase 4 | Pending |
+| ELEM-02 | Phase 4 | Pending |
+| ELEM-03 | Phase 4 | Pending |
+| GAME-01 | Phase 4 | Pending |
+| GAME-02 | Phase 4 | Pending |
+| GAME-03 | Phase 4 | Pending |
+| RND-01 | Phase 5 | Pending |
+| RND-02 | Phase 5 | Pending |
+| RND-03 | Phase 5 | Pending |
+| AUD-01 | Phase 5 | Pending |
+| PLSH-01 | Phase 6 | Pending |
+| PLSH-02 | Phase 6 | Pending |
+| PLSH-03 | Phase 6 | Pending |
+| PLSH-04 | Phase 6 | Pending |
+| PLSH-05 | Phase 6 | Pending |
+| PLSH-06 | Phase 6 | Pending |
+| PLSH-07 | Phase 6 | Pending |
+| PLSH-08 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-15*
-*Last updated: 2026-07-15 after initial definition*
+*Last updated: 2026-07-15 after roadmap creation (traceability populated)*

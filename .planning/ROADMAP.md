@@ -1,0 +1,113 @@
+# Roadmap: Space Cadet Pinball — Browser Edition
+
+## Overview
+
+This roadmap is ordered by risk and dependency, not feature convenience. The entire risk profile lives in one place — a fast ball tunneling through thin geometry — so the physics core (Phase 1) is proven in isolation before any table exists, and the flippers (Phase 2, the project's Core Value) are their own phase because rotational collision is a distinct hard problem. Only once feel is retired does the real Space Cadet table get built (Phase 3), turned into a game with scoring and rules (Phase 4), dressed in procedural rendering and synthesized audio (Phase 5), and finally raised to portfolio-grade with juice and polish (Phase 6). Every phase yields something playable or observably testable.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Physics Core Spike** - Tunnel-proof, frame-rate-independent ball physics proven in isolation; engine decision locked
+- [ ] **Phase 2: Flippers & Feel** - Two keyboard flippers with rotational CCD, momentum transfer, and cradle — the Core Value
+- [ ] **Phase 3: Table, Plunger & Event Bus** - The real Space Cadet layout, a hold-to-charge plunger, and a typed collision-event bus
+- [ ] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works
+- [ ] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX
+- [ ] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score
+
+## Phase Details
+
+### Phase 1: Physics Core Spike
+**Goal**: A single ball obeys stable, heavy, tunnel-proof, frame-rate-independent 2D physics — provable in isolation before any table geometry or art exists.
+**Mode:** mvp
+**Depends on**: Nothing (first phase)
+**Requirements**: PHYS-01, PHYS-02, PHYS-03
+**Success Criteria** (what must be TRUE):
+  1. The ball moves under gravity, momentum, restitution, and friction and feels heavy and weighty, not floaty.
+  2. Flung at the thinnest wall and the fastest-moving test flipper at maximum speed for a 10-minute stress run, the ball never escapes the play area (no tunneling).
+  3. A resting ball sits perfectly still — no jitter, no corner-sticking — and total energy trends downward over time, never gaining speed.
+  4. Ball feel is identical at 60Hz, 120Hz, and 144Hz, and survives an alt-tab / tab-blur without the physics exploding.
+  5. The physics engine is chosen and locked (Planck.js `setBullet` vs. custom swept circle-vs-segment/arc solver), decided empirically by whichever proves easier to make provably tunnel-proof and to tune, with the physics module isolated behind ball/flipper/event interfaces and data structures kept N-ball-ready.
+**Plans**: TBD
+
+### Phase 2: Flippers & Feel
+**Goal**: Two keyboard-controlled flippers respond instantly, transfer real rotational momentum, hold a steady cradle, and can never be passed through — the project's stated Core Value, proven and tuned.
+**Mode:** mvp
+**Depends on**: Phase 1
+**Requirements**: FLIP-01, FLIP-02, FLIP-03, FLIP-04
+**Success Criteria** (what must be TRUE):
+  1. Pressing a flipper key raises the corresponding flipper with near-instant (sub-frame) response; releasing drops it, with no stuck-key or auto-repeat artifacts.
+  2. A tip hit launches the ball noticeably faster than a base hit (contact-point velocity `v = ω × r` transfers correctly into the ball).
+  3. The player can catch the ball on a raised flipper and hold it cradled steady, with no jitter, via an explicit resting → flipping-up → held-up → returning state machine.
+  4. The fastest possible flip never passes through the ball (rotational continuous collision via angular sub-stepping / capsule contact geometry).
+**Plans**: TBD
+
+### Phase 3: Table, Plunger & Event Bus
+**Goal**: The real Space Cadet playfield exists and a ball can be charged and launched into it, with a single table/spec coordinate source and a typed collision-event bus wired and ready for downstream rules, rendering, and audio.
+**Mode:** mvp
+**Depends on**: Phase 1, Phase 2
+**Requirements**: LNCH-01, LNCH-02, TBL-01
+**Success Criteria** (what must be TRUE):
+  1. The playfield recreates Space Cadet's layout — launch chute, upper bumper cluster, ramps, lanes, outer walls, and center-bottom drain funnel — in their original relative positions (behavior/coordinates only, no ripped assets).
+  2. The player holds to charge and releases the plunger to fire a proportional impulse that sends the ball up the launch chute onto the playfield.
+  3. Plunger charge is visualized (pullback and/or charge meter) so a launch feels deliberate and its power is readable before release.
+  4. Every ball-vs-element contact emits a typed collision event on a one-way bus, with the collision model and render model both derived from one `table/spec` source so what's hit and what's drawn cannot drift apart.
+**Plans**: TBD
+
+### Phase 4: Reactive Elements & Game Rules
+**Goal**: The table becomes a game — reactive elements bounce and score off the event bus, a 3-ball loop runs to game-over, and nudge/tilt behaves faithfully.
+**Mode:** mvp
+**Depends on**: Phase 3
+**Requirements**: ELEM-01, ELEM-02, ELEM-03, GAME-01, GAME-02, GAME-03
+**Success Criteria** (what must be TRUE):
+  1. Bumpers pop the ball back with added energy and award points on every contact.
+  2. Slingshots/kickers near the flippers kick the ball on contact to keep play lively, and lanes/rollovers register the ball passing over and award points.
+  3. A live running score updates on-screen as the player scores.
+  4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
+  5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
+**Plans**: TBD
+
+### Phase 5: Rendering & Audio
+**Goal**: The whole table is drawn procedurally at a stable 60fps and every element speaks through distinct runtime-synthesized sound — a read-only presentation layer over state that already exists.
+**Mode:** mvp
+**Depends on**: Phase 4
+**Requirements**: RND-01, RND-02, RND-03, AUD-01
+**Success Criteria** (what must be TRUE):
+  1. The entire table — playfield, ball, flippers, lanes, and HUD — is rendered procedurally in code on Canvas with zero image assets.
+  2. The game holds a stable 60fps via render interpolation, with ball motion smooth even on high-refresh displays.
+  3. Every element flashes on contact to confirm the hit registered.
+  4. Each element (bumper, flipper, slingshot, drain, launch, tilt) produces a distinct runtime-synthesized sound with velocity/pitch variation and no audio files, played through a shared, gesture-resumed audio context with enveloped one-shots.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 6: Juice & Polish
+**Goal**: The game crosses from correctly functioning to portfolio-grade — responsive feedback, depth, glowing lights, and rewarding flourishes that make play feel alive and shareable.
+**Mode:** mvp
+**Depends on**: Phase 5
+**Requirements**: PLSH-01, PLSH-02, PLSH-03, PLSH-04, PLSH-05, PLSH-06, PLSH-07, PLSH-08
+**Success Criteria** (what must be TRUE):
+  1. Big hits and nudges produce a subtle, decaying screen shake / camera kick, and bumper/target hits emit particle bursts and light flares.
+  2. Depth reads clearly — a soft ball-drop shadow plus playfield shading/vignette imply 2.5D depth — and insert/lane lights glow with a distinct lit-vs-unlit playfield state.
+  3. A precise plunger charge over a lit lane earns a skill-shot bonus on launch.
+  4. Scores count up with animation and an end-of-ball bonus tally, and a near-drain can trigger a simple center-post ball-save flourish.
+  5. The local high score persists across browser sessions via `localStorage`.
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Physics Core Spike | 0/TBD | Not started | - |
+| 2. Flippers & Feel | 0/TBD | Not started | - |
+| 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
+| 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
+| 5. Rendering & Audio | 0/TBD | Not started | - |
+| 6. Juice & Polish | 0/TBD | Not started | - |
