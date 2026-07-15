@@ -26,7 +26,7 @@ There is NO database, NO routing, NO auth, NO backend, and NO deployment target 
 - Accumulate real elapsed time; step physics at a **fixed `FIXED_DT = 1/120s`** (120Hz) regardless of render rate (Gaffer "Fix Your Timestep").
 - **Clamp** each real frame delta to `MAX_FRAME_MS = 250` before accumulation (spiral-of-death / tab-blur guard).
 - Keep `previous` + `current` physics snapshots and an `alpha`; **render interpolates** between them (smooth on 60/120/144Hz displays).
-- Physics outcome is a pure function of accumulated time + `FIXED_DT` — render cadence changes nothing (proven in plan 01-03).
+- Physics outcome is a pure function of accumulated time + `FIXED_DT` — render cadence changes nothing (proven in plan 01-04).
 - **Reuse vector/snapshot objects**; no per-frame allocation (GC hitches break 60fps).
 
 ## Ball / Flipper / Event Interface Shape (N-ball-ready — the project contract)
@@ -89,9 +89,9 @@ flippers/
 
 - [x] Project scaffold (Vite + TypeScript, ESLint/Prettier, Vitest) — plan 01-01
 - [x] "Routing" analog: N/A (single canvas, no routes) — deliberately none
-- [x] "Data" analog: one real dynamic ball body simulated through the interface (not a stub) — plan 01-01
-- [x] UI: interactive debug sandbox rendering the live interpolated ball wired to the loop — plan 01-02
-- [x] "Deployment" analog: documented `npm run dev` + `npm run soak` full-stack local commands — plans 01-01/01-05
+- [x] "Data" analog: one real dynamic ball body simulated through the interface (not a stub) — plan 01-02
+- [x] UI: interactive debug sandbox rendering the live interpolated ball wired to the loop — plan 01-03
+- [x] "Deployment" analog: documented `npm run dev` + `npm run soak` full-stack local commands — plans 01-01/01-03/01-06
 
 ## Out of Scope (Deferred to Later Slices)
 

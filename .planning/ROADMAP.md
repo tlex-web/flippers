@@ -32,14 +32,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A resting ball sits perfectly still — no jitter, no corner-sticking — and total energy trends downward over time, never gaining speed.
   4. Ball feel is identical at 60Hz, 120Hz, and 144Hz, and survives an alt-tab / tab-blur without the physics exploding.
   5. The physics engine is chosen and locked (Planck.js `setBullet` vs. custom swept circle-vs-segment/arc solver), decided empirically by whichever proves easier to make provably tunnel-proof and to tune, with the physics module isolated behind ball/flipper/event interfaces and data structures kept N-ball-ready.
-**Plans**: 6 plans
+**Plans**: 7 plans (5 waves)
 Plans:
-- [ ] 01-01-PLAN.md — Scaffold + engine-agnostic physics interface + Planck adapter (one bullet ball + walls) + fixed-step loop
-- [ ] 01-02-PLAN.md — Throwaway Canvas 2D debug sandbox rendering the live interpolated ball + HUD (diagnosis only)
-- [ ] 01-03-PLAN.md — Frame-rate independence (identical sim at 60/120/144Hz) + tab-blur / large-dt survival (PHYS-03)
-- [ ] 01-04-PLAN.md — Max-speed motorized test flipper + seeded PRNG + swept containment invariant (unit-tested)
-- [ ] 01-05-PLAN.md — Headless ≥10-min swept-containment soak (the SOLE tunnel-proof gate) + CCD-off negative control (PHYS-02)
-- [ ] 01-06-PLAN.md — Resting-ball stability + energy proof, reference-anchored feel constants, and the locked engine decision (PHYS-01, criterion #5)
+- [ ] 01-01-PLAN.md — Project scaffold (Vite/TS/ESLint/Vitest, pinned + supply-chain-gated install) + sandbox entry stub [wave 1]
+- [ ] 01-02-PLAN.md — Engine-agnostic ball/flipper/event interface + reference-anchored constants + Planck adapter (bullet ball, tilted gravity, chain/edge walls) + fixed-120Hz loop + smoke test [wave 2]
+- [ ] 01-03-PLAN.md — Throwaway Canvas 2D debug sandbox rendering the live interpolated ball + HUD (diagnosis only) [wave 3]
+- [ ] 01-04-PLAN.md — Frame-rate independence (identical sim at 60/120/144Hz) + tab-blur / large-dt survival (PHYS-03) [wave 3]
+- [ ] 01-05-PLAN.md — Max-speed motorized test flipper + seeded PRNG + swept containment invariant (unit-tested) [wave 3]
+- [ ] 01-06-PLAN.md — Headless ≥10-min swept-containment soak (the SOLE tunnel-proof gate) + CCD-off negative control (PHYS-02) [wave 4]
+- [ ] 01-07-PLAN.md — Resting-ball stability + energy proof, reference-anchored feel constants, and the locked engine decision (PHYS-01, criterion #5) [wave 5]
 
 ### Phase 2: Flippers & Feel
 **Goal**: Two keyboard-controlled flippers respond instantly, transfer real rotational momentum, hold a steady cradle, and can never be passed through — the project's stated Core Value, proven and tuned.
@@ -112,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 0/6 | Not started | - |
+| 1. Physics Core Spike | 0/7 | Not started | - |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
