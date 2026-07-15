@@ -93,50 +93,98 @@ export const FIXED_DT = 1 / 120;
 export const MAX_FRAME_MS = 250;
 
 /* ------------------------------------------------------------------------- *
- * Max-speed TEST flipper (Phase-1 stress only — NOT a real controllable
- * flipper; that is Phase 2). This is the canonical Box2D pinball flipper: a
- * DYNAMIC body on a MOTORIZED REVOLUTE JOINT (CLAUDE.md § "What NOT to Use":
- * kinematic flippers transfer momentum wrong and interact badly with CCD).
- * It is deliberately a thin, fast mover — the exact dynamic tunneling target
- * the ball must never pass through (PHYS-02). Values are stress-tuned, not
- * feel-tuned; feel is Phase 2.
+ * FEEL flipper (Phase 2). The canonical Box2D pinball flipper: a DYNAMIC body
+ * on a MOTORIZED REVOLUTE JOINT (CLAUDE.md § "What NOT to Use": kinematic
+ * flippers transfer momentum wrong and interact badly with CCD). Phase 1's
+ * single thin STRESS bat is productized here into two mirrored, feel-tuned
+ * CAPSULE bats (Box core + rounded tip Circle, D-07). These values are the
+ * single HMR-tunable source of truth for flipper feel; every value below is
+ * Claude's discretion within the D-06/D-07 ballpark (cited per const).
  * ------------------------------------------------------------------------- */
 
 /**
- * Flipper bat length (meters) from pivot to tip. A short, stubby bat sized for
- * the 2×3 m test box; long enough that its tip has real linear speed at the
- * max motor rate below (tip speed = FLIPPER_MOTOR_SPEED · FLIPPER_LENGTH_M).
+ * Flipper bat length (meters) from pivot to the tip of the capsule. Sized for
+ * the 2×3 m test rig; long enough that the tip carries real linear speed at the
+ * raise rate below (tip speed = FLIPPER_UP_SPEED · FLIPPER_LENGTH_M ≈ 15 m/s),
+ * which is what makes the `v = ω × r` tip-vs-base difference read (FLIP-02).
  */
 export const FLIPPER_LENGTH_M = 0.5;
 
 /**
- * Flipper half-thickness (meters). Deliberately THIN (8 cm full width) — a thin
- * fast-rotating bat vs. a small ball is the textbook "bullet-through-paper"
- * tunneling case this spike exists to disprove.
+ * Flipper capsule core half-thickness (meters) — feel-tuned (D-07). Retuned up
+ * from the Phase-1 stress value (0.04, deliberately razor-thin) to match the
+ * rounded tip radius so the bat is a symmetric "stadium": the huge 0.2 m ball
+ * now rides a real 14 cm-wide face instead of a sliver, giving a clean, jitter-
+ * free catch/cradle (FLIP-03). Equal to FLIPPER_TIP_RADIUS_M by construction.
  */
-export const FLIPPER_HALF_WIDTH_M = 0.04;
+export const FLIPPER_HALF_WIDTH_M = 0.07;
 
 /**
- * Motor speed (rad/s) — HIGH, for max-speed stress. At FLIPPER_LENGTH_M the tip
- * moves ~20 m/s, well past the ball's terminal speed, so the swept soak drives
- * the flipper faster than gameplay ever would. Sign is set per-sweep via the
- * interface drive hook; the constant is the magnitude.
+ * Capsule tip-circle radius (meters) — the D-07 rounded tip. Removes the sharp
+ * corner that would snag the ball, so the catch is consistent and the ball rolls
+ * smoothly to the tip; the fat convex tip also sits on the fastest, most tunnel-
+ * prone point (a good CCD target for the D-01 sub-stepping in plan 02-04). Equal
+ * to the core half-thickness → the bat renders as a symmetric stadium.
+ */
+export const FLIPPER_TIP_RADIUS_M = 0.07;
+
+/**
+ * Raise motor speed (rad/s) — snappy but bounded (D-04/D-05). +1 through the
+ * `setFlipperMotor` hook maps to +FLIPPER_UP_SPEED. Chosen so the D-01 anti-
+ * tunnel sub-step count stays tiny at this ω: N = ceil(ω · L · FIXED_DT /
+ * (0.5 · r)) = ceil(30 · 0.5 · (1/120) / (0.5 · 0.2)) = 2 (plan 02-04). The
+ * high maxMotorTorque below saturates the bat to this speed within ~1 fixed
+ * step → sub-frame snap (FLIP-01) falls out for free.
+ */
+export const FLIPPER_UP_SPEED = 30;
+
+/**
+ * Return motor speed (rad/s) — deliberately SOFTER than the raise (20 < 30). −1
+ * through `setFlipperMotor` maps to −FLIPPER_RETURN_SPEED. A gentler return reads
+ * as a weighted bat settling back, not a violent snap-down, and keeps the return
+ * sweep's ω (hence its sub-step count) below the raise's.
+ */
+export const FLIPPER_RETURN_SPEED = 20;
+
+/**
+ * @deprecated Phase-1 single stress motor speed. Superseded by the feel speeds
+ * FLIPPER_UP_SPEED / FLIPPER_RETURN_SPEED (D-05). Kept only until the adapter is
+ * remapped in Task 2, then removed. Do NOT wire new code to this.
  */
 export const FLIPPER_MOTOR_SPEED = 40;
 
 /**
- * Maximum motor torque (N·m) — HIGH, so the motor whips the bat to
- * FLIPPER_MOTOR_SPEED and holds it against the ball's impulse and the angle
- * limits without stalling (the canonical high-torque pinball-flipper setup).
+ * Maximum motor torque (N·m) — feel-tuned (D-06(2)). Retuned down from the
+ * Phase-1 stress value (10000) to a still-firm 500. Two requirements, both met
+ * with a large margin:
+ *   1. Never yields at the limit: it must exceed the ball's gravity torque at the
+ *      tip τ_g = m · g_inplane · FLIPPER_LENGTH_M, where m = BALL_DENSITY · π ·
+ *      BALL_RADIUS_M² = 1 · π · 0.2² ≈ 0.126 kg and g_inplane = IN_PLANE_GRAVITY
+ *      ≈ 4.61 m/s² → τ_g ≈ 0.126 · 4.61 · 0.5 ≈ 0.29 N·m. 500 N·m exceeds this by
+ *      ~1700× → the held cradle (D-06(1)) is rock-solid, the bat never sags off
+ *      the upper limit under the ball's weight.
+ *   2. Saturates FLIPPER_UP_SPEED within ~1 fixed step: with the capsule bat's
+ *      inertia about the pivot ≈ 7·10⁻³ kg·m², α = τ/I ≈ 500 / 0.007 ≈ 7·10⁴
+ *      rad/s² reaches 30 rad/s in ~4·10⁻⁴ s ≪ FIXED_DT (8.3·10⁻³ s) → sub-frame
+ *      snap (FLIP-01).
  */
-export const FLIPPER_MAX_MOTOR_TORQUE = 10000;
+export const FLIPPER_MAX_MOTOR_TORQUE = 500;
 
 /**
- * Lower revolute-joint angle limit (radians). The bat sweeps between
- * FLIPPER_LOWER_ANGLE and FLIPPER_UPPER_ANGLE; a bounded arc keeps it inside the
- * test box and makes the sweep a repeatable, phase-controllable stress motion.
+ * Lower revolute-joint angle limit (radians) — feel-tuned (D-07 discretion). The
+ * left bat sweeps a symmetric ~45° arc [FLIPPER_LOWER_ANGLE, FLIPPER_UPPER_ANGLE]
+ * = [−π/8, π/8] straddling the horizontal (angle 0). Keeping level MID-arc (not
+ * at a limit) matters: the bat crosses horizontal at full angular speed, which is
+ * both the feel-relevant flick and what lets the swept-tunnel proof drive a fast
+ * MOVING bat through the drop path (the soak flipper negative control). The
+ * mirrored right bat reflects this arc about the vertical (θ → π − θ), so the pair
+ * sweeps in opposite angular senses. Retuned from ±π/4 (a 90° stress arc).
  */
-export const FLIPPER_LOWER_ANGLE = -Math.PI / 4;
+export const FLIPPER_LOWER_ANGLE = -Math.PI / 8;
 
-/** Upper revolute-joint angle limit (radians). See FLIPPER_LOWER_ANGLE. */
-export const FLIPPER_UPPER_ANGLE = Math.PI / 4;
+/**
+ * Upper revolute-joint angle limit (radians) — the rest/droop stop. At +π/8 (tip
+ * slightly below level) the bat rests here under gravity + the default motor.
+ * Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE = π/4 ≈ 45° (D-07).
+ */
+export const FLIPPER_UPPER_ANGLE = Math.PI / 8;

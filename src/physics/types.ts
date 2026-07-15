@@ -67,6 +67,15 @@ export interface FlipperState {
   readonly angle: number;
   readonly length: number;
   readonly halfWidth: number;
+  /**
+   * Rounded-tip radius (meters) — the D-08 addition for the Phase-2 capsule bat.
+   * The bat is a "stadium": a rectangular core of half-thickness `halfWidth`
+   * capped by a circle of this radius at the tip (and hinge). For the symmetric
+   * capsule `tipRadius === halfWidth`; the renderer reads it to draw the rounded
+   * end instead of a bare rectangle. Kept engine-agnostic so a future tapered
+   * variant only has to split `halfWidth` — this field stays meaningful.
+   */
+  readonly tipRadius: number;
 }
 
 /** Kind of contact that produced a collision event. */

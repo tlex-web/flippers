@@ -33,6 +33,7 @@ import {
   FLIPPER_LOWER_ANGLE,
   FLIPPER_MAX_MOTOR_TORQUE,
   FLIPPER_MOTOR_SPEED,
+  FLIPPER_TIP_RADIUS_M,
   FLIPPER_UPPER_ANGLE,
   IN_PLANE_GRAVITY,
 } from "./constants";
@@ -116,6 +117,7 @@ interface MutableFlipperState {
   angle: number;
   length: number;
   halfWidth: number;
+  tipRadius: number;
 }
 
 /** Identity stamped onto each Planck body's userData for event classification. */
@@ -342,6 +344,7 @@ export class PlanckWorld implements PhysicsWorld {
       angle: bat.getAngle(),
       length: FLIPPER_LENGTH_M,
       halfWidth: FLIPPER_HALF_WIDTH_M,
+      tipRadius: FLIPPER_TIP_RADIUS_M,
     });
   }
 
