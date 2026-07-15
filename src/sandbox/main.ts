@@ -13,7 +13,10 @@
  */
 
 import { PlanckWorld } from "../physics/planck-world";
+import { FlipperController } from "../control/flipper-controller";
+import { FlipperInput } from "../input/flipper-input";
 import { FixedStepLoop } from "../sim/loop";
+import type { BallState } from "../physics/types";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
 /**
@@ -40,6 +43,14 @@ const HZ_WINDOW_MS = 500;
 /** Throttle (ms) for HUD number updates — keeps the readout legible. */
 const HUD_UPDATE_MS = 200;
 
+/**
+ * Ball-feed drain line (meters, world y). Below every flipper hinge (the pivots
+ * sit at y ≈ 2.35–2.6) but above a floor-resting ball's center (≈ 2.8): once the
+ * tracked ball's center passes this it has left the flipper zone for the floor,
+ * so the rig drops a fresh one (D-11). Throwaway scaffold — NOT table geometry.
+ */
+const FEED_DRAIN_Y = 2.72;
+
 function main(): void {
   const canvas = document.getElementById("stage");
   if (!(canvas instanceof HTMLCanvasElement)) {
@@ -49,8 +60,43 @@ function main(): void {
   // Composition root: the one engine-specific construction. Everything else
   // below talks to the world through the `PhysicsWorld` interface only.
   const world = new PlanckWorld();
-  world.addBall(BALL_SPAWN);
+  let activeBallId = world.addBall(BALL_SPAWN);
   const loop = new FixedStepLoop(world);
+
+  // Keyboard input + flipper FSM (D-10). Constructed ONCE here (never inside
+  // frame()). `attach()` registers the window keydown/keyup/blur + document
+  // visibilitychange listeners. Neither module imports an engine — only this
+  // file's `new PlanckWorld()` above is engine-specific; both talk through the
+  // `PhysicsWorld` interface / synthetic-friendly handlers.
+  const input = new FlipperInput();
+  input.attach();
+  const controller = new FlipperController(world);
+
+  // Side -> flipper-id mapping (D-09/D-10): the physically-LEFT flipper (smaller
+  // pivot x) answers the left keys; the right flipper answers the right keys.
+  // Computed ONCE from the world.
+  const flippersByX = world
+    .getFlippers()
+    .slice()
+    .sort((a, b) => a.pivotX - b.pivotX);
+  const leftFlipperId = flippersByX[0]?.id ?? 0;
+  const rightFlipperId = flippersByX[1]?.id ?? leftFlipperId;
+
+  // The drain-and-tick step callback (D-10). Built ONCE as a stable, long-lived
+  // reference and passed BY REFERENCE to `loop.advance()` every frame, so it adds
+  // NO per-frame allocation (threat T-02-05). It runs at the TOP OF EACH FIXED
+  // 120 Hz STEP (before that step's `world.step()`): drain the input latch, feed
+  // each per-side edge to the FSM, then tick it — so a key press applies on the
+  // very next 120 Hz step (<= ~8.3 ms, sub-frame vs a 60 fps render), NOT once
+  // per render frame.
+  function onFixedStep(): void {
+    const edges = input.drainEdges();
+    if (edges.leftPress) controller.onPressEdge(leftFlipperId);
+    if (edges.leftRelease) controller.onReleaseEdge(leftFlipperId);
+    if (edges.rightPress) controller.onPressEdge(rightFlipperId);
+    if (edges.rightRelease) controller.onReleaseEdge(rightFlipperId);
+    controller.update();
+  }
 
   const renderer = new DebugRenderer(canvas);
   renderer.resize(world);
@@ -73,8 +119,10 @@ function main(): void {
     const deltaMs = nowMs - lastTimeMs;
     lastTimeMs = nowMs;
 
-    // Advance physics by whole fixed steps; drain the accumulator.
-    const steps = loop.advance(deltaMs);
+    // Advance physics by whole fixed steps; drain the accumulator. The stable
+    // `onFixedStep` reference drains input + ticks the FSM at the top of each
+    // fixed step (D-10) — passed by reference, so no per-frame allocation.
+    const steps = loop.advance(deltaMs, onFixedStep);
 
     // Drain and discard collision events every frame. This sandbox has no event
     // consumer yet (D-03: it asserts nothing), but `step()` pushes an event per
@@ -82,6 +130,15 @@ function main(): void {
     // buffer without bound for the life of the tab. Draining resets the pool so
     // it stays bounded; the reused-view drain allocates nothing per frame.
     world.drainEvents();
+
+    // Ball-feed rig (D-11): once the tracked ball drains below the flipper zone,
+    // drop a fresh one so the flippers always have something to catch. Throwaway
+    // scaffold — NOT real table geometry. No steady-state allocation: `findBall`
+    // reuses the pooled snapshot and `addBall` runs only on the (rare) drain.
+    const activeBall = findBall(world.getBalls(), activeBallId);
+    if (activeBall && activeBall.y > FEED_DRAIN_Y) {
+      activeBallId = world.addBall(BALL_SPAWN);
+    }
 
     // Interpolate each ball between the loop's previous and current fixed states
     // (smooth motion independent of the render rate).
@@ -153,6 +210,15 @@ function growTo(pool: InterpolatedBall[], n: number): void {
   while (pool.length < n) {
     pool.push({ id: 0, x: 0, y: 0, vx: 0, vy: 0, radius: 0, angle: 0 });
   }
+}
+
+/** Find a ball by id in the pooled snapshot (no allocation). */
+function findBall(balls: readonly BallState[], id: number): BallState | undefined {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b && b.id === id) return b;
+  }
+  return undefined;
 }
 
 main();

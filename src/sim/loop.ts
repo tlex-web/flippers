@@ -50,8 +50,18 @@ export class FixedStepLoop {
    * Feed real elapsed time (ms). Runs a whole number of fixed 120 Hz steps,
    * drains the accumulator (leftover < FIXED_DT), and updates the interpolation
    * `alpha`. Returns the number of fixed steps taken this call.
+   *
+   * `onStep` (optional) is a PURE pre-step hook invoked at the TOP OF EACH FIXED
+   * STEP, immediately before that step's `world.step()` (D-10). It lets the
+   * caller drain input + tick control logic so a motor command applies to the
+   * VERY next 120 Hz step (<= ~8.3 ms, sub-frame vs a 60 fps render) rather than
+   * once per render frame. It is called exactly `steps` times — zero when this
+   * frame drains no whole step — and never after the last step. The loop stays
+   * engine-agnostic: the hook is a plain callback, not an engine handle. Pass a
+   * long-lived function reference (built once) to keep the hot path allocation-
+   * free (threat T-02-05).
    */
-  advance(realDeltaMs: number): number {
+  advance(realDeltaMs: number, onStep?: () => void): number {
     // Spiral-of-death clamp (T-01-02): bound the per-call catch-up work.
     const clamped = Math.min(realDeltaMs, MAX_FRAME_MS);
     this.accumulator += clamped;
@@ -60,6 +70,9 @@ export class FixedStepLoop {
     while (this.accumulator >= FIXED_DT_MS) {
       // previous <- current (state before this step), then integrate.
       this.copyStates(this.currentStates, this.previousStates);
+      // Top of the fixed step (D-10): drain input + tick the FSM BEFORE the
+      // physics that consumes the resulting motor command.
+      if (onStep) onStep();
       this.world.step(FIXED_DT);
       this.snapshotInto(this.currentStates);
       this.accumulator -= FIXED_DT_MS;
