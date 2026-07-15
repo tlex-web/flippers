@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-15T16:57:05.980Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-07-15T17:18:50.115Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 17
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 02 (flippers-feel) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-07-15
 
-Progress: [████████░░] 77%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [████████░░] 77%
 | Phase 02 P01 | 50min | 3 tasks | 6 files |
 | Phase 02 P02 | 6min | 2 tasks | 4 files |
 | Phase 02 P03 | 32min | 2 tasks | 4 files |
+| Phase 02 P04 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase 02]: FSM limit detection is by angular settling (|delta|<1e-3 rad after moving), not a hard-coded FLIPPER_UPPER/LOWER_ANGLE compare — the referenceAngle-mirrored right flipper reports absolute angles around pi, so settling is the mirror-safe, geometry/engine-independent detector.
 - [Phase ?]: [Phase 02]: FixedStepLoop.advance() gained an optional onStep pre-step hook invoked before each internal world.step (D-10); main.ts drains the input latch + ticks the FlipperController FSM at the top of each fixed 120 Hz step via one stable callback passed by reference (zero per-frame alloc, T-02-05), so a keypress applies sub-frame. Loop stays engine-agnostic. First keyboard-playable end-to-end flipper rig + drain-triggered ball feed (D-11), guarded by a no-mock E2E integration test.
 - [Phase ?]: [Phase 02]: FlipperController now commands setFlipperMotor(id,0) per flipper in its constructor to enforce its documented resting==motor-0 invariant (Rule-1 fix surfaced by the E2E test) - otherwise a never-pressed bat runs the adapter construction-default motor into a joint limit and Box2D locks it (startup limit-jam). Release jam-lag (~15 steps after a long cradle hold) + physical rest/raise orientation deferred to the 02-06 feel checkpoint.
+- [Phase 02]: Adaptive angular sub-stepping (D-01) lives inside PlanckWorld.step(): it splits FIXED_DT into N deterministic Planck sub-steps sized from the live peak flipper joint speed (N=ceil(omega*L*dt/(0.5*r)); 1 at rest, 2 at FLIPPER_UP_SPEED), bounded to N<=4 by a secondary cap FLIPPER_MAX_ANGULAR_SPEED=96 (D-02), with events accumulating across sub-steps and pools/contacts synced once after the last. PlanckWorldOptions.subStepping=false forces N=1 as the 02-05 negative-control hook. N is from joint speed never wall-clock; the ball setBullet CCD and the interface/harness are untouched. — FLIP-04 rotational anti-tunnel mechanism, unit-proven; 02-05 seeded gate proves non-penetration green ON / red OFF.
 
 ### Pending Todos
 
@@ -107,6 +109,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:56:57.042Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-07-15T17:18:50.101Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
