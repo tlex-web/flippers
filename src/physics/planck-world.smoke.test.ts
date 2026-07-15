@@ -110,9 +110,9 @@ describe("PlanckWorld + FixedStepLoop smoke", () => {
     const { world: wb } = makeWorldWithBall();
     const la = new FixedStepLoop(wa);
     const lb = new FixedStepLoop(wb);
-    const seq = [frameMsSeq()];
-    const ca = seq[0].map((d) => la.advance(d));
-    const cb = seq[0].map((d) => lb.advance(d));
+    const seq = frameMsSeq();
+    const ca = seq.map((d) => la.advance(d));
+    const cb = seq.map((d) => lb.advance(d));
     expect(ca).toEqual(cb);
     expect(la.totalSteps).toBe(lb.totalSteps);
   });
