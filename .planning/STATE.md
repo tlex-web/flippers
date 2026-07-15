@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-03-PLAN.md (render checkpoint approved)
-last_updated: "2026-07-15T11:13:51.160Z"
+stopped_at: Completed 01-06-PLAN.md (tunnel-proof soak gate; CCD-on green, negative control red)
+last_updated: "2026-07-15T11:53:52.686Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 01 (Physics Core Spike) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-07-15
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [███████░░░] 71%
 | Phase 01 P04 | 7min | 2 tasks | 2 files |
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
 | Phase 01 P03 | 15min | 2 tasks | 3 files |
+| Phase 01 P06 | 20min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Test flipper is the canonical Box2D pinball flipper — a DYNAMIC bat on a motorized revolute joint (enableMotor, high maxMotorTorque, plus/minus 45deg limits), never kinematic; exposed via getFlippers() with an engine-agnostic setFlipperMotor drive hook. Ball CCD armed on addBall (Planck #167 guard).
 - [Phase 01]: Swept containment invariant (sweptEscaped) is engine-agnostic (reads the interface, not planck) with an EXCLUSIVE radius boundary (graze at exactly radius = contact, not escape); it catches thin-wall tunnel and boundary poke-out/re-enter that a naive center-in-box check misses. Deterministic mulberry32 PRNG (never the unseeded global RNG) backs seed replay.
 - [Phase 01]: Throwaway Canvas 2D debug sandbox (D-06/D-07) renders the live interpolated ball + walls + test flipper + velocity + contacts + FPS/physics-Hz/KE HUD, reading state only through the PhysicsWorld interface (no planck import); allocation-free rAF path (pooled buffers, cached gradient/HUD strings). Diagnosis only — pass/fail stays the headless soak (01-06). Human render checkpoint operator-approved.
+- [Phase 01]: Headless swept-containment soak (npm run soak) is the SOLE PHYS-02 tunnel-proof gate (D-03): seeded mulberry32 sweep of launch angle x speed (past real max, ~58 m/s) x flipper phase over >=630s SIMULATED 120Hz steps, sweptEscaped asserted every step against the interface; green with CCD on in ~11s wall-clock. Planck setBullet+continuousPhysics empirically HOLDS at ~10x the ball's real max velocity. — Turns PHYS-02 (the #1 risk) into a green/red CI line with replayable seeds and makes the plan 01-07 engine decision empirical (D-05).
+- [Phase 01]: The soak gate is proven honest by a CCD-off negative control: bullet:false disables world-level continuousPhysics (Box2D runs CCD vs static bodies regardless of the per-body setBullet flag), so a max-velocity thin-wall launch tunnels and runSoak reports passed=false with a numeric replayable seed + full state that reproduces identically. Flipper tunnels use swept-path crossing + far-side-clear to exclude the stress-flipper crushing a resting ball. — A green gate is only trustworthy when a real fault is demonstrated to turn it RED (test integrity, T-06-01).
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T11:13:51.127Z
-Stopped at: Completed 01-03-PLAN.md (render checkpoint approved)
+Last session: 2026-07-15T11:53:52.631Z
+Stopped at: Completed 01-06-PLAN.md (tunnel-proof soak gate; CCD-on green, negative control red)
 Resume file: None

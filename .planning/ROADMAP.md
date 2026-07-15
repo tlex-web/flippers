@@ -54,7 +54,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-06-PLAN.md — Headless ≥10-min swept-containment soak (the SOLE tunnel-proof gate) + CCD-off negative control (PHYS-02) [wave 4]
+- [x] 01-06-PLAN.md — Headless ≥10-min swept-containment soak (the SOLE tunnel-proof gate) + CCD-off negative control (PHYS-02) [wave 4]
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 5/7 | In Progress|  |
+| 1. Physics Core Spike | 6/7 | In Progress|  |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
