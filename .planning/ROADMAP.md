@@ -73,7 +73,25 @@ Plans:
   3. The player can catch the ball on a raised flipper and hold it cradled steady, with no jitter, via an explicit resting → flipping-up → held-up → returning state machine.
   4. The fastest possible flip never passes through the ball (rotational continuous collision via angular sub-stepping / capsule contact geometry).
 
-**Plans**: TBD
+**Plans**: 6 plans (4 waves)
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Two mirrored capsule flippers + `tipRadius` interface + feel constants + debug-draw stadium [wave 1]
+- [ ] 02-02-PLAN.md — Engine-agnostic keyboard input module (event.code, repeat-safe, blur-clear) + FlipperController FSM [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-03-PLAN.md — Wire keyboard → FSM → flippers end-to-end on the test rig + ball feed (+ headless E2E test) [wave 2]
+- [ ] 02-04-PLAN.md — Rotational anti-tunnel: adaptive angular sub-stepping in `step()` + secondary cap + off-switch [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-05-PLAN.md — FLIP-04 seeded proof gate (green ON / RED OFF) + tip-vs-base + jitter-free cradle feel proofs [wave 3]
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-06-PLAN.md — By-feel acceptance checkpoint: heavy-not-floaty verdict on the live rig (D-09) [wave 4]
 
 ### Phase 3: Table, Plunger & Event Bus
 
@@ -147,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
-| 2. Flippers & Feel | 0/TBD | Not started | - |
+| 2. Flippers & Feel | 0/6 | Planned | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
