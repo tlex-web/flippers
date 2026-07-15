@@ -40,7 +40,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Project scaffold (Vite/TS/ESLint/Vitest, pinned + supply-chain-gated install) + sandbox entry stub [wave 1]
+- [x] 01-01-PLAN.md — Project scaffold (Vite/TS/ESLint/Vitest, pinned + supply-chain-gated install) + sandbox entry stub [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 0/7 | Not started | - |
+| 1. Physics Core Spike | 1/7 | In Progress|  |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |

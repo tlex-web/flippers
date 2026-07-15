@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-15T00:31:08.993Z"
-last_activity: 2026-07-15 -- Phase 1 planning complete
+last_updated: "2026-07-15T00:59:06.373Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original.
-**Current focus:** Phase 1 — Physics Core Spike
+**Current focus:** Phase 01 — Physics Core Spike
 
 ## Current Position
 
-Phase: 1 of 6 (Physics Core Spike)
-Plan: 0 of TBD in current phase
+Phase: 01 (Physics Core Spike) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 1 planning complete
+Last activity: 2026-07-15
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 14%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 10 | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,7 @@ Recent decisions affecting current work:
 - [Phase 1]: Physics engine (Planck.js `setBullet` vs. custom swept solver) deliberately deferred to an empirical spike inside Phase 1 — decide by which is provably tunnel-proof and easiest to tune, not on paper.
 - [Roadmap]: Risk-first ordering — physics core and flipper feel retired before any table geometry is built.
 - [Roadmap]: Keep v1 physics data structures N-ball-ready so deferred multiball is additive later, not a rewrite.
+- [Phase 01]: TypeScript pinned to 5.9.3 (not plan 7.0.2) for 01-01 scaffold — @typescript-eslint 8 requires TS <6.1.0 and crashes under TS 7.0 native compiler; resolved per CLAUDE.md compat escape hatch. Exact-pin + lockfile control preserved. Ratify or revisit when typescript-eslint supports TS 7.
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-14T23:25:59.614Z
+Last session: 2026-07-15T00:56:02.147Z
 Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-physics-core-spike/01-CONTEXT.md
+Resume file: None
