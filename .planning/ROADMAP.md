@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 7/7 | Complete   | 2026-07-15 |
+| 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
