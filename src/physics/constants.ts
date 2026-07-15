@@ -83,3 +83,52 @@ export const FIXED_DT = 1 / 120;
  * stalled frame at ~30 catch-up steps instead of thousands.
  */
 export const MAX_FRAME_MS = 250;
+
+/* ------------------------------------------------------------------------- *
+ * Max-speed TEST flipper (Phase-1 stress only — NOT a real controllable
+ * flipper; that is Phase 2). This is the canonical Box2D pinball flipper: a
+ * DYNAMIC body on a MOTORIZED REVOLUTE JOINT (CLAUDE.md § "What NOT to Use":
+ * kinematic flippers transfer momentum wrong and interact badly with CCD).
+ * It is deliberately a thin, fast mover — the exact dynamic tunneling target
+ * the ball must never pass through (PHYS-02). Values are stress-tuned, not
+ * feel-tuned; feel is Phase 2.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Flipper bat length (meters) from pivot to tip. A short, stubby bat sized for
+ * the 2×3 m test box; long enough that its tip has real linear speed at the
+ * max motor rate below (tip speed = FLIPPER_MOTOR_SPEED · FLIPPER_LENGTH_M).
+ */
+export const FLIPPER_LENGTH_M = 0.5;
+
+/**
+ * Flipper half-thickness (meters). Deliberately THIN (8 cm full width) — a thin
+ * fast-rotating bat vs. a small ball is the textbook "bullet-through-paper"
+ * tunneling case this spike exists to disprove.
+ */
+export const FLIPPER_HALF_WIDTH_M = 0.04;
+
+/**
+ * Motor speed (rad/s) — HIGH, for max-speed stress. At FLIPPER_LENGTH_M the tip
+ * moves ~20 m/s, well past the ball's terminal speed, so the swept soak drives
+ * the flipper faster than gameplay ever would. Sign is set per-sweep via the
+ * interface drive hook; the constant is the magnitude.
+ */
+export const FLIPPER_MOTOR_SPEED = 40;
+
+/**
+ * Maximum motor torque (N·m) — HIGH, so the motor whips the bat to
+ * FLIPPER_MOTOR_SPEED and holds it against the ball's impulse and the angle
+ * limits without stalling (the canonical high-torque pinball-flipper setup).
+ */
+export const FLIPPER_MAX_MOTOR_TORQUE = 10000;
+
+/**
+ * Lower revolute-joint angle limit (radians). The bat sweeps between
+ * FLIPPER_LOWER_ANGLE and FLIPPER_UPPER_ANGLE; a bounded arc keeps it inside the
+ * test box and makes the sweep a repeatable, phase-controllable stress motion.
+ */
+export const FLIPPER_LOWER_ANGLE = -Math.PI / 4;
+
+/** Upper revolute-joint angle limit (radians). See FLIPPER_LOWER_ANGLE. */
+export const FLIPPER_UPPER_ANGLE = Math.PI / 4;

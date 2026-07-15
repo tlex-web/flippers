@@ -102,8 +102,17 @@ export interface PhysicsWorld {
   addBall(spec: BallSpec): BallId;
   /** Pooled, id-keyed snapshot of every live ball. */
   getBalls(): readonly BallState[];
-  /** Pooled snapshot of every flipper (empty until Phase 2). */
+  /** Pooled snapshot of every flipper (a max-speed test flipper this phase). */
   getFlippers(): readonly FlipperState[];
+  /**
+   * Drive a flipper's motor for stress sweeping (engine-agnostic hook — the
+   * soak harness reverses direction at the angle limits to sweep flipper phase
+   * past the ball's max speed, D-04/D-05). `direction > 0` drives toward the
+   * upper angle limit, `direction < 0` toward the lower, `0` holds. Magnitude is
+   * ignored (the engine uses its stress-tuned motor speed); only the sign is
+   * read. No-op for an unknown id.
+   */
+  setFlipperMotor(id: number, direction: number): void;
   /** Static boundary/wall segments (built once; for debug-draw + containment). */
   getBoundarySegments(): readonly Segment[];
   /** Drain collision events accumulated since the last drain. */

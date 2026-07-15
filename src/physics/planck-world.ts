@@ -11,13 +11,20 @@
  * allocation on the render read path.
  */
 
-import { Chain, Circle, Edge, Vec2, World } from "planck";
+import { Box, Chain, Circle, Edge, RevoluteJoint, Vec2, World } from "planck";
 
 import {
   BALL_FRICTION,
   BALL_LINEAR_DAMPING,
   BALL_RADIUS_M,
   BALL_RESTITUTION,
+  FIXED_DT,
+  FLIPPER_HALF_WIDTH_M,
+  FLIPPER_LENGTH_M,
+  FLIPPER_LOWER_ANGLE,
+  FLIPPER_MAX_MOTOR_TORQUE,
+  FLIPPER_MOTOR_SPEED,
+  FLIPPER_UPPER_ANGLE,
   IN_PLANE_GRAVITY,
 } from "./constants";
 import type {
@@ -56,6 +63,16 @@ const THIN_WALL = { ax: 0.2, ay: 2.0, bx: 0.8, by: 2.0 } as const;
 // Stable id for the (single) static walls body used in collision events.
 const WALL_ID = -1;
 
+// --- Max-speed TEST flipper placement in the 2×3 m box. Lower-LEFT, with its
+//     bounded sweep arc kept clear of the ball's fall column (x≈1.5) and the
+//     thin interior wall (y=2.0), so the stress flipper sweeps real play area
+//     without disturbing the baseline single-ball smoke run. Feel/torque values
+//     live in constants.ts; only the placement is here (test scaffold geometry,
+//     not a tunable feel constant). ---
+const FLIPPER_PIVOT = { x: 0.35, y: 2.6 } as const;
+const FLIPPER_ID = 0;
+const FLIPPER_DENSITY = 1;
+
 /** Internal, mutable view of a ball snapshot (returned read-only as BallState). */
 interface MutableBallState {
   id: BallId;
@@ -71,6 +88,16 @@ interface MutableBallState {
 interface MutableVec2 {
   x: number;
   y: number;
+}
+
+/** Internal, mutable view of a flipper snapshot (returned read-only as FlipperState). */
+interface MutableFlipperState {
+  id: number;
+  pivotX: number;
+  pivotY: number;
+  angle: number;
+  length: number;
+  halfWidth: number;
 }
 
 /** Identity stamped onto each Planck body's userData for event classification. */
@@ -119,7 +146,16 @@ export class PlanckWorld implements PhysicsWorld {
   // once steady-state ball/contact counts are reached.
   private readonly ballPool: MutableBallState[] = [];
   private readonly contactPoints: MutableVec2[] = [];
-  private readonly flippers: FlipperState[] = [];
+
+  // Flipper snapshot pool (mutated in place by `step()`) + the live joint/body
+  // registry that backs it (drive hook + angle read-out).
+  private readonly flipperPool: MutableFlipperState[] = [];
+  private readonly flipperJoints: {
+    id: number;
+    body: PlanckBody;
+    joint: RevoluteJoint;
+  }[] = [];
+
   private readonly segments: readonly Segment[];
 
   // Accumulated collision events, handed off (and reset) by `drainEvents()`.
@@ -130,6 +166,7 @@ export class PlanckWorld implements PhysicsWorld {
     // NOT full vertical g — this is what makes the fall read as a heavy roll.
     this.world = new World({ gravity: Vec2(0, IN_PLANE_GRAVITY) });
     this.segments = this.buildBoundary();
+    this.buildTestFlipper();
     this.world.on("post-solve", (contact, impulse) => {
       const a = asTag(contact.getFixtureA().getBody().getUserData());
       const b = asTag(contact.getFixtureB().getBody().getUserData());
@@ -180,6 +217,63 @@ export class PlanckWorld implements PhysicsWorld {
     ];
   }
 
+  /**
+   * Build the max-speed TEST flipper: a DYNAMIC thin bat on a MOTORIZED
+   * REVOLUTE JOINT — the canonical Box2D pinball flipper, run at max speed for
+   * stress. It is dynamic (NOT kinematic) so momentum transfers through the
+   * solver correctly on a ball hit (CLAUDE.md § "What NOT to Use"). This is the
+   * dynamic fast-thin-mover the ball must never tunnel through (PHYS-02/D-04).
+   */
+  private buildTestFlipper(): void {
+    const px = FLIPPER_PIVOT.x;
+    const py = FLIPPER_PIVOT.y;
+
+    // Static hinge the bat pivots around.
+    const pivot = this.world.createBody({ position: Vec2(px, py) });
+
+    // Dynamic bat: a thin box extending from the pivot (body origin) along
+    // local +x by FLIPPER_LENGTH_M.
+    const bat = this.world.createDynamicBody({ position: Vec2(px, py) });
+    bat.createFixture(
+      new Box(
+        FLIPPER_LENGTH_M / 2,
+        FLIPPER_HALF_WIDTH_M,
+        Vec2(FLIPPER_LENGTH_M / 2, 0),
+      ),
+      { density: FLIPPER_DENSITY, friction: WALL_FRICTION },
+    );
+    const tag: BodyTag = { kind: "flipper", id: FLIPPER_ID };
+    bat.setUserData(tag);
+
+    // Motorized revolute joint: motor ON, HIGH max torque, bounded angle arc.
+    // The motor is driven at max speed so the bat sweeps the play area for
+    // stress; the sign (sweep direction/phase) is steered via setFlipperMotor.
+    const joint = new RevoluteJoint(
+      {
+        enableMotor: true,
+        motorSpeed: FLIPPER_MOTOR_SPEED,
+        maxMotorTorque: FLIPPER_MAX_MOTOR_TORQUE,
+        enableLimit: true,
+        lowerAngle: FLIPPER_LOWER_ANGLE,
+        upperAngle: FLIPPER_UPPER_ANGLE,
+      },
+      pivot,
+      bat,
+      Vec2(px, py),
+    );
+    this.world.createJoint(joint);
+
+    this.flipperJoints.push({ id: FLIPPER_ID, body: bat, joint });
+    this.flipperPool.push({
+      id: FLIPPER_ID,
+      pivotX: px,
+      pivotY: py,
+      angle: bat.getAngle(),
+      length: FLIPPER_LENGTH_M,
+      halfWidth: FLIPPER_HALF_WIDTH_M,
+    });
+  }
+
   addBall(spec: BallSpec): BallId {
     const id = this.nextId++;
     const radius = spec.radius ?? BALL_RADIUS_M;
@@ -205,9 +299,49 @@ export class PlanckWorld implements PhysicsWorld {
     const tag: BodyTag = { kind: "ball", id };
     body.setUserData(tag);
 
+    // Planck issue #167 guard: `setBullet` CCD can no-op for a body that has
+    // never had a contact, so a freshly-added ball could tunnel on its very
+    // first high-speed step. Arm CCD now by forcing one real contact on init.
+    // https://github.com/piqnt/planck.js/issues/167
+    this.primeBallCcd(body, spec.x, spec.y, vx, vy, radius);
+
     this.balls.push({ id, body });
     this.ballPool.push({ id, x: spec.x, y: spec.y, vx, vy, radius, angle: 0 });
     return id;
+  }
+
+  /**
+   * Give a newly-added ball its first contact so Planck's CCD is armed before
+   * any high-speed launch (issue #167). A tiny temporary static "primer" fixture
+   * is overlapped with the ball for a single fixed sub-step so the narrow phase
+   * registers a real contact, then the primer is removed and the ball is
+   * restored to its exact requested transform + velocity — so priming is
+   * invisible to callers (the ball starts precisely where it was specified).
+   */
+  private primeBallCcd(
+    body: PlanckBody,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    radius: number,
+  ): void {
+    const primer = this.world.createBody({ position: Vec2(x, y) });
+    // Small circle fully inside the ball → guaranteed overlap → touching contact.
+    primer.createFixture(new Circle(radius * 0.5), { friction: 0 });
+
+    // One direct sub-step: the broad+narrow phase creates the ball↔primer
+    // contact and puts the ball in a solver island, arming its CCD. The primer
+    // has no BodyTag, so `post-solve` ignores it → no spurious collision event.
+    this.world.step(FIXED_DT, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+
+    this.world.destroyBody(primer);
+
+    // Discard the priming impulse: restore the exact requested spawn state.
+    body.setTransform(Vec2(x, y), 0);
+    body.setLinearVelocity(Vec2(vx, vy));
+    body.setAngularVelocity(0);
+    body.setAwake(true);
   }
 
   step(dtSeconds: number): void {
@@ -225,6 +359,15 @@ export class PlanckWorld implements PhysicsWorld {
       snap.y = pos.y;
       snap.vx = vel.x;
       snap.vy = vel.y;
+      snap.angle = entry.body.getAngle();
+    }
+
+    // Refresh pooled flipper snapshots in place (pivot/length/half-width are
+    // fixed; only the live joint angle changes as the bat sweeps).
+    for (let i = 0; i < this.flipperJoints.length; i++) {
+      const entry = this.flipperJoints[i];
+      const snap = this.flipperPool[i];
+      if (!entry || !snap) continue;
       snap.angle = entry.body.getAngle();
     }
 
@@ -260,7 +403,21 @@ export class PlanckWorld implements PhysicsWorld {
   }
 
   getFlippers(): readonly FlipperState[] {
-    return this.flippers;
+    return this.flipperPool;
+  }
+
+  setFlipperMotor(id: number, direction: number): void {
+    const entry = this.flipperJoints.find((f) => f.id === id);
+    if (!entry) return;
+    // Only the sign matters — the engine uses its stress-tuned motor speed.
+    const speed =
+      direction > 0
+        ? FLIPPER_MOTOR_SPEED
+        : direction < 0
+          ? -FLIPPER_MOTOR_SPEED
+          : 0;
+    entry.joint.setMotorSpeed(speed);
+    entry.body.setAwake(true);
   }
 
   getBoundarySegments(): readonly Segment[] {
