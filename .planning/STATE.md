@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-15T16:29:06.492Z"
+last_updated: "2026-07-15T16:57:05.980Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 9
+  completed_plans: 10
   percent: 17
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 02 (flippers-feel) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-07-15
 
-Progress: [███████░░░] 69%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [███████░░░] 69%
 | Phase 01 P07 | 14min | 3 tasks | 4 files |
 | Phase 02 P01 | 50min | 3 tasks | 6 files |
 | Phase 02 P02 | 6min | 2 tasks | 4 files |
+| Phase 02 P03 | 32min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02]: Two mirrored capsule feel flippers (Box core + rounded tip/hinge Circles, D-07) on motorized revolute joints; tipRadius on FlipperState (D-08); setFlipperMotor remapped to feel speeds +1->UP_SPEED 30 / -1->RETURN_SPEED 20 (D-05), replacing FLIPPER_MOTOR_SPEED; flipper restitution 0 (D-06(3)); torque 10000->500, limits +/-pi/8; mirror via body angle pi + planck reference-relative limits; right flipper is throwaway-rig scaffold (D-11) clear of every Phase-1 test ball. Phase-1 flipper neg-control launch retuned 80->105 to stay honest under the slower feel drive.
 - [Phase 02]: Flipper control layer split into two engine-agnostic pure-TS modules (src/input/ keyboard held-set + per-side OR latched edges on event.code; src/control/ FlipperController FSM resting->flipping-up->held-up->returning) — neither imports planck (grep-enforced), FSM drives world only via setFlipperMotor(id,+1/-1/0) and holds +1 continuously through held-up (D-06(1)); unit-proven vs synthetic events and a spy PhysicsWorld.
 - [Phase 02]: FSM limit detection is by angular settling (|delta|<1e-3 rad after moving), not a hard-coded FLIPPER_UPPER/LOWER_ANGLE compare — the referenceAngle-mirrored right flipper reports absolute angles around pi, so settling is the mirror-safe, geometry/engine-independent detector.
+- [Phase ?]: [Phase 02]: FixedStepLoop.advance() gained an optional onStep pre-step hook invoked before each internal world.step (D-10); main.ts drains the input latch + ticks the FlipperController FSM at the top of each fixed 120 Hz step via one stable callback passed by reference (zero per-frame alloc, T-02-05), so a keypress applies sub-frame. Loop stays engine-agnostic. First keyboard-playable end-to-end flipper rig + drain-triggered ball feed (D-11), guarded by a no-mock E2E integration test.
+- [Phase ?]: [Phase 02]: FlipperController now commands setFlipperMotor(id,0) per flipper in its constructor to enforce its documented resting==motor-0 invariant (Rule-1 fix surfaced by the E2E test) - otherwise a never-pressed bat runs the adapter construction-default motor into a joint limit and Box2D locks it (startup limit-jam). Release jam-lag (~15 steps after a long cradle hold) + physical rest/raise orientation deferred to the 02-06 feel checkpoint.
 
 ### Pending Todos
 
@@ -104,6 +107,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:29:05.715Z
+Last session: 2026-07-15T16:56:57.042Z
 Stopped at: Completed 02-01-PLAN.md
 Resume file: None
