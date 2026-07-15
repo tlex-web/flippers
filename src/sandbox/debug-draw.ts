@@ -186,14 +186,23 @@ export class DebugRenderer {
     const ctx = this.ctx;
     ctx.fillStyle = COL_FLIPPER;
     for (const f of flippers) {
-      const hw = f.halfWidth * PIXELS_PER_METER;
+      // Draw the D-07 capsule as a STADIUM: a rectangular core capped by a
+      // rounded tip (and hinge) of radius tipRadius. The loop iterates every
+      // flipper, so the mirrored second bat draws for free; the body `angle`
+      // already carries the mirror (≈π), so this needs no per-flipper casing.
+      const tr = f.tipRadius * PIXELS_PER_METER;
+      const len = f.length * PIXELS_PER_METER;
       ctx.save();
       ctx.translate(f.pivotX * PIXELS_PER_METER, f.pivotY * PIXELS_PER_METER);
       ctx.rotate(f.angle);
-      // Bat: from the pivot along local +x by length, half-thickness halfWidth.
-      ctx.fillRect(0, -hw, f.length * PIXELS_PER_METER, hw * 2);
+      // Core: from the pivot along local +x by length, half-thickness tipRadius.
+      ctx.fillRect(0, -tr, len, tr * 2);
+      // Rounded tip + rounded hinge (no per-frame allocation — ctx paths only).
       ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.arc(len, 0, tr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, tr, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
