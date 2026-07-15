@@ -48,7 +48,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Throwaway Canvas 2D debug sandbox rendering the live interpolated ball + HUD (diagnosis only) [wave 3]
+- [x] 01-03-PLAN.md — Throwaway Canvas 2D debug sandbox rendering the live interpolated ball + HUD (diagnosis only) [wave 3]
 - [x] 01-04-PLAN.md — Frame-rate independence (identical sim at 60/120/144Hz) + tab-blur / large-dt survival (PHYS-03) [wave 3]
 - [x] 01-05-PLAN.md — Max-speed motorized test flipper + seeded PRNG + swept containment invariant (unit-tested) [wave 3]
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 4/7 | In Progress|  |
+| 1. Physics Core Spike | 5/7 | In Progress|  |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
