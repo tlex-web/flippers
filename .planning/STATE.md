@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 02 complete (7/6) — ready to discuss Phase 3
-last_updated: 2026-07-15T22:05:59.274Z
+status: planning
+stopped_at: Phase 3 context gathered
+last_updated: "2026-07-15T22:32:13.751Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
   completed_plans: 14
-  percent: 17
+  percent: 33
 ---
 
 # Project State
@@ -116,6 +116,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T23:45:00.000Z
-Stopped at: 02-GAP-01 rig playability fix — symmetric same-height flippers + centre feed (one ball, no pile-up) from 02-06 live-rig feedback; all green (tsc/eslint 0, 71/71, 2/2 soak). Rig now catchable for the by-feel checkpoint.
-Resume file: None
+Last session: 2026-07-15T22:32:13.725Z
+Stopped at: Phase 3 context gathered
+Resume file: .planning/phases/03-table-plunger-event-bus/03-CONTEXT.md
