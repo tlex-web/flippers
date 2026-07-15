@@ -109,6 +109,12 @@ export interface PhysicsWorld {
   step(dtSeconds: number): void;
   /** Introduce a ball; returns its stable id (N-ball-ready). */
   addBall(spec: BallSpec): BallId;
+  /**
+   * Remove a ball by its id (no-op for an unknown id). Frees the engine body and
+   * its pooled snapshot so a throwaway feed can recycle a single ball on drain
+   * without leaking bodies (N-ball-ready: removing one leaves the rest intact).
+   */
+  removeBall(id: BallId): void;
   /** Pooled, id-keyed snapshot of every live ball. */
   getBalls(): readonly BallState[];
   /** Pooled snapshot of every flipper (a max-speed test flipper this phase). */

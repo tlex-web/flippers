@@ -130,13 +130,19 @@ function makeStepper(world: PhysicsWorld): () => void {
 }
 
 /**
- * Hold the always-on max-speed TEST flipper still (motor speed 0). It lives in
- * the lower-left and never reaches the balls used here, but pinning it removes it
- * as a variable so these stability assertions isolate the BALL.
+ * Pin EVERY flipper at a fixed motor command so these stability assertions isolate
+ * the BALL. The two feel flippers now sit CENTRED and mirror-symmetric on the
+ * throwaway rig (planck-world.ts, D-11) rather than as the Phase-1 single lower-left
+ * bat, so BOTH must be pinned — and each scenario picks the pin that keeps its ball
+ * clear of, or stably cradled by, the pair:
+ *   `-1` → drive to the DROOP limit and hold: a deep, rigid V that catches and
+ *          steadies a ball dropped into the centre (limit-pinned = rock steady).
+ *   `+1` → hold RAISED (tips up, out of the floor zone): a floor / corner ball then
+ *          has clear floor and never spawns inside a near-floor drooped bat.
+ * The command persists on the joint motor, so one call holds for the whole run.
  */
-function holdFlipper(world: PhysicsWorld): void {
-  const f = world.getFlippers()[0];
-  if (f) world.setFlipperMotor(f.id, 0);
+function holdAllFlippers(world: PhysicsWorld, direction: number): void {
+  for (const f of world.getFlippers()) world.setFlipperMotor(f.id, direction);
 }
 
 /**
@@ -185,8 +191,10 @@ function firstMonotonicIncrease(
 describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   it("a dropped ball settles to rest and then sits perfectly still (no jitter)", () => {
     const world: PhysicsWorld = new PlanckWorld();
-    world.addBall({ x: 1.0, y: 0.4, vx: 0.6 });
-    holdFlipper(world);
+    // Drop straight down onto the CENTRE of the mirrored pair; held at the droop
+    // limit the two bats form a deep, rigid V that catches and steadies the ball.
+    world.addBall({ x: 1.0, y: 0.4, vx: 0 });
+    holdAllFlippers(world, -1);
     const step = makeStepper(world);
 
     // Phase A — settle: the ball must reach true rest within the time budget.
@@ -216,12 +224,15 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
     const world: PhysicsWorld = new PlanckWorld();
     const b = bounds(world);
     const r = BALL_RADIUS_M;
-    // Bottom-right corner (clear of the lower-left test flipper). In-plane gravity
-    // pulls the ball into the corner, where it must SETTLE — not creep or vibrate
-    // against the two walls indefinitely.
-    world.addBall({ x: b.maxX - r - 0.01, y: b.maxY - r - 0.01 });
-    holdFlipper(world);
     const step = makeStepper(world);
+
+    // Hold both flippers RAISED first — lifting the right bat's near-corner base out
+    // of the bottom-right corner — THEN seed the ball there (no spawn overlap). In-
+    // plane gravity pulls it into the corner, where it must SETTLE — not creep or
+    // vibrate against the two walls indefinitely.
+    holdAllFlippers(world, 1);
+    for (let s = 0; s < 30; s++) step();
+    world.addBall({ x: b.maxX - r - 0.01, y: b.maxY - r - 0.01 });
 
     const settleStep = stepUntilSettled(world, step);
     expect(settleStep).toBeGreaterThan(0);
@@ -239,18 +250,33 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   it("kinetic energy is monotonically non-increasing once undisturbed (never spontaneously gains speed)", () => {
     const world: PhysicsWorld = new PlanckWorld();
     const b = bounds(world);
-    const r = BALL_RADIUS_M;
-    // Rest the ball ON the floor (max-y wall) with a purely HORIZONTAL launch, so
-    // in-plane gravity is fully carried by the floor's normal force and cannot
-    // pump kinetic energy in. (A free-falling ball legitimately GAINS kinetic
-    // energy as gravity does work — that is expected physics, not the defect under
-    // test.) With no energy source, damping + inelastic contacts can only BLEED
-    // energy, so the kinetic-energy series MUST be monotonically non-increasing;
-    // any sustained rise would be a solver/config defect (a ball speeding up on
-    // its own).
-    world.addBall({ x: (b.minX + b.maxX) / 2, y: b.maxY - r, vx: 1.5, vy: 0 });
-    holdFlipper(world);
     const step = makeStepper(world);
+
+    // Hold both flippers RAISED first (bats + pivot bases lifted well above the
+    // floor), THEN roll a ball ALONG the floor. The centred rig fills the lower box,
+    // so — unlike the Phase-1 single lower-left flipper — a full-radius ball can't
+    // roll the floor without striking a raised pivot base and being lobbed upward
+    // (which then legitimately GAINS KE from gravity on the way back down — a false
+    // trip, not the defect under test). A SMALLER ball (radius 0.1) clears UNDER the
+    // raised bats/bases to the bare floor, where it bounces only off the two VERTICAL
+    // side walls — reversing it ALONG the floor, never lobbing it up. Ball size is
+    // irrelevant to the property; it is shrunk only to reach clear floor under this
+    // throwaway D-11 rig. On that horizontal floor in-plane gravity is fully carried
+    // by the floor normal and cannot pump KE in (a free-FALLING ball would legitimately
+    // gain KE — expected physics); with no energy source, damping + inelastic wall
+    // bounces can only BLEED energy, so the KE series MUST be monotonically
+    // non-increasing — any sustained rise is a solver/config defect (a ball speeding
+    // up on its own).
+    const smallR = 0.1;
+    holdAllFlippers(world, 1);
+    for (let s = 0; s < 30; s++) step();
+    world.addBall({
+      x: (b.minX + b.maxX) / 2,
+      y: b.maxY - smallR,
+      vx: 2.5,
+      vy: 0,
+      radius: smallR,
+    });
 
     // Discard the one-off contact-resolution transient (the resting contact
     // warm-starts over a few steps), then sample kinetic energy every fixed step.

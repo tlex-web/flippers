@@ -81,23 +81,28 @@ const WALL_ID = -1;
 //     Phase 3. Feel/torque/angle values live in constants.ts; only the pivots +
 //     capsule shape live here.
 //
-//     Placement is chosen so neither flipper's swept fixture sector touches the
-//     rig's test balls at ANY angle in its limits: the ball fall column (x≈1.5),
-//     the thin interior wall (y=2.0), and the stability harness's resting balls
-//     (the bottom-right corner rest ≈ (1.79, 2.79) and the floor balls the drop/
-//     energy proofs roll along y≈2.8, x∈[1.0,1.8]). The left flipper keeps the
-//     Phase-1 lower-left pivot; the mirrored right flipper points toward the left
-//     wall from the lower-center.
+//     SYMMETRIC by construction (human-checkpoint fix): both pivots share ONE y
+//     and are mirrored in x about the box centre (x = WIDTH_M/2 = 1.0), so the
+//     pair reads as a level, mirror-image classic-pinball layout — left pivot
+//     lower-left, right pivot lower-right, both bats angling up toward the centre
+//     with a gap between the tips that a fed ball rests in and can be flipped from
+//     (the ball-feed drops onto the centre of the pair; see src/sandbox/main.ts).
 //
-//     Right-flipper pivot moved 1.15 → 1.55 (gap 01): once the mirror raise-sign
-//     was corrected, BOTH bats raise their tip UP, and at x=1.15 the right bat's
-//     leftward reach overlapped the left bat's now-UP raised arc (they collided,
-//     and the left bat's tip ball sat inside the right bat). Shifting the right
-//     pivot right so its leftmost reach (≈ x 1.02) clears the left bat's raised
-//     tip (≈ x 0.88) removes the overlap while keeping the right arc left of the
-//     fall column and clear of the resting balls. ---
-const FLIPPER_PIVOT_L = { x: 0.35, y: 2.6 } as const;
-const FLIPPER_PIVOT_R = { x: 1.55, y: 2.35 } as const;
+//     FLIPPER_HALF_SEP is chosen so the two bats never overlap at ANY angle in
+//     their [−π/8, +π/8] limits. The tips reach FURTHEST toward centre at LEVEL
+//     (joint 0, cos 0 = 1), so the minimum centre-to-centre tip gap is
+//     2·HALF_SEP − 2·FLIPPER_LENGTH_M = 2·0.65 − 1.0 = 0.30 m — i.e. 0.16 m of
+//     clear air between the two tip circles (radius FLIPPER_TIP_RADIUS_M = 0.07
+//     each); at the droop/raise limits the gap only widens (cos π/8 < 1). The left
+//     pivot keeps its Phase-1 x/y (0.35, 2.6) so every harness proof that reads
+//     getFlippers()[0] is unaffected; the right pivot is its exact mirror (it was
+//     the asymmetric (1.55, 2.35), which sat lopsided in the bottom-right corner —
+//     the "not on the same height" / "balls roll off the right side" report). ---
+const BOX_CENTER_X = WIDTH_M / 2;
+const FLIPPER_HALF_SEP = 0.65;
+const FLIPPER_PIVOT_Y = 2.6;
+const FLIPPER_PIVOT_L = { x: BOX_CENTER_X - FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
+const FLIPPER_PIVOT_R = { x: BOX_CENTER_X + FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
 const FLIPPER_ID_L = 0;
 const FLIPPER_ID_R = 1;
 const FLIPPER_DENSITY = 1;
@@ -457,7 +462,13 @@ export class PlanckWorld implements PhysicsWorld {
 
     // Motorized revolute joint: motor ON (default drives toward the rest/upper
     // limit), high max torque, bounded ~45° arc. The limits are reference-
-    // relative (referenceAngle = restAngle), so the mirror reuses them.
+    // relative (referenceAngle = restAngle), so the mirror reuses them. The idle
+    // pose the human sees is NOT this default speed — the sandbox composition root
+    // constructs the FlipperController (which commands motor 0) BEFORE the first
+    // ball, so both bats freeze at their symmetric construction angle (level, joint
+    // 0) rather than drifting one prime-step apart (main.ts, "not on the same
+    // height" fix). Left unchanged here so the FLIP-04 soak/teeth calibration — which
+    // reads flipper[0]'s post-prime angle — is byte-for-byte preserved.
     const joint = new RevoluteJoint(
       {
         enableMotor: true,
@@ -523,6 +534,29 @@ export class PlanckWorld implements PhysicsWorld {
     this.balls.push({ id, body });
     this.ballPool.push({ id, x: spec.x, y: spec.y, vx, vy, radius, angle: 0 });
     return id;
+  }
+
+  removeBall(id: BallId): void {
+    for (let i = 0; i < this.balls.length; i++) {
+      const entry = this.balls[i];
+      if (!entry || entry.id !== id) continue;
+      // Destroy the Planck body (frees its fixtures + contacts). Only the sandbox
+      // feed calls this, BETWEEN steps (never mid-`step()`), so tearing the body
+      // down cannot disturb an in-flight contact solve.
+      this.world.destroyBody(entry.body);
+      // Swap-remove from BOTH parallel pools (balls[] and ballPool[]) so they stay
+      // index-aligned: move the last entry into this slot, then drop the tail. Order
+      // is irrelevant — consumers key by id, and the loop snapshots by index then
+      // truncates to length. No per-call allocation.
+      const lastIdx = this.balls.length - 1;
+      const lastBall = this.balls[lastIdx];
+      const lastSnap = this.ballPool[lastIdx];
+      if (lastBall) this.balls[i] = lastBall;
+      if (lastSnap) this.ballPool[i] = lastSnap;
+      this.balls.pop();
+      this.ballPool.pop();
+      return;
+    }
   }
 
   /**

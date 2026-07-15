@@ -83,6 +83,7 @@ class SpyWorld implements PhysicsWorld {
   addBall(): BallId {
     return 0;
   }
+  removeBall(): void {}
   getBalls(): readonly BallState[] {
     return [];
   }

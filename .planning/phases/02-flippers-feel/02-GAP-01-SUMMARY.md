@@ -69,3 +69,28 @@ Correcting the sign made BOTH bats raise UP; at the old right pivot `(1.15, 2.35
 - All modified files present; changes compile, lint, and test green (71/71 + 2/2 gates).
 - Post-fix probe confirms `+1` raises BOTH flippers (left & right tip world-Y −0.414 m).
 - `.planning/config.json` left untouched.
+
+---
+
+## Addendum — Live-rig playability fix (02-06 human-checkpoint feedback)
+
+**One-liner:** After the raise-direction fix, the operator ran `npm run dev` and reported the two-flipper TEST RIG was unusable — the bats were "not on the same height" and fed balls "rolled over the right side of the right flipper" and piled in the corner. This addendum rebuilds the throwaway rig scaffold (D-11) into a symmetric, playable feel rig **without touching the confirmed raiseSign fix or any feel constant.**
+
+### What the operator confirmed / reported (playing the live rig)
+1. **Flippers work** — the per-flipper `raiseSign` raise-direction is CONFIRMED good and is preserved EXACTLY (unchanged).
+2. **Not on the same height** — the prior gap-fix left the right pivot at `(1.55, 2.35)`, a different y than the left `(0.35, 2.6)`, lopsided into the bottom-right corner.
+3. **Balls roll off the right / pile in the corner** — the feed dropped balls that missed the faces AND left every drained ball in the world (they accumulated).
+
+### The rig fix (all test-scaffold geometry, D-11 — Claude's discretion)
+- **Symmetric, same-height pivots** (`src/physics/planck-world.ts`): both pivots now share one y and are mirrored in x about the box centre. Left keeps its Phase-1 `(0.35, 2.6)` (so every harness proof that reads `getFlippers()[0]` is byte-for-byte unaffected); right is its exact mirror `(1.65, 2.6)` via `BOX_CENTER_X ± FLIPPER_HALF_SEP` (0.65). `HALF_SEP` is sized so the tips — which reach furthest toward centre at LEVEL — keep ≥0.16 m of clear air, so the two bats **never collide at any angle** (verified: min tip gap through a full both-raise sweep = 0.309 m > 2·tipRadius).
+- **Symmetric idle via composition order** (`src/sandbox/main.ts`): the `FlipperController` (which commands motor 0) is now constructed BEFORE the first ball, so both bats freeze at their symmetric construction angle (level) instead of drifting a quarter-radian apart on the first ball's CCD-prime step. The adapter's construction default motor is deliberately **left unchanged** so the FLIP-04 soak/teeth calibration (which reads flipper[0]'s post-prime angle) stays byte-identical.
+- **One catchable ball, centre feed** (`src/sandbox/main.ts` + new `removeBall` on the interface): the ball is dropped straight down onto the CENTRE of the pair (verified: rests at x≈1.00, y≈2.45 — dead centre, catchable — and its max x ever is 1.10, so it never reaches the right edge). On drain the tracked ball is now **removed before** a fresh one is fed, so exactly one ball ever exists (no pile-up).
+
+### Deviations forced by the rig move (Rule 3 — blocking; tests kept green, none weakened)
+- **`src/harness/stability.test.ts`** (Phase-1 ball proof): its three balls sat in the bottom-centre where the centred flippers now live. `holdFlipper` → `holdAllFlippers(dir)` pins BOTH bats; the drop test holds a deep drooped V and drops into it; the corner + energy tests raise both bats clear first. The energy (monotonic-KE) ball is shrunk to r=0.1 so it clears UNDER the raised bats to bare floor and bounces only off the vertical side walls (a full-radius ball would strike a raised pivot base and be lobbed upward — a false KE gain). Intent of each proof preserved.
+- **`src/harness/flipper-feel.test.ts`** (FLIP-02 v=ω·r): the ratio assertion was silently RIG-COUPLED — a tip fling used to clip the OLD right bat, damping the measured tip launch into the tolerance. Decoupled by drooping the far flipper (out of the flung path → now rig-independent) and by striking the flat capsule CORE (rFrac 0.9→0.8) instead of the rounded TIP CIRCLE, whose convex surface whips the ball ~30% above the rigid-bar ω·r. Clean, rig-independent match: off 0.195 **within the UNCHANGED 35% tolerance** (no weakening). Core FLIP-02 claim (tip out-launches base, >1.5×) intact.
+
+### Validation — all green
+- `npx tsc --noEmit` → 0 · `npx eslint .` → 0 · `npx vitest run` → **71/71** · `npm run soak` → **2/2 gates**.
+- Raise-direction `raiseSign` fix preserved verbatim; engine isolation intact (`planck` still only in `planck-world.ts`); zero per-frame/per-step allocation preserved (feed remove/add run only on the rare drain).
+- `.planning/config.json` left untouched.

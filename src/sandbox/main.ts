@@ -28,11 +28,15 @@ import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw
 const BALL_DENSITY = 1;
 
 /**
- * Ball spawn: near the top of the 2 m × 3 m box, centred with a small sideways
- * nudge, so it visibly falls down the tilted playfield, grazes a wall, and
- * settles — an honest first read on weighty motion (PHYS-01) and interpolation.
+ * Ball feed (D-11): drop ONE ball straight DOWN onto the CENTRE of the mirrored
+ * flipper pair (box centre x = WIDTH_M/2 = 1.0), from near the top of the 2 m × 3 m
+ * box, so it falls into the gap between the two bats and comes to rest cradled in
+ * the pair — where either flipper can catch it, hold it, and flip it (tip vs base).
+ * A fresh ball is re-fed only when the tracked one drains off the pair to the floor
+ * (see FEED_DRAIN_Y), and the drained ball is REMOVED first, so exactly one
+ * catchable ball ever exists. Throwaway scaffold — NOT real table geometry.
  */
-const BALL_SPAWN = { x: 1.0, y: 0.5, vx: 0.6 } as const;
+const BALL_SPAWN = { x: 1.0, y: 0.5, vx: 0 } as const;
 
 /** Frame-rate smoothing factor for the FPS readout (0..1; higher = snappier). */
 const FPS_SMOOTHING = 0.1;
@@ -44,12 +48,13 @@ const HZ_WINDOW_MS = 500;
 const HUD_UPDATE_MS = 200;
 
 /**
- * Ball-feed drain line (meters, world y). Below every flipper hinge (the pivots
- * sit at y ≈ 2.35–2.6) but above a floor-resting ball's center (≈ 2.8): once the
- * tracked ball's center passes this it has left the flipper zone for the floor,
- * so the rig drops a fresh one (D-11). Throwaway scaffold — NOT table geometry.
+ * Ball-feed drain line (meters, world y). Both flipper pivots sit at y ≈ 2.6 and a
+ * ball cradled in the pair rests around y ≈ 2.5–2.6; a ball that has instead rolled
+ * off the pair onto the floor sits near y ≈ 2.8. Once the tracked ball's center
+ * passes this line it has left the catchable zone, so the rig removes it and drops
+ * a fresh one onto the centre (D-11). Throwaway scaffold — NOT table geometry.
  */
-const FEED_DRAIN_Y = 2.72;
+const FEED_DRAIN_Y = 2.75;
 
 function main(): void {
   const canvas = document.getElementById("stage");
@@ -60,17 +65,25 @@ function main(): void {
   // Composition root: the one engine-specific construction. Everything else
   // below talks to the world through the `PhysicsWorld` interface only.
   const world = new PlanckWorld();
-  let activeBallId = world.addBall(BALL_SPAWN);
-  const loop = new FixedStepLoop(world);
 
   // Keyboard input + flipper FSM (D-10). Constructed ONCE here (never inside
   // frame()). `attach()` registers the window keydown/keyup/blur + document
   // visibilitychange listeners. Neither module imports an engine — only this
   // file's `new PlanckWorld()` above is engine-specific; both talk through the
   // `PhysicsWorld` interface / synthetic-friendly handlers.
+  //
+  // ORDER (idle-symmetry fix): build the controller — whose constructor commands
+  // motor 0 on every flipper, freezing both bats at their symmetric construction
+  // angle (level) — BEFORE the first ball. If the ball were added first, its CCD-
+  // priming step would run the flippers' default motor for one step and drift the
+  // mirror pair a quarter-radian apart (the human-checkpoint "not on the same
+  // height" idle). Both bats then rest LEVEL and mirror-symmetric until a key press.
   const input = new FlipperInput();
   input.attach();
   const controller = new FlipperController(world);
+
+  let activeBallId = world.addBall(BALL_SPAWN);
+  const loop = new FixedStepLoop(world);
 
   // Side -> flipper-id mapping (D-09/D-10): the physically-LEFT flipper (smaller
   // pivot x) answers the left keys; the right flipper answers the right keys.
@@ -131,12 +144,15 @@ function main(): void {
     // it stays bounded; the reused-view drain allocates nothing per frame.
     world.drainEvents();
 
-    // Ball-feed rig (D-11): once the tracked ball drains below the flipper zone,
-    // drop a fresh one so the flippers always have something to catch. Throwaway
-    // scaffold — NOT real table geometry. No steady-state allocation: `findBall`
-    // reuses the pooled snapshot and `addBall` runs only on the (rare) drain.
+    // Ball-feed rig (D-11): once the tracked ball drains off the flipper pair onto
+    // the floor, REMOVE it and drop a fresh one onto the centre, so exactly one
+    // catchable ball ever exists (the previous rig left drained balls in the world,
+    // so several piled up in the corner). Throwaway scaffold — NOT real table
+    // geometry. No steady-state allocation: `findBall` reuses the pooled snapshot
+    // and remove/add run only on the (rare) drain.
     const activeBall = findBall(world.getBalls(), activeBallId);
     if (activeBall && activeBall.y > FEED_DRAIN_Y) {
+      world.removeBall(activeBallId);
       activeBallId = world.addBall(BALL_SPAWN);
     }
 
