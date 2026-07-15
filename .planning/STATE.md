@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-15T14:47:35.298Z"
-last_activity: 2026-07-15 -- Phase 02 planning complete
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-15T16:10:29.322Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 7
+  completed_plans: 8
   percent: 17
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original.
-**Current focus:** Phase 2 — flippers & feel
+**Current focus:** Phase 02 — flippers-feel
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (flippers-feel) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 02 planning complete
+Last activity: 2026-07-15
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 62%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [██████████] 100%
 | Phase 01 P03 | 15min | 2 tasks | 3 files |
 | Phase 01 P06 | 20min | 2 tasks | 9 files |
 | Phase 01 P07 | 14min | 3 tasks | 4 files |
+| Phase 02 P01 | 50min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase 01]: Headless swept-containment soak (npm run soak) is the SOLE PHYS-02 tunnel-proof gate (D-03): seeded mulberry32 sweep of launch angle x speed (past real max, ~58 m/s) x flipper phase over >=630s SIMULATED 120Hz steps, sweptEscaped asserted every step against the interface; green with CCD on in ~11s wall-clock. Planck setBullet+continuousPhysics empirically HOLDS at ~10x the ball's real max velocity. — Turns PHYS-02 (the #1 risk) into a green/red CI line with replayable seeds and makes the plan 01-07 engine decision empirical (D-05).
 - [Phase 01]: The soak gate is proven honest by a CCD-off negative control: bullet:false disables world-level continuousPhysics (Box2D runs CCD vs static bodies regardless of the per-body setBullet flag), so a max-velocity thin-wall launch tunnels and runSoak reports passed=false with a numeric replayable seed + full state that reproduces identically. Flipper tunnels use swept-path crossing + far-side-clear to exclude the stress-flipper crushing a resting ball. — A green gate is only trustworthy when a real fault is demonstrated to turn it RED (test integrity, T-06-01).
 - [Phase 01]: Engine LOCKED — Planck.js 1.5.0 (setBullet + world continuousPhysics, behind the PhysicsWorld interface) confirmed by the passing npm run soak tunnel-proof gate + a green headless stability/energy proof (stability.test.ts: settles-to-rest, no jitter/corner-stick, kinetic energy monotonically non-increasing, teeth-proven). The D-01 custom-swept-solver fallback is documented but NOT triggered. Feel constants held unchanged; operator approved a visibly weighty fall/settle (D-09 Phase-1 target), final heavy verdict deferred to Phase 2.
+- [Phase ?]: [Phase 02]: Two mirrored capsule feel flippers (Box core + rounded tip/hinge Circles, D-07) on motorized revolute joints; tipRadius on FlipperState (D-08); setFlipperMotor remapped to feel speeds +1->UP_SPEED 30 / -1->RETURN_SPEED 20 (D-05), replacing FLIPPER_MOTOR_SPEED; flipper restitution 0 (D-06(3)); torque 10000->500, limits +/-pi/8; mirror via body angle pi + planck reference-relative limits; right flipper is throwaway-rig scaffold (D-11) clear of every Phase-1 test ball. Phase-1 flipper neg-control launch retuned 80->105 to stay honest under the slower feel drive.
 
 ### Pending Todos
 
@@ -99,6 +101,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T13:25:48.795Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-flippers-feel/02-CONTEXT.md
+Last session: 2026-07-15T16:10:29.306Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None

@@ -77,7 +77,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Two mirrored capsule flippers + `tipRadius` interface + feel constants + debug-draw stadium [wave 1]
+- [x] 02-01-PLAN.md — Two mirrored capsule flippers + `tipRadius` interface + feel constants + debug-draw stadium [wave 1]
 - [ ] 02-02-PLAN.md — Engine-agnostic keyboard input module (event.code, repeat-safe, blur-clear) + FlipperController FSM [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
-| 2. Flippers & Feel | 0/6 | Planned | - |
+| 2. Flippers & Feel | 1/6 | In Progress|  |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
