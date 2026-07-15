@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-06-PLAN.md (tunnel-proof soak gate; CCD-on green, negative control red)
-last_updated: "2026-07-15T11:53:52.686Z"
+status: verifying
+stopped_at: "Completed 01-07-PLAN.md (Phase 1 final: stability/energy proof, engine LOCKED to Planck, operator-approved weighty feel)"
+last_updated: "2026-07-15T12:16:54.337Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 6
-  percent: 0
+  completed_plans: 7
+  percent: 17
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 01 (Physics Core Spike) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-15
 
-Progress: [█████████░] 86%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [█████████░] 86%
 | Phase 01 P05 | 12min | 2 tasks | 7 files |
 | Phase 01 P03 | 15min | 2 tasks | 3 files |
 | Phase 01 P06 | 20min | 2 tasks | 9 files |
+| Phase 01 P07 | 14min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 01]: Throwaway Canvas 2D debug sandbox (D-06/D-07) renders the live interpolated ball + walls + test flipper + velocity + contacts + FPS/physics-Hz/KE HUD, reading state only through the PhysicsWorld interface (no planck import); allocation-free rAF path (pooled buffers, cached gradient/HUD strings). Diagnosis only — pass/fail stays the headless soak (01-06). Human render checkpoint operator-approved.
 - [Phase 01]: Headless swept-containment soak (npm run soak) is the SOLE PHYS-02 tunnel-proof gate (D-03): seeded mulberry32 sweep of launch angle x speed (past real max, ~58 m/s) x flipper phase over >=630s SIMULATED 120Hz steps, sweptEscaped asserted every step against the interface; green with CCD on in ~11s wall-clock. Planck setBullet+continuousPhysics empirically HOLDS at ~10x the ball's real max velocity. — Turns PHYS-02 (the #1 risk) into a green/red CI line with replayable seeds and makes the plan 01-07 engine decision empirical (D-05).
 - [Phase 01]: The soak gate is proven honest by a CCD-off negative control: bullet:false disables world-level continuousPhysics (Box2D runs CCD vs static bodies regardless of the per-body setBullet flag), so a max-velocity thin-wall launch tunnels and runSoak reports passed=false with a numeric replayable seed + full state that reproduces identically. Flipper tunnels use swept-path crossing + far-side-clear to exclude the stress-flipper crushing a resting ball. — A green gate is only trustworthy when a real fault is demonstrated to turn it RED (test integrity, T-06-01).
+- [Phase 01]: Engine LOCKED — Planck.js 1.5.0 (setBullet + world continuousPhysics, behind the PhysicsWorld interface) confirmed by the passing npm run soak tunnel-proof gate + a green headless stability/energy proof (stability.test.ts: settles-to-rest, no jitter/corner-stick, kinetic energy monotonically non-increasing, teeth-proven). The D-01 custom-swept-solver fallback is documented but NOT triggered. Feel constants held unchanged; operator approved a visibly weighty fall/settle (D-09 Phase-1 target), final heavy verdict deferred to Phase 2.
 
 ### Pending Todos
 
@@ -97,6 +99,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T11:53:52.631Z
-Stopped at: Completed 01-06-PLAN.md (tunnel-proof soak gate; CCD-on green, negative control red)
+Last session: 2026-07-15T12:16:54.302Z
+Stopped at: Completed 01-07-PLAN.md (Phase 1 final: stability/energy proof, engine LOCKED to Planck, operator-approved weighty feel)
 Resume file: None

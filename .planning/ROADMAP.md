@@ -13,7 +13,7 @@ This roadmap is ordered by risk and dependency, not feature convenience. The ent
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Physics Core Spike** - Tunnel-proof, frame-rate-independent ball physics proven in isolation; engine decision locked
+- [x] **Phase 1: Physics Core Spike** - Tunnel-proof, frame-rate-independent ball physics proven in isolation; engine decision locked (completed 2026-07-15)
 - [ ] **Phase 2: Flippers & Feel** - Two keyboard flippers with rotational CCD, momentum transfer, and cradle — the Core Value
 - [ ] **Phase 3: Table, Plunger & Event Bus** - The real Space Cadet layout, a hold-to-charge plunger, and a typed collision-event bus
 - [ ] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works
@@ -58,7 +58,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — Resting-ball stability + energy proof, reference-anchored feel constants, and the locked engine decision (PHYS-01, criterion #5) [wave 5]
+- [x] 01-07-PLAN.md — Resting-ball stability + energy proof, reference-anchored feel constants, and the locked engine decision (PHYS-01, criterion #5) [wave 5]
 
 ### Phase 2: Flippers & Feel
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 6/7 | In Progress|  |
+| 1. Physics Core Spike | 7/7 | Complete   | 2026-07-15 |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
