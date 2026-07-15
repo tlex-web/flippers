@@ -165,14 +165,22 @@ export function sweptEscaped(
  * This sub-samples the bat centerline across the whole swept sector `[preAngle,
  * postAngle]` (so the tip advances well under a ball radius between samples) and
  * reports a tunnel iff, at SOME sampled angle, the ball chord `prev -> next`
- * crosses the bat segment while BOTH endpoints are clear (> `radius + halfWidth`)
+ * crosses the bat segment while BOTH endpoints are clear (> `radius + tipRadius`)
  * of it — i.e. the ball entered clear on one side and exited clear on the other,
  * a genuine pass-through. Requiring BOTH ends clear is what gives it teeth
  * without false greens on the CCD-on run: the stress bat WHACKING a ball leaves
  * an endpoint touching/overlapping (never clear on both sides), and a normal
  * bounce reflects to the SAME side (no crossing) — neither trips.
  *
- * Engine-agnostic: consumes only interface scalars (pivot/length/half-width and
+ * `tipRadius` (D-08) is the capsule bat's fat half-thickness at the swept tip: the
+ * clearance band `radius + tipRadius` reflects the rounded-tip stadium the ball
+ * must clear on BOTH sides to count as a genuine pass-through, rather than a
+ * razor-thin segment. (This is a SAME-ARITY rename of the former `halfWidth`
+ * positional param — for the symmetric capsule `tipRadius === halfWidth`, so
+ * existing thin-segment callers passing their half-width in this slot are
+ * unchanged; only the semantics widen to the capsule tip.)
+ *
+ * Engine-agnostic: consumes only interface scalars (pivot/length/tip-radius and
  * the pre/post angles read off `getFlippers()`), never anything from Planck.
  */
 export function flipperSweptTunnel(
@@ -181,11 +189,11 @@ export function flipperSweptTunnel(
   radius: number,
   pivot: Vec2,
   length: number,
-  halfWidth: number,
+  tipRadius: number,
   preAngle: number,
   postAngle: number,
 ): boolean {
-  const clearance = radius + halfWidth;
+  const clearance = radius + tipRadius;
   const tipTravel = Math.abs(postAngle - preAngle) * length;
   // Tip travel (m) allowed between consecutive bat samples — a quarter of the
   // ball radius keeps the sweep finely covered so no crossing angle is skipped.

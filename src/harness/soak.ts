@@ -27,7 +27,12 @@ import {
 import { PlanckWorld } from "../physics/planck-world";
 import { flipperSweptTunnel, sweptEscaped } from "./containment";
 import { mulberry32 } from "./prng";
-import type { PhysicsWorld, Segment, Vec2 } from "../physics/types";
+import type {
+  FlipperState,
+  PhysicsWorld,
+  Segment,
+  Vec2,
+} from "../physics/types";
 
 /** Which stress target a case's launch is aimed at. */
 export type LaunchMode = "thin-wall" | "flipper" | "free";
@@ -52,6 +57,17 @@ export interface SoakConfig {
   readonly cases: number;
   /** CCD on/off. Default TRUE; FALSE only for the negative control. */
   readonly bullet?: boolean;
+  /**
+   * Adaptive angular sub-stepping on/off (D-01, plan 02-04). Default TRUE (the
+   * PlanckWorld default). Set FALSE **only** for plan 02-05's FLIP-04 TEETH
+   * negative control: at the feel-tuned peak ω the D-01 formula gives N ≥ 2, so
+   * forcing N = 1 (sub-stepping OFF) lets one 120 Hz step rotate the bat past ~2×
+   * the safe arc — the whipping bat then skips the ball and the swept check goes
+   * RED, proving the ROTATIONAL guarantee is held by the sub-stepping MECHANISM,
+   * not by luck or by the ball's translational CCD (which is left ON: `bullet`
+   * is independent of this switch).
+   */
+  readonly subStepping?: boolean;
   /**
    * Replay hook: run EXACTLY these case seeds instead of deriving `cases` seeds
    * from `seed`. Feeding a logged failure seed here reproduces it identically.
@@ -384,10 +400,20 @@ function runCase(
   let prevY = launch.originY;
   let flipperDir = params.flipperDir;
 
+  // Reusable per-flipper pre-step angle buffer (grow-only, index-aligned with
+  // getFlippers()). Filled BEFORE each world.step() so the intra-step swept
+  // sector of EVERY bat is bounded by its own start angle (see the copy-out note
+  // below). Declared once here — no per-step allocation in the loop body.
+  const preAngles: number[] = [];
+
   for (let step = 1; step <= totalSteps; step++) {
-    // Drive the flipper phase: hold through the phase delay, then sweep back and
-    // forth by reversing the motor at the joint limits (a continuous fast target).
-    const flPre = world.getFlippers()[0];
+    // Drive the flipper phase on the AIMED flipper (index 0 — the bat the launch
+    // targets): hold through the phase delay, then sweep back and forth by
+    // reversing the motor at the joint limits (a continuous fast target at peak
+    // ω on the up-leg). Its world angle equals the joint angle (referenceAngle 0),
+    // so the reference-relative limit comparison is valid for it.
+    const flippers = world.getFlippers();
+    const flPre = flippers[0];
     if (flPre) {
       if (step < params.flipperPhaseSteps) {
         world.setFlipperMotor(flPre.id, 0);
@@ -404,11 +430,15 @@ function runCase(
       }
     }
 
-    // Capture the flipper angle BEFORE the step. `flPre` is a live pooled
-    // reference (the same object `getFlippers()` returns post-step), so its
-    // `.angle` would read the POST-step value after `world.step()` — copy it out
-    // now to bound the bat's intra-step swept sector for the tunnel check below.
-    const flPreAngle = flPre ? flPre.angle : null;
+    // Capture EVERY flipper's angle BEFORE the step. `getFlippers()` returns live
+    // pooled references (the same objects it returns post-step), so their `.angle`
+    // would read the POST-step value after `world.step()` — copy each out now to
+    // bound that bat's intra-step swept sector for the per-flipper tunnel check.
+    preAngles.length = 0;
+    for (let i = 0; i < flippers.length; i++) {
+      const f = flippers[i];
+      preAngles.push(f ? f.angle : NaN);
+    }
 
     world.step(FIXED_DT);
 
@@ -422,33 +452,48 @@ function runCase(
     // Two per-step swept checks against the ball/flipper INTERFACE (D-05):
     //   1. Static boundary (incl. the thin interior wall) via the slop-aware
     //      swept containment invariant — catches tunnel-through + poke-and-return.
-    //   2. The max-speed flipper: the bat is a MOVING thin wall that rotates up
-    //      to ~19°/step, so testing only its POST-step centerline would MISS a
-    //      ball that passes through where the bat WAS mid-sweep. `flipperSweptTunnel`
-    //      sub-samples the bat's INTRA-STEP swept sector (pre-angle -> post-angle,
-    //      read off getFlippers) and trips iff the ball's chord crosses the bat
-    //      while BOTH endpoints are clear — a genuine pass-through. This proves
-    //      the dynamic-flipper no-tunnel property independently of Planck's CCD
-    //      (D-03), rather than leaning on the engine.
-    const fl = world.getFlippers()[0];
+    //   2. EVERY flipper: each bat is a MOVING thin wall that rotates up to
+    //      ~19°/step, so testing only its POST-step centerline would MISS a ball
+    //      that passes through where the bat WAS mid-sweep. `flipperSweptTunnel`
+    //      sub-samples each bat's INTRA-STEP swept sector (its pre-angle ->
+    //      post-angle, read off getFlippers) and trips iff the ball's chord
+    //      crosses the bat while BOTH endpoints are clear of the (radius +
+    //      tipRadius) capsule band — a genuine pass-through. Iterating ALL
+    //      flippers (not just index 0) makes this the FLIP-04 two-flipper gate:
+    //      the ball can never be swept through by EITHER bat. Proves the property
+    //      independently of Planck's CCD (D-03), rather than leaning on the engine.
     const escapedBoundary = ignoreBoundary
       ? false
       : sweptEscaped(prev, next, effRadius, boundary);
     let escapedFlipper = false;
-    if (fl && flPreAngle !== null) {
-      escapedFlipper = flipperSweptTunnel(
-        prev,
-        next,
-        BALL_RADIUS_M,
-        { x: fl.pivotX, y: fl.pivotY },
-        fl.length,
-        fl.halfWidth,
-        flPreAngle,
-        fl.angle,
-      );
+    let trippedFlipper: FlipperState | null = null;
+    const flippersPost = world.getFlippers();
+    for (let i = 0; i < flippersPost.length; i++) {
+      const fl = flippersPost[i];
+      const preAngle = preAngles[i];
+      if (!fl || preAngle === undefined || Number.isNaN(preAngle)) continue;
+      if (
+        flipperSweptTunnel(
+          prev,
+          next,
+          BALL_RADIUS_M,
+          { x: fl.pivotX, y: fl.pivotY },
+          fl.length,
+          fl.tipRadius,
+          preAngle,
+          fl.angle,
+        )
+      ) {
+        escapedFlipper = true;
+        trippedFlipper = fl;
+        break;
+      }
     }
 
     if (escapedBoundary || escapedFlipper) {
+      // Record the flipper that tripped (or, for a boundary escape, the aimed
+      // flipper as context) so the failure replays with full state.
+      const recordFl = trippedFlipper ?? flippersPost[0] ?? null;
       const failure: SoakFailure = {
         seed: caseSeed,
         kind: escapedBoundary ? "boundary" : "flipper",
@@ -464,14 +509,14 @@ function runCase(
           radius: ball.radius,
           angle: ball.angle,
         },
-        flipperState: fl
+        flipperState: recordFl
           ? {
-              id: fl.id,
-              pivotX: fl.pivotX,
-              pivotY: fl.pivotY,
-              angle: fl.angle,
-              length: fl.length,
-              halfWidth: fl.halfWidth,
+              id: recordFl.id,
+              pivotX: recordFl.pivotX,
+              pivotY: recordFl.pivotY,
+              angle: recordFl.angle,
+              length: recordFl.length,
+              halfWidth: recordFl.halfWidth,
             }
           : null,
       };
@@ -494,8 +539,21 @@ function runCase(
  */
 export function runSoak(config: SoakConfig): SoakResult {
   const bullet = config.bullet ?? true;
+  // Thread the sub-stepping switch into the default Planck adapter (the FLIP-04
+  // teeth control passes { subStepping: false }); when undefined the adapter's
+  // default (true) applies. `bullet` is passed independently so the two switches
+  // stay orthogonal (CCD vs the rotational sub-stepping guarantee).
   const makeWorld =
-    config.makeWorld ?? ((options) => new PlanckWorld(options));
+    config.makeWorld ??
+    ((options) =>
+      new PlanckWorld(
+        // Omit `subStepping` entirely when unset so the adapter default (true)
+        // applies (exactOptionalPropertyTypes forbids passing an explicit
+        // `undefined`); pass the concrete boolean only for the teeth control.
+        config.subStepping === undefined
+          ? { bullet: options.bullet }
+          : { bullet: options.bullet, subStepping: config.subStepping },
+      ));
   const caseSeeds = config.seeds
     ? [...config.seeds]
     : deriveSeeds(config.seed, config.cases);
