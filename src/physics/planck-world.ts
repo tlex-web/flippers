@@ -11,7 +11,16 @@
  * allocation on the render read path.
  */
 
-import { Box, Chain, Circle, Edge, RevoluteJoint, Vec2, World } from "planck";
+import {
+  Box,
+  Chain,
+  Circle,
+  Edge,
+  RevoluteJoint,
+  Vec2,
+  World,
+  WorldManifold,
+} from "planck";
 
 import {
   BALL_FRICTION,
@@ -90,6 +99,15 @@ interface MutableVec2 {
   y: number;
 }
 
+/** Internal, mutable collision event — pooled and mutated in place (never re-allocated per step). */
+interface MutableCollisionEvent {
+  type: CollisionEventType;
+  aId: number;
+  bId: number;
+  point: MutableVec2;
+  normalImpulse: number;
+}
+
 /** Internal, mutable view of a flipper snapshot (returned read-only as FlipperState). */
 interface MutableFlipperState {
   id: number;
@@ -124,9 +142,14 @@ function classifyContact(
   a: BodyTag["kind"],
   b: BodyTag["kind"],
 ): CollisionEventType | null {
-  const kinds = new Set([a, b]);
-  if (kinds.has("ball") && kinds.has("wall")) return "ball-wall";
-  if (kinds.has("ball") && kinds.has("flipper")) return "ball-flipper";
+  // Direct pair comparison — no per-contact `new Set`/array literal (this runs
+  // inside `world.step()` on the 60fps path; steady-state zero allocation).
+  if ((a === "ball" && b === "wall") || (a === "wall" && b === "ball")) {
+    return "ball-wall";
+  }
+  if ((a === "ball" && b === "flipper") || (a === "flipper" && b === "ball")) {
+    return "ball-flipper";
+  }
   if (a === "ball" && b === "ball") return "ball-ball";
   return null;
 }
@@ -180,8 +203,20 @@ export class PlanckWorld implements PhysicsWorld {
 
   private readonly segments: readonly Segment[];
 
-  // Accumulated collision events, handed off (and reset) by `drainEvents()`.
-  private events: CollisionEvent[] = [];
+  // Collision-event pool: grow-only, mutated in place. `eventCount` is the live
+  // count accumulated since the last drain; `drainEvents()` resets it to 0 so a
+  // draining consumer keeps the buffer BOUNDED (no per-step object churn, no
+  // unbounded growth). Matches the ball/contact snapshot-pool pattern.
+  private readonly eventPool: MutableCollisionEvent[] = [];
+  private eventCount = 0;
+
+  // One reusable WorldManifold shared by both contact read paths (post-solve +
+  // syncContactPoints). Passing it into `getWorldManifold` avoids the fresh
+  // `new WorldManifold()` Planck allocates when handed `null` (verified against
+  // planck.js internals). Safe to share: both call sites read it out immediately
+  // and never retain it, and they never run concurrently (post-solve fires
+  // during `world.step()`, sync runs after it returns).
+  private readonly scratchWm = new WorldManifold();
 
   constructor(options?: PlanckWorldOptions) {
     // CCD defaults ON; the soak's negative control passes { bullet: false }.
@@ -204,15 +239,17 @@ export class PlanckWorld implements PhysicsWorld {
       if (!type) return;
       let normalImpulse = 0;
       for (const value of impulse.normalImpulses) normalImpulse += value;
-      const wm = contact.getWorldManifold(null);
+      const wm = contact.getWorldManifold(this.scratchWm);
       const first = wm && wm.pointCount > 0 ? wm.points[0] : undefined;
-      this.events.push({
-        type,
-        aId: a.id,
-        bId: b.id,
-        point: { x: first?.x ?? 0, y: first?.y ?? 0 },
-        normalImpulse,
-      });
+      // Reuse a pooled event record + its nested point vector (no per-contact
+      // object/point allocation on the step hot path).
+      const evt = this.nextEventSlot();
+      evt.type = type;
+      evt.aId = a.id;
+      evt.bId = b.id;
+      evt.point.x = first?.x ?? 0;
+      evt.point.y = first?.y ?? 0;
+      evt.normalImpulse = normalImpulse;
     });
   }
 
@@ -412,7 +449,7 @@ export class PlanckWorld implements PhysicsWorld {
     let n = 0;
     for (let c = this.world.getContactList(); c; c = c.getNext()) {
       if (!c.isTouching()) continue;
-      const wm = c.getWorldManifold(null);
+      const wm = c.getWorldManifold(this.scratchWm);
       if (!wm) continue;
       for (let k = 0; k < wm.pointCount; k++) {
         const p = wm.points[k];
@@ -461,9 +498,32 @@ export class PlanckWorld implements PhysicsWorld {
     return this.contactPoints;
   }
 
+  /**
+   * Reserve the next pooled event slot, growing the pool by one only when the
+   * live count outruns it (grow-only). Returns a record to mutate in place.
+   */
+  private nextEventSlot(): MutableCollisionEvent {
+    let slot = this.eventPool[this.eventCount];
+    if (!slot) {
+      slot = {
+        type: "ball-wall",
+        aId: 0,
+        bId: 0,
+        point: { x: 0, y: 0 },
+        normalImpulse: 0,
+      };
+      this.eventPool.push(slot);
+    }
+    this.eventCount++;
+    return slot;
+  }
+
   drainEvents(): CollisionEvent[] {
-    const drained = this.events;
-    this.events = [];
+    // Hand back the live slice and reset the count so the pool is reused (and
+    // stays bounded) next cycle. The returned records are pooled and mutated on
+    // the next step — per the interface contract, copy out anything retained.
+    const drained = this.eventPool.slice(0, this.eventCount);
+    this.eventCount = 0;
     return drained;
   }
 }
