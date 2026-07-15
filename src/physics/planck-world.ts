@@ -31,6 +31,7 @@ import {
   FLIPPER_HALF_WIDTH_M,
   FLIPPER_LENGTH_M,
   FLIPPER_LOWER_ANGLE,
+  FLIPPER_MAX_ANGULAR_SPEED,
   FLIPPER_MAX_MOTOR_TORQUE,
   FLIPPER_RETURN_SPEED,
   FLIPPER_TIP_RADIUS_M,
@@ -105,6 +106,31 @@ const CAP_CORE_HALF_LEN = 0.18;
 const CAP_CORE_CENTER_X = 0.25;
 const CAP_TIP_X = 0.43;
 const CAP_BASE_X = 0.07;
+
+// --- D-01 adaptive angular sub-stepping law -------------------------------- //
+// N = ceil(ω · FLIPPER_LENGTH_M · FIXED_DT / (0.5 · BALL_RADIUS_M)): the number
+// of Planck sub-steps that keep the fastest bat's per-sub-step TIP arc below
+// ~half a ball radius, so a whipping thin bat cannot sweep THROUGH the ball
+// between narrow-phase samples (Planck/Box2D TOI sweeps translation — handled by
+// the ball's setBullet — but "can miss" a large rotation; Erin Catto, GDC 2013).
+// Kept as a pure scalar function of the LIVE joint speed → deterministic, never
+// wall-clock (threat T-02-09 / replay).
+const SUB_STEP_TRAVEL_LIMIT = 0.5 * BALL_RADIUS_M;
+
+/** Sub-step count for a given peak flipper angular speed ω (rad/s). */
+function subStepsFor(omega: number): number {
+  return Math.max(
+    1,
+    Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / SUB_STEP_TRAVEL_LIMIT),
+  );
+}
+
+// Secondary cap (D-02): the D-01 count clamped to the bound derived from the
+// pathological-ω ceiling FLIPPER_MAX_ANGULAR_SPEED (≈ N ≤ 4). A BOUND ONLY — the
+// non-penetration guarantee is the sub-stepping, never this clamp (see the
+// FLIPPER_MAX_ANGULAR_SPEED doc block). Computed once at module load (no per-step
+// work); FLIPPER_MAX_ANGULAR_SPEED = 96 → SUB_STEP_N_MAX = 4.
+const SUB_STEP_N_MAX = subStepsFor(FLIPPER_MAX_ANGULAR_SPEED);
 
 /** Internal, mutable view of a ball snapshot (returned read-only as BallState). */
 interface MutableBallState {
@@ -200,6 +226,20 @@ export interface PlanckWorldOptions {
    * actually tunnels through the static wall.
    */
   readonly bullet?: boolean;
+
+  /**
+   * Adaptive angular sub-stepping master switch (FLIP-04/D-01). Defaults to TRUE.
+   * When true, `step()` splits the fixed step into `N` Planck sub-steps derived
+   * from the live flipper joint speed so the fastest bat can never sweep THROUGH
+   * the ball (the primary rotational anti-tunnel guarantee, D-01). Set FALSE
+   * **only** for plan 02-05's FLIP-04 negative control, which drives the flipper
+   * at peak ω with sub-stepping forced OFF (N always 1) so the seeded gate goes
+   * RED — proving the green gate is held by the MECHANISM, not by luck.
+   *
+   * Independent of `bullet`: this toggles the ROTATIONAL guarantee only; the
+   * ball's translational `setBullet` CCD is unaffected either way.
+   */
+  readonly subStepping?: boolean;
 }
 
 export class PlanckWorld implements PhysicsWorld {
@@ -207,6 +247,18 @@ export class PlanckWorld implements PhysicsWorld {
 
   /** Whether balls are created with CCD armed (see PlanckWorldOptions.bullet). */
   private readonly bulletEnabled: boolean;
+
+  /** Whether step() adapts N sub-steps to flipper ω (see options.subStepping). */
+  private readonly subSteppingEnabled: boolean;
+
+  /**
+   * Diagnostic: the `N` chosen by the LAST `step()`'s adaptive sub-stepping
+   * (D-01). A concrete-class field ONLY — deliberately NOT on the `PhysicsWorld`
+   * interface, so engine internals never leak into the contract. The 02-04 unit
+   * test reads it to assert the sub-step law (1 at rest, 2 at up-speed, bounded
+   * under a hard drive, 1 when sub-stepping is disabled).
+   */
+  lastSubStepCount = 1;
 
   private nextId = 0;
 
@@ -251,6 +303,9 @@ export class PlanckWorld implements PhysicsWorld {
   constructor(options?: PlanckWorldOptions) {
     // CCD defaults ON; the soak's negative control passes { bullet: false }.
     this.bulletEnabled = options?.bullet ?? true;
+    // Adaptive angular sub-stepping (D-01) defaults ON; plan 02-05's FLIP-04
+    // negative control passes { subStepping: false } to force N = 1.
+    this.subSteppingEnabled = options?.subStepping ?? true;
     // Gravity is the IN-PLANE projection along the tilted playfield (D-08),
     // NOT full vertical g — this is what makes the fall read as a heavy roll.
     // `continuousPhysics` (the TOI solver) is the world-level CCD switch — off
@@ -481,7 +536,43 @@ export class PlanckWorld implements PhysicsWorld {
   }
 
   step(dtSeconds: number): void {
-    this.world.step(dtSeconds, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    // --- D-01 adaptive angular sub-stepping (the FLIP-04 rotational anti-tunnel
+    //     guarantee). Size N from the LIVE peak flipper joint speed so the
+    //     fastest bat's per-sub-step tip arc stays below ~half a ball radius,
+    //     shrinking the rotation below what Planck's discrete narrow phase can
+    //     miss. N is derived from joint speed, NEVER wall-clock, so replay stays
+    //     deterministic (threat T-02-09). `subStepping: false` forces N = 1 (the
+    //     02-05 negative-control hook). Everything here is scalar — no array, no
+    //     per-step allocation (threat T-02-07 zero-alloc discipline). ---
+    let omega = 0;
+    for (let i = 0; i < this.flipperJoints.length; i++) {
+      const entry = this.flipperJoints[i];
+      if (!entry) continue;
+      const speed = Math.abs(entry.joint.getJointSpeed());
+      if (speed > omega) omega = speed;
+    }
+
+    let subSteps = 1;
+    if (this.subSteppingEnabled) {
+      subSteps = subStepsFor(omega);
+      // Secondary cap (D-02): a BOUND only — never the non-penetration mechanism.
+      if (subSteps > SUB_STEP_N_MAX) subSteps = SUB_STEP_N_MAX;
+    }
+    this.lastSubStepCount = subSteps;
+
+    // Split into N Planck sub-steps whose dts sum EXACTLY to dtSeconds (the last
+    // sub-step takes the remainder so float drift can't accumulate; N = 1 is a
+    // single full step, bit-identical to before). Collision events ACCUMULATE
+    // across sub-steps: the post-solve handler appends into the grow-only event
+    // pool and ONLY drainEvents() resets the count — so we must NOT drain (or
+    // otherwise reset) between sub-steps (threat T-02-08). Ball/flipper pools and
+    // contact points sync ONCE, after the last sub-step (below).
+    const subDt = dtSeconds / subSteps;
+    for (let i = 0; i < subSteps; i++) {
+      const stepDt =
+        i === subSteps - 1 ? dtSeconds - subDt * (subSteps - 1) : subDt;
+      this.world.step(stepDt, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    }
 
     // Refresh pooled ball snapshots in place (no allocation).
     for (let i = 0; i < this.balls.length; i++) {

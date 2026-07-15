@@ -181,3 +181,23 @@ export const FLIPPER_LOWER_ANGLE = -Math.PI / 8;
  * Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE = π/4 ≈ 45° (D-07).
  */
 export const FLIPPER_UPPER_ANGLE = Math.PI / 8;
+
+/**
+ * Secondary angular-speed cap (rad/s) bounding the D-01 adaptive sub-step count
+ * `N` in `PlanckWorld.step()` (D-02). This is a **secondary BOUND only** — it is
+ * explicitly NOT the mechanism that guarantees the fast bat can never sweep
+ * through the ball. That guarantee is the sub-stepping itself: splitting a fixed
+ * step into `N = ceil(ω · FLIPPER_LENGTH_M · FIXED_DT / (0.5 · BALL_RADIUS_M))`
+ * Planck sub-steps so the fastest bat's per-sub-step tip arc stays below ~half a
+ * ball radius. A cap low enough to serve as the primary guarantee would sand down
+ * flip snappiness (the Core Value this phase exists to nail), so the cap only
+ * exists to keep `N` bounded against a *pathological* ω that would otherwise blow
+ * the 16.6 ms frame budget (threat T-02-07 — availability/feel DoS).
+ *
+ * Sized so `N ≤ ~4` at any ω: N = 4 corresponds to
+ *   ω ≈ 4 · 0.5 · BALL_RADIUS_M / (FLIPPER_LENGTH_M · FIXED_DT)
+ *     = 4 · 0.5 · 0.2 / (0.5 · 1/120) = 96 rad/s.
+ * At the feel-tuned FLIPPER_UP_SPEED (30 rad/s) N = 2, far under this bound — the
+ * cap never engages in normal play; it is purely the pathological-ω backstop.
+ */
+export const FLIPPER_MAX_ANGULAR_SPEED = 96;
