@@ -4,10 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Physics Sandbox — Space Cadet Pinball</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05060d;
+      }
+      #sandbox {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      #stage {
+        display: block;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+      }
+    </style>
   </head>
   <body>
-    <!-- Throwaway diagnosis sandbox. The real interactive debug view is built in plan 01-03. -->
-    <main id="sandbox"></main>
+    <!-- Throwaway diagnosis sandbox (D-06/D-07): live interpolated ball + HUD.
+         The real procedural renderer is Phase 5; do not build on this. -->
+    <main id="sandbox">
+      <canvas id="stage"></canvas>
+    </main>
     <script type="module" src="/src/sandbox/main.ts"></script>
   </body>
 </html>
