@@ -11,6 +11,14 @@
  * These are the single source of truth for the adapter and every later plan;
  * they are plain exported consts so Vite HMR re-applies edits instantly during
  * feel tuning ("change a number, feel it").
+ *
+ * CONFIRMED (plan 01-07): these values are held unchanged — the headless
+ * stability/energy proof (`src/harness/stability.test.ts`) shows a ball driven by
+ * them settles to rest with no jitter/corner-sticking and never spontaneously
+ * gains kinetic energy, and the tunnel-proof soak (`npm run soak`, plan 01-06)
+ * stays green with them. Phase-1 "done" for feel = reference-anchored constants +
+ * a visibly weighty fall/settle; the FINAL by-feel "heavy" verdict is deferred to
+ * Phase 2, judged through flipper catch/return on the real table incline (D-09).
  */
 
 /**
