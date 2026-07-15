@@ -61,6 +61,15 @@ export class FlipperController {
       const f = flippers[i];
       if (!f) continue;
       this.fsms.push({ id: f.id, phase: "resting", prevAngle: f.angle, moved: false });
+      // Enforce the resting invariant IMMEDIATELY (D-04/D-06): command motor 0 so
+      // each bat is brake-held at rest rather than left running the adapter's
+      // construction-default motor speed. Without this, the leftover speed keeps
+      // driving a never-pressed bat hard into a joint limit, where the high-torque
+      // revolute motor overshoots and Box2D locks the joint (a "limit jam") — an
+      // idle flipper enters that jam on startup and it then swallows the first
+      // real press/release. The whole FSM assumes "resting == motor 0"; the world
+      // does not start there, so make it true here (once, in the constructor).
+      this.world.setFlipperMotor(f.id, 0);
     }
   }
 
