@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-15T16:10:29.322Z"
+last_updated: "2026-07-15T16:29:06.492Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
   percent: 17
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 02 (flippers-feel) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-15
 
-Progress: [██████░░░░] 62%
+Progress: [███████░░░] 69%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [██████░░░░] 62%
 | Phase 01 P06 | 20min | 2 tasks | 9 files |
 | Phase 01 P07 | 14min | 3 tasks | 4 files |
 | Phase 02 P01 | 50min | 3 tasks | 6 files |
+| Phase 02 P02 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 01]: The soak gate is proven honest by a CCD-off negative control: bullet:false disables world-level continuousPhysics (Box2D runs CCD vs static bodies regardless of the per-body setBullet flag), so a max-velocity thin-wall launch tunnels and runSoak reports passed=false with a numeric replayable seed + full state that reproduces identically. Flipper tunnels use swept-path crossing + far-side-clear to exclude the stress-flipper crushing a resting ball. — A green gate is only trustworthy when a real fault is demonstrated to turn it RED (test integrity, T-06-01).
 - [Phase 01]: Engine LOCKED — Planck.js 1.5.0 (setBullet + world continuousPhysics, behind the PhysicsWorld interface) confirmed by the passing npm run soak tunnel-proof gate + a green headless stability/energy proof (stability.test.ts: settles-to-rest, no jitter/corner-stick, kinetic energy monotonically non-increasing, teeth-proven). The D-01 custom-swept-solver fallback is documented but NOT triggered. Feel constants held unchanged; operator approved a visibly weighty fall/settle (D-09 Phase-1 target), final heavy verdict deferred to Phase 2.
 - [Phase ?]: [Phase 02]: Two mirrored capsule feel flippers (Box core + rounded tip/hinge Circles, D-07) on motorized revolute joints; tipRadius on FlipperState (D-08); setFlipperMotor remapped to feel speeds +1->UP_SPEED 30 / -1->RETURN_SPEED 20 (D-05), replacing FLIPPER_MOTOR_SPEED; flipper restitution 0 (D-06(3)); torque 10000->500, limits +/-pi/8; mirror via body angle pi + planck reference-relative limits; right flipper is throwaway-rig scaffold (D-11) clear of every Phase-1 test ball. Phase-1 flipper neg-control launch retuned 80->105 to stay honest under the slower feel drive.
+- [Phase 02]: Flipper control layer split into two engine-agnostic pure-TS modules (src/input/ keyboard held-set + per-side OR latched edges on event.code; src/control/ FlipperController FSM resting->flipping-up->held-up->returning) — neither imports planck (grep-enforced), FSM drives world only via setFlipperMotor(id,+1/-1/0) and holds +1 continuously through held-up (D-06(1)); unit-proven vs synthetic events and a spy PhysicsWorld.
+- [Phase 02]: FSM limit detection is by angular settling (|delta|<1e-3 rad after moving), not a hard-coded FLIPPER_UPPER/LOWER_ANGLE compare — the referenceAngle-mirrored right flipper reports absolute angles around pi, so settling is the mirror-safe, geometry/engine-independent detector.
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:10:29.306Z
+Last session: 2026-07-15T16:29:05.715Z
 Stopped at: Completed 02-01-PLAN.md
 Resume file: None

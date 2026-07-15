@@ -15,7 +15,7 @@ Requirements for the initial release: a polished, faithful, browser-playable cor
 
 ### Flippers (FLIP)
 
-- [ ] **FLIP-01**: Left and right flippers are controlled by the keyboard with near-instant (sub-frame) response
+- [x] **FLIP-01**: Left and right flippers are controlled by the keyboard with near-instant (sub-frame) response
 - [x] **FLIP-02**: Flippers transfer correct rotational momentum to the ball (the tip launches the ball faster than the base)
 - [x] **FLIP-03**: Player can catch and cradle the ball on a raised flipper and hold it steady without jitter
 - [ ] **FLIP-04**: A fast-moving flipper never passes through the ball (rotational continuous collision)
@@ -100,7 +100,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PHYS-01 | Phase 1 | Complete |
 | PHYS-02 | Phase 1 | Complete |
 | PHYS-03 | Phase 1 | Complete |
-| FLIP-01 | Phase 2 | Pending |
+| FLIP-01 | Phase 2 | Complete |
 | FLIP-02 | Phase 2 | Complete |
 | FLIP-03 | Phase 2 | Complete |
 | FLIP-04 | Phase 2 | Pending |
