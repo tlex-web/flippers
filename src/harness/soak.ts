@@ -25,7 +25,7 @@ import {
   FLIPPER_UPPER_ANGLE,
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
-import { segmentsIntersect, sweptEscaped } from "./containment";
+import { flipperSweptTunnel, sweptEscaped } from "./containment";
 import { mulberry32 } from "./prng";
 import type { PhysicsWorld, Segment, Vec2 } from "../physics/types";
 
@@ -61,6 +61,18 @@ export interface SoakConfig {
   readonly stopOnFirstFailure?: boolean;
   /** Force every case's aim (negative control targets the thin wall). */
   readonly forceMode?: LaunchMode;
+  /**
+   * FLIPPER negative control ONLY. When set, every case ignores the launch
+   * generator and instead drops the ball straight DOWN through the test bat's
+   * horizontal reach at `maxLaunchSpeed`, sweeping the flipper phase per case so
+   * some case coincides with a near-horizontal bat. It also SUPPRESSES the
+   * boundary-escape check, isolating the flipper-swept invariant: with CCD off
+   * the fast ball also tunnels the (thin) walls, and that boundary escape would
+   * otherwise trip first and mask the flipper tunnel. This exists solely to prove
+   * the enhanced flipper-swept check has TEETH (fires on a real bat pass-through);
+   * it is never used by the CCD-on gate.
+   */
+  readonly flipperNegativeControl?: boolean;
   /**
    * Injectable world factory — defaults to the Planck adapter. Keeps the soak
    * engine-agnostic (D-05): swap in any `PhysicsWorld` and the proof is unchanged.
@@ -190,17 +202,6 @@ function segLength(s: Segment): number {
   return Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
 }
 
-/** Shortest distance from point `p` to segment a-b. */
-function pointToSegmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
-
 /**
  * Midpoint of the thinnest interior wall, derived from the interface alone: the
  * outer perimeter edges span the full box, so the deliberately thin interior
@@ -233,6 +234,32 @@ function flipperTarget(world: PhysicsWorld): Vec2 {
   const fl = world.getFlippers()[0];
   if (!fl) return { x: 1, y: 1.5 };
   return { x: fl.pivotX + fl.length * 0.6, y: fl.pivotY };
+}
+
+/**
+ * FLIPPER negative-control launch: drop the ball straight DOWN through the bat's
+ * horizontal reach at max speed. The x offset along the bat is derived from the
+ * case's sweep angle (deterministic), so cases spread across the bat while the
+ * per-case flipper phase spreads the bat angle at arrival — together guaranteeing
+ * some case meets a near-horizontal bat and cleanly tunnels it (CCD off). Read
+ * off the interface (`getFlippers`), never Planck.
+ */
+function flipperThroughLaunch(
+  world: PhysicsWorld,
+  params: CaseParams,
+  maxLaunchSpeed: number,
+): { originX: number; originY: number; vx: number; vy: number } {
+  const fl = world.getFlippers()[0];
+  if (!fl) {
+    return { originX: 1, originY: 0.5, vx: 0, vy: maxLaunchSpeed };
+  }
+  // Aim at x in [pivot + 0.4·len, pivot + 1.0·len] — the bat's mid-to-tip span,
+  // where a straight-down chord crosses the near-horizontal centerline with both
+  // endpoints clear of the (corner-anchored) pivot.
+  const frac = params.angle / (Math.PI * 2); // [0,1) — deterministic per case
+  const originX = fl.pivotX + fl.length * (0.4 + 0.6 * frac);
+  const originY = fl.pivotY - 1.2; // well above the bat so it arrives at full speed
+  return { originX, originY, vx: 0, vy: maxLaunchSpeed };
 }
 
 // --- Seeded case generation ------------------------------------------------ //
@@ -328,12 +355,24 @@ function runCase(
   const flipper = flipperTarget(world);
 
   const params = makeCaseParams(caseSeed, config, thin, bounds);
-  const { vx, vy } = launchVelocity(params, thin, flipper);
+
+  // The flipper negative control isolates the flipper-swept invariant: it drops
+  // the ball straight through the bat and SUPPRESSES the boundary check (a CCD-off
+  // ball also tunnels the walls, which would otherwise trip first and mask the
+  // flipper tunnel). Otherwise, use the seeded sweep launch.
+  const ignoreBoundary = config.flipperNegativeControl === true;
+  const launch = ignoreBoundary
+    ? flipperThroughLaunch(world, params, config.maxLaunchSpeed)
+    : {
+        originX: params.originX,
+        originY: params.originY,
+        ...launchVelocity(params, thin, flipper),
+      };
   world.addBall({
-    x: params.originX,
-    y: params.originY,
-    vx,
-    vy,
+    x: launch.originX,
+    y: launch.originY,
+    vx: launch.vx,
+    vy: launch.vy,
     radius: BALL_RADIUS_M,
   });
 
@@ -341,8 +380,8 @@ function runCase(
   const effRadius = BALL_RADIUS_M - CONTACT_SLOP;
   const totalSteps = Math.max(1, Math.round(config.durationSeconds / FIXED_DT));
 
-  let prevX = params.originX;
-  let prevY = params.originY;
+  let prevX = launch.originX;
+  let prevY = launch.originY;
   let flipperDir = params.flipperDir;
 
   for (let step = 1; step <= totalSteps; step++) {
@@ -365,6 +404,12 @@ function runCase(
       }
     }
 
+    // Capture the flipper angle BEFORE the step. `flPre` is a live pooled
+    // reference (the same object `getFlippers()` returns post-step), so its
+    // `.angle` would read the POST-step value after `world.step()` — copy it out
+    // now to bound the bat's intra-step swept sector for the tunnel check below.
+    const flPreAngle = flPre ? flPre.angle : null;
+
     world.step(FIXED_DT);
 
     const ball = world.getBalls()[0];
@@ -377,29 +422,30 @@ function runCase(
     // Two per-step swept checks against the ball/flipper INTERFACE (D-05):
     //   1. Static boundary (incl. the thin interior wall) via the slop-aware
     //      swept containment invariant — catches tunnel-through + poke-and-return.
-    //   2. The max-speed flipper: the bat's centerline is a MOVING thin wall
-    //      (pivot + angle·length, read straight off getFlippers). A genuine
-    //      tunnel means the ball's swept path CROSSES the centerline AND the ball
-    //      ENDS clear on the far side (center > radius+halfWidth from the bat).
-    //      Ending clear after a crossing requires ~2·(radius+halfWidth) of travel
-    //      in one step — i.e. a real fast pass-through. It rules out the over-
-    //      powered stress flipper CRUSHING a resting ball (which leaves the ball
-    //      deeply OVERLAPPING the bat, never clear) and normal bounces (no cross).
+    //   2. The max-speed flipper: the bat is a MOVING thin wall that rotates up
+    //      to ~19°/step, so testing only its POST-step centerline would MISS a
+    //      ball that passes through where the bat WAS mid-sweep. `flipperSweptTunnel`
+    //      sub-samples the bat's INTRA-STEP swept sector (pre-angle -> post-angle,
+    //      read off getFlippers) and trips iff the ball's chord crosses the bat
+    //      while BOTH endpoints are clear — a genuine pass-through. This proves
+    //      the dynamic-flipper no-tunnel property independently of Planck's CCD
+    //      (D-03), rather than leaning on the engine.
     const fl = world.getFlippers()[0];
-    const escapedBoundary = sweptEscaped(prev, next, effRadius, boundary);
+    const escapedBoundary = ignoreBoundary
+      ? false
+      : sweptEscaped(prev, next, effRadius, boundary);
     let escapedFlipper = false;
-    if (fl) {
-      const pivot: Vec2 = { x: fl.pivotX, y: fl.pivotY };
-      const batB: Vec2 = {
-        x: fl.pivotX + Math.cos(fl.angle) * fl.length,
-        y: fl.pivotY + Math.sin(fl.angle) * fl.length,
-      };
-      if (segmentsIntersect(prev, next, pivot, batB)) {
-        const farClear =
-          pointToSegmentDistance(next, pivot, batB) >
-          BALL_RADIUS_M + fl.halfWidth;
-        escapedFlipper = farClear;
-      }
+    if (fl && flPreAngle !== null) {
+      escapedFlipper = flipperSweptTunnel(
+        prev,
+        next,
+        BALL_RADIUS_M,
+        { x: fl.pivotX, y: fl.pivotY },
+        fl.length,
+        fl.halfWidth,
+        flPreAngle,
+        fl.angle,
+      );
     }
 
     if (escapedBoundary || escapedFlipper) {

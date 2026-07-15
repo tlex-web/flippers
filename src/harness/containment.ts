@@ -152,6 +152,64 @@ export function sweptEscaped(
 }
 
 /**
+ * Did the ball's swept path tunnel THROUGH the flipper bat during one fixed step?
+ *
+ * The bat is a thin segment from `pivot` to its tip; its angle sweeps from
+ * `preAngle` (step start) to `postAngle` (step end), so a fast bat covers a whole
+ * angular SECTOR in a single 120 Hz step (here up to ~19°, the tip moving ~0.17 m).
+ * A naive check that only tests the ball chord against the POST-step centerline
+ * MISSES a ball that crosses where the bat WAS mid-sweep but the bat has rotated
+ * away by step end — the exact intra-step false-negative on the make-or-break
+ * dynamic-flipper tunnel case (D-03/D-04).
+ *
+ * This sub-samples the bat centerline across the whole swept sector `[preAngle,
+ * postAngle]` (so the tip advances well under a ball radius between samples) and
+ * reports a tunnel iff, at SOME sampled angle, the ball chord `prev -> next`
+ * crosses the bat segment while BOTH endpoints are clear (> `radius + halfWidth`)
+ * of it — i.e. the ball entered clear on one side and exited clear on the other,
+ * a genuine pass-through. Requiring BOTH ends clear is what gives it teeth
+ * without false greens on the CCD-on run: the stress bat WHACKING a ball leaves
+ * an endpoint touching/overlapping (never clear on both sides), and a normal
+ * bounce reflects to the SAME side (no crossing) — neither trips.
+ *
+ * Engine-agnostic: consumes only interface scalars (pivot/length/half-width and
+ * the pre/post angles read off `getFlippers()`), never anything from Planck.
+ */
+export function flipperSweptTunnel(
+  prevCenter: Vec2,
+  nextCenter: Vec2,
+  radius: number,
+  pivot: Vec2,
+  length: number,
+  halfWidth: number,
+  preAngle: number,
+  postAngle: number,
+): boolean {
+  const clearance = radius + halfWidth;
+  const tipTravel = Math.abs(postAngle - preAngle) * length;
+  // Tip travel (m) allowed between consecutive bat samples — a quarter of the
+  // ball radius keeps the sweep finely covered so no crossing angle is skipped.
+  const sampleRes = radius * 0.25;
+  const subSteps = Math.max(1, Math.ceil(tipTravel / sampleRes));
+  for (let s = 0; s <= subSteps; s++) {
+    const t = s / subSteps;
+    const angle = preAngle + (postAngle - preAngle) * t;
+    const tip: Vec2 = {
+      x: pivot.x + Math.cos(angle) * length,
+      y: pivot.y + Math.sin(angle) * length,
+    };
+    if (!segmentsIntersect(prevCenter, nextCenter, pivot, tip)) continue;
+    if (
+      pointSegmentDistance(prevCenter, pivot, tip) > clearance &&
+      pointSegmentDistance(nextCenter, pivot, tip) > clearance
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * `sweptEscaped` adapter over the interface's `BallState` snapshots: takes the
  * previous- and next-step ball states and uses the ball's own `radius`. This is
  * the shape the soak gate calls each step (D-05: reads the interface, not the
