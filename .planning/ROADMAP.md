@@ -44,7 +44,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Engine-agnostic ball/flipper/event interface + reference-anchored constants + Planck adapter (bullet ball, tilted gravity, chain/edge walls) + fixed-120Hz loop + smoke test [wave 2]
+- [x] 01-02-PLAN.md — Engine-agnostic ball/flipper/event interface + reference-anchored constants + Planck adapter (bullet ball, tilted gravity, chain/edge walls) + fixed-120Hz loop + smoke test [wave 2]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -146,7 +146,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Physics Core Spike | 1/7 | In Progress|  |
+| 1. Physics Core Spike | 2/7 | In Progress|  |
 | 2. Flippers & Feel | 0/TBD | Not started | - |
 | 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |

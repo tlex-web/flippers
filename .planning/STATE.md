@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-15T00:59:06.373Z"
+last_updated: "2026-07-15T01:16:52.491Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 01 (Physics Core Spike) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-15
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [███░░░░░░░] 29%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [█░░░░░░░░░] 14%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 10 | 2 tasks | 10 files |
+| Phase 01 P02 | 18min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ Recent decisions affecting current work:
 - [Roadmap]: Risk-first ordering — physics core and flipper feel retired before any table geometry is built.
 - [Roadmap]: Keep v1 physics data structures N-ball-ready so deferred multiball is additive later, not a rewrite.
 - [Phase 01]: TypeScript pinned to 5.9.3 (not plan 7.0.2) for 01-01 scaffold — @typescript-eslint 8 requires TS <6.1.0 and crashes under TS 7.0 native compiler; resolved per CLAUDE.md compat escape hatch. Exact-pin + lockfile control preserved. Ratify or revisit when typescript-eslint supports TS 7.
+- [Phase 01]: Physics isolated behind an engine-agnostic PhysicsWorld interface — planck imported only in planck-world.ts; pooled snapshots avoid per-frame allocation; 120Hz fixed-step accumulator loop with MAX_FRAME_MS spiral-of-death clamp. PHYS-01/02/03 satisfied by a green headless smoke test.
 
 ### Pending Todos
 
@@ -85,6 +87,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T00:56:02.147Z
+Last session: 2026-07-15T01:16:40.019Z
 Stopped at: Phase 1 context gathered
 Resume file: None

@@ -9,9 +9,9 @@ Requirements for the initial release: a polished, faithful, browser-playable cor
 
 ### Physics (PHYS)
 
-- [ ] **PHYS-01**: Ball moves under stable 2D physics (gravity, momentum, restitution, friction) and feels heavy, not floaty
-- [ ] **PHYS-02**: The ball never tunnels through thin walls or flippers, even at maximum speed (continuous collision detection)
-- [ ] **PHYS-03**: Simulation runs on a fixed timestep decoupled from rendering, so ball feel is identical at 60/120/144Hz and survives a tab-blur without exploding
+- [x] **PHYS-01**: Ball moves under stable 2D physics (gravity, momentum, restitution, friction) and feels heavy, not floaty
+- [x] **PHYS-02**: The ball never tunnels through thin walls or flippers, even at maximum speed (continuous collision detection)
+- [x] **PHYS-03**: Simulation runs on a fixed timestep decoupled from rendering, so ball feel is identical at 60/120/144Hz and survives a tab-blur without exploding
 
 ### Flippers (FLIP)
 
@@ -97,9 +97,9 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PHYS-01 | Phase 1 | Pending |
-| PHYS-02 | Phase 1 | Pending |
-| PHYS-03 | Phase 1 | Pending |
+| PHYS-01 | Phase 1 | Complete |
+| PHYS-02 | Phase 1 | Complete |
+| PHYS-03 | Phase 1 | Complete |
 | FLIP-01 | Phase 2 | Pending |
 | FLIP-02 | Phase 2 | Pending |
 | FLIP-03 | Phase 2 | Pending |
