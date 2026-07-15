@@ -14,7 +14,7 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 
 <!-- Shipped and confirmed valuable. -->
 
-(None yet — ship to validate)
+- [x] Stable 2D ball physics — gravity, momentum, realistic bounce, no tunneling through thin walls/flippers at speed, frame-rate-independent (fixed 120Hz timestep) — **Validated in Phase 1 (Physics Core Spike):** headless swept-containment soak gate is green with a proven-red CCD-off negative control (incl. the fast test-flipper intra-step case); ball feel is bit-identical at 60/120/144Hz and survives tab-blur; physics is isolated behind an N-ball-ready ball/flipper/event interface; engine chosen and locked on evidence (Planck.js 1.5 `setBullet` + `continuousPhysics`). Final by-feel "heavy" verdict deferred to Phase 2 (judged through real flipper catch/return).
 
 ### Active
 
@@ -22,7 +22,6 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 
 - [ ] Ball launches via a plunger with variable power (hold to charge, release to fire)
 - [ ] Two keyboard-controlled flippers with correct rotational physics and ball interaction
-- [ ] Stable 2D ball physics — gravity, momentum, realistic bounce, no tunneling through thin walls/flippers at speed
 - [ ] Space Cadet table layout recreated: launch chute, bumper cluster, ramps, lanes, and drain positioned like the original
 - [ ] Bumpers and targets react (bounce + visual flash + sound) and award points
 - [ ] Live score display
@@ -90,4 +89,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 after initialization*
+*Last updated: 2026-07-15 after Phase 1 (Physics Core Spike) completion*
