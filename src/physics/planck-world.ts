@@ -32,8 +32,9 @@ import {
   FLIPPER_LENGTH_M,
   FLIPPER_LOWER_ANGLE,
   FLIPPER_MAX_MOTOR_TORQUE,
-  FLIPPER_MOTOR_SPEED,
+  FLIPPER_RETURN_SPEED,
   FLIPPER_TIP_RADIUS_M,
+  FLIPPER_UP_SPEED,
   FLIPPER_UPPER_ANGLE,
   IN_PLANE_GRAVITY,
 } from "./constants";
@@ -73,15 +74,37 @@ const THIN_WALL = { ax: 0.2, ay: 2.0, bx: 0.8, by: 2.0 } as const;
 // Stable id for the (single) static walls body used in collision events.
 const WALL_ID = -1;
 
-// --- Max-speed TEST flipper placement in the 2×3 m box. Lower-LEFT, with its
-//     bounded sweep arc kept clear of the ball's fall column (x≈1.5) and the
-//     thin interior wall (y=2.0), so the stress flipper sweeps real play area
-//     without disturbing the baseline single-ball smoke run. Feel/torque values
-//     live in constants.ts; only the placement is here (test scaffold geometry,
-//     not a tunable feel constant). ---
-const FLIPPER_PIVOT = { x: 0.35, y: 2.6 } as const;
-const FLIPPER_ID = 0;
+// --- Two mirrored FEEL flippers on the throwaway 2×3 m test rig (D-11). Their
+//     placement is test-scaffold geometry (a replaceable local const like the
+//     Phase-1 single flipper), NOT real Space Cadet table layout — that is
+//     Phase 3. Feel/torque/angle values live in constants.ts; only the pivots +
+//     capsule shape live here.
+//
+//     Placement is chosen so neither flipper's swept fixture sector touches the
+//     rig's test balls at ANY angle in its limits: the ball fall column (x≈1.5),
+//     the thin interior wall (y=2.0), and the stability harness's resting balls
+//     (the bottom-right corner rest ≈ (1.79, 2.79) and the floor balls the drop/
+//     energy proofs roll along y≈2.8, x∈[1.0,1.8]). The left flipper keeps the
+//     Phase-1 lower-left pivot; the mirrored right flipper points toward the left
+//     wall from the lower-center, its whole arc held above y≈2.6 and left of the
+//     fall column, so all Phase-1 proofs stay green. ---
+const FLIPPER_PIVOT_L = { x: 0.35, y: 2.6 } as const;
+const FLIPPER_PIVOT_R = { x: 1.15, y: 2.35 } as const;
+const FLIPPER_ID_L = 0;
+const FLIPPER_ID_R = 1;
 const FLIPPER_DENSITY = 1;
+
+// --- Capsule bat geometry (local body frame, meters; D-07). The pivot is at
+//     local x=0 and the bat extends +x; the mirrored flipper is rotated to point
+//     the other way via its body angle, NOT by changing these fixtures. A Box
+//     core plus a rounded tip Circle (Planck 1.5 = Box2D 2.4 has no native
+//     capsule); a base Circle rounds the hinge so the ball cannot snag the pivot
+//     corner while cradling. Core spans local x∈[0.07, 0.43]; tip circle reaches
+//     x≈0.50 = FLIPPER_LENGTH_M. ---
+const CAP_CORE_HALF_LEN = 0.18;
+const CAP_CORE_CENTER_X = 0.25;
+const CAP_TIP_X = 0.43;
+const CAP_BASE_X = 0.07;
 
 /** Internal, mutable view of a ball snapshot (returned read-only as BallState). */
 interface MutableBallState {
@@ -237,7 +260,10 @@ export class PlanckWorld implements PhysicsWorld {
       continuousPhysics: this.bulletEnabled,
     });
     this.segments = this.buildBoundary();
-    this.buildTestFlipper();
+    // Two mirrored capsule flippers (D-07/D-11). N flippers is additive: the
+    // joint/pool registries are index-iterated in step().
+    this.buildFlipper(FLIPPER_ID_L, FLIPPER_PIVOT_L, false);
+    this.buildFlipper(FLIPPER_ID_R, FLIPPER_PIVOT_R, true);
     this.world.on("post-solve", (contact, impulse) => {
       const a = asTag(contact.getFixtureA().getBody().getUserData());
       const b = asTag(contact.getFixtureB().getBody().getUserData());
@@ -291,54 +317,86 @@ export class PlanckWorld implements PhysicsWorld {
   }
 
   /**
-   * Build the max-speed TEST flipper: a DYNAMIC thin bat on a MOTORIZED
-   * REVOLUTE JOINT — the canonical Box2D pinball flipper, run at max speed for
-   * stress. It is dynamic (NOT kinematic) so momentum transfers through the
-   * solver correctly on a ball hit (CLAUDE.md § "What NOT to Use"). This is the
-   * dynamic fast-thin-mover the ball must never tunnel through (PHYS-02/D-04).
+   * Build one FEEL flipper: a DYNAMIC multi-fixture CAPSULE bat on a MOTORIZED
+   * REVOLUTE JOINT — the canonical Box2D pinball flipper (CLAUDE.md § "What NOT
+   * to Use": kinematic flippers transfer momentum wrong and interact badly with
+   * CCD). The bat is a Box core + rounded tip Circle (+ hinge Circle), D-07: the
+   * fat rounded tip removes the sharp-corner snag so the ball catches/rolls
+   * cleanly (FLIP-03) and the `v = ω × r` tip-vs-base difference reads (FLIP-02).
+   *
+   * `mirror` produces the right flipper by constructing the bat at body angle π
+   * (pointing −x). Planck derives the joint's referenceAngle from that body
+   * angle, so the SAME reference-relative limits [FLIPPER_LOWER_ANGLE,
+   * FLIPPER_UPPER_ANGLE] describe a mirror-reflected sweep — no per-flipper limit
+   * math, and `bat.getAngle()` (≈π) reports the true orientation for the renderer
+   * and swept-tunnel harness. The bat is NOT a bullet: its anti-tunnel guarantee
+   * is D-01 sub-stepping (plan 02-04), never setBullet.
    */
-  private buildTestFlipper(): void {
-    const px = FLIPPER_PIVOT.x;
-    const py = FLIPPER_PIVOT.y;
+  private buildFlipper(
+    id: number,
+    pivot: { readonly x: number; readonly y: number },
+    mirror: boolean,
+  ): void {
+    const px = pivot.x;
+    const py = pivot.y;
+    // Right flipper starts pointing −x (body angle π); left points +x (angle 0).
+    const restAngle = mirror ? Math.PI : 0;
 
     // Static hinge the bat pivots around.
-    const pivot = this.world.createBody({ position: Vec2(px, py) });
+    const hinge = this.world.createBody({ position: Vec2(px, py) });
 
-    // Dynamic bat: a thin box extending from the pivot (body origin) along
-    // local +x by FLIPPER_LENGTH_M.
-    const bat = this.world.createDynamicBody({ position: Vec2(px, py) });
+    // Dynamic capsule bat. All fixtures share the flipper density/friction and
+    // restitution 0 — a caught ball must not micro-bounce off the bat (D-06(3);
+    // Box2D takes the MAX restitution of the contacting pair, so 0 here means the
+    // bat never ADDS bounce beyond the ball's own).
+    const bat = this.world.createDynamicBody({
+      position: Vec2(px, py),
+      angle: restAngle,
+    });
+    const fixtureOpts = {
+      density: FLIPPER_DENSITY,
+      friction: WALL_FRICTION,
+      restitution: 0,
+    };
+    // Box core.
     bat.createFixture(
-      new Box(
-        FLIPPER_LENGTH_M / 2,
-        FLIPPER_HALF_WIDTH_M,
-        Vec2(FLIPPER_LENGTH_M / 2, 0),
-      ),
-      { density: FLIPPER_DENSITY, friction: WALL_FRICTION },
+      new Box(CAP_CORE_HALF_LEN, FLIPPER_HALF_WIDTH_M, Vec2(CAP_CORE_CENTER_X, 0)),
+      fixtureOpts,
     );
-    const tag: BodyTag = { kind: "flipper", id: FLIPPER_ID };
+    // Rounded tip (the fast, tunnel-prone end) at local x = CAP_TIP_X.
+    bat.createFixture(
+      new Circle(Vec2(CAP_TIP_X, 0), FLIPPER_TIP_RADIUS_M),
+      fixtureOpts,
+    );
+    // Rounded hinge end so a cradling ball cannot catch the pivot corner (D-07).
+    bat.createFixture(
+      new Circle(Vec2(CAP_BASE_X, 0), FLIPPER_TIP_RADIUS_M),
+      fixtureOpts,
+    );
+    const tag: BodyTag = { kind: "flipper", id };
     bat.setUserData(tag);
 
-    // Motorized revolute joint: motor ON, HIGH max torque, bounded angle arc.
-    // The motor is driven at max speed so the bat sweeps the play area for
-    // stress; the sign (sweep direction/phase) is steered via setFlipperMotor.
+    // Motorized revolute joint: motor ON (default drives toward the rest/upper
+    // limit), high max torque, bounded ~45° arc. The limits are reference-
+    // relative (referenceAngle = restAngle), so the mirror reuses them.
     const joint = new RevoluteJoint(
       {
         enableMotor: true,
-        motorSpeed: FLIPPER_MOTOR_SPEED,
+        motorSpeed: FLIPPER_UP_SPEED,
         maxMotorTorque: FLIPPER_MAX_MOTOR_TORQUE,
         enableLimit: true,
         lowerAngle: FLIPPER_LOWER_ANGLE,
         upperAngle: FLIPPER_UPPER_ANGLE,
       },
-      pivot,
+      hinge,
       bat,
       Vec2(px, py),
     );
     this.world.createJoint(joint);
 
-    this.flipperJoints.push({ id: FLIPPER_ID, body: bat, joint });
+    this.flipperJoints.push({ id, body: bat, joint });
     this.flipperPool.push({
-      id: FLIPPER_ID,
+      id,
       pivotX: px,
       pivotY: py,
       angle: bat.getAngle(),
@@ -487,12 +545,14 @@ export class PlanckWorld implements PhysicsWorld {
   setFlipperMotor(id: number, direction: number): void {
     const entry = this.flipperJoints.find((f) => f.id === id);
     if (!entry) return;
-    // Only the sign matters — the engine uses its stress-tuned motor speed.
+    // Sign-only hook (D-05): the adapter maps it to the FEEL speeds — a snappy
+    // raise and a softer return — replacing the single Phase-1 stress speed.
+    // Mirroring lives in the joint geometry, so the sign→speed map is uniform.
     const speed =
       direction > 0
-        ? FLIPPER_MOTOR_SPEED
+        ? FLIPPER_UP_SPEED
         : direction < 0
-          ? -FLIPPER_MOTOR_SPEED
+          ? -FLIPPER_RETURN_SPEED
           : 0;
     entry.joint.setMotorSpeed(speed);
     entry.body.setAwake(true);

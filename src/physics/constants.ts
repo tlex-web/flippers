@@ -147,13 +147,6 @@ export const FLIPPER_UP_SPEED = 30;
 export const FLIPPER_RETURN_SPEED = 20;
 
 /**
- * @deprecated Phase-1 single stress motor speed. Superseded by the feel speeds
- * FLIPPER_UP_SPEED / FLIPPER_RETURN_SPEED (D-05). Kept only until the adapter is
- * remapped in Task 2, then removed. Do NOT wire new code to this.
- */
-export const FLIPPER_MOTOR_SPEED = 40;
-
-/**
  * Maximum motor torque (N·m) — feel-tuned (D-06(2)). Retuned down from the
  * Phase-1 stress value (10000) to a still-firm 500. Two requirements, both met
  * with a large margin:

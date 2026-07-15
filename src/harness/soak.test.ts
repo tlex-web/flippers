@@ -43,8 +43,18 @@ const NEGATIVE_CONTROL: SoakConfig = {
 const FLIPPER_NEGATIVE_CONTROL: SoakConfig = {
   seed: 0xcafe,
   durationSeconds: 1,
-  maxLaunchSpeed: 80, // well past the ball's real max (~6 m/s)
-  cases: 48, // sweeps flipper phase/x so ≥1 case coincides with a horizontal bat
+  // Well past the ball's real max (~6 m/s). Retuned 80 -> 105 for the Phase-2
+  // FEEL flipper (plan 02-01): the Phase-1 stress bat swept at ~40 rad/s, fast
+  // enough that a case's bat could sweep OUT of a straight-down ball's path and
+  // leave a clean intra-step tunnel at 80 m/s. The feel bat sweeps slower
+  // (setFlipperMotor now maps to FLIPPER_UP_SPEED/RETURN_SPEED, D-05), so instead
+  // the control relies on a launch fast enough that the ball clears the bat in a
+  // SINGLE 120 Hz step with both endpoints clear of the (radius + halfWidth)
+  // band — a genuine straight-through tunnel, robust to bat speed. 105 m/s sits in
+  // the clean window (~100–115): slower straddles the bat at the far endpoint,
+  // faster at the near one. Still isolates the flipper-swept invariant.
+  maxLaunchSpeed: 105,
+  cases: 48, // sweeps flipper phase/x so many cases cleanly tunnel the bat
   bullet: false, // CCD OFF — the whole point of the control
   flipperNegativeControl: true, // straight-through-the-bat launch; boundary isolated
 };
