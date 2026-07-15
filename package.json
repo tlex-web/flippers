@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "soak": "vitest run src/harness/soak.gate.test.ts --testTimeout=900000"
+    "soak": "vitest run --config vitest.gate.config.ts --testTimeout=900000"
   },
   "dependencies": {
     "planck": "1.5.0"

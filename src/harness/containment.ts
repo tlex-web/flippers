@@ -62,7 +62,12 @@ function onSegment(a: Vec2, b: Vec2, c: Vec2): boolean {
 }
 
 /** Do segments p1-p2 and q1-q2 intersect (proper crossing or collinear touch)? */
-function segmentsIntersect(p1: Vec2, p2: Vec2, q1: Vec2, q2: Vec2): boolean {
+export function segmentsIntersect(
+  p1: Vec2,
+  p2: Vec2,
+  q1: Vec2,
+  q2: Vec2,
+): boolean {
   const d1 = orient(q1, q2, p1);
   const d2 = orient(q1, q2, p2);
   const d3 = orient(p1, p2, q1);

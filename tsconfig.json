@@ -26,5 +26,5 @@
     /* Vite transpiles with esbuild; tsc is a type-check-only gate. */
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts", "vitest.gate.config.ts"]
 }

@@ -135,8 +135,23 @@ function segment(ax: number, ay: number, bx: number, by: number): Segment {
   return { a: { x: ax, y: ay }, b: { x: bx, y: by } };
 }
 
+/** Construction options for the Planck adapter. */
+export interface PlanckWorldOptions {
+  /**
+   * Continuous collision detection (Planck `setBullet`) on every ball — the
+   * make-or-break anti-tunneling flag (PHYS-02/D-01). Defaults to TRUE. Set
+   * FALSE **only** for the soak's negative control, which flings the ball past
+   * its real max velocity at the thin wall with CCD OFF to prove the gate goes
+   * RED on real tunneling (i.e. that the green gate has teeth, not a false pass).
+   */
+  readonly bullet?: boolean;
+}
+
 export class PlanckWorld implements PhysicsWorld {
   private readonly world: World;
+
+  /** Whether balls are created with CCD armed (see PlanckWorldOptions.bullet). */
+  private readonly bulletEnabled: boolean;
 
   private nextId = 0;
 
@@ -161,7 +176,9 @@ export class PlanckWorld implements PhysicsWorld {
   // Accumulated collision events, handed off (and reset) by `drainEvents()`.
   private events: CollisionEvent[] = [];
 
-  constructor() {
+  constructor(options?: PlanckWorldOptions) {
+    // CCD defaults ON; the soak's negative control passes { bullet: false }.
+    this.bulletEnabled = options?.bullet ?? true;
     // Gravity is the IN-PLANE projection along the tilted playfield (D-08),
     // NOT full vertical g — this is what makes the fall read as a heavy roll.
     this.world = new World({ gravity: Vec2(0, IN_PLANE_GRAVITY) });
@@ -286,9 +303,10 @@ export class PlanckWorld implements PhysicsWorld {
       // Velocity-proportional drag → the ball settles and reads as HEAVY (D-08).
       linearDamping: BALL_LINEAR_DAMPING,
       // Continuous collision detection: the make-or-break anti-tunneling flag.
-      bullet: true,
+      // Disabled only for the soak negative control (bulletEnabled === false).
+      bullet: this.bulletEnabled,
     });
-    body.setBullet(true); // explicit CCD enable (belt-and-braces; D-01/PHYS-02)
+    body.setBullet(this.bulletEnabled); // explicit CCD toggle (D-01/PHYS-02)
 
     body.createFixture(new Circle(radius), {
       density: BALL_DENSITY,
@@ -302,8 +320,11 @@ export class PlanckWorld implements PhysicsWorld {
     // Planck issue #167 guard: `setBullet` CCD can no-op for a body that has
     // never had a contact, so a freshly-added ball could tunnel on its very
     // first high-speed step. Arm CCD now by forcing one real contact on init.
+    // (No-op work when CCD is off — the negative control WANTS to tunnel.)
     // https://github.com/piqnt/planck.js/issues/167
-    this.primeBallCcd(body, spec.x, spec.y, vx, vy, radius);
+    if (this.bulletEnabled) {
+      this.primeBallCcd(body, spec.x, spec.y, vx, vy, radius);
+    }
 
     this.balls.push({ id, body });
     this.ballPool.push({ id, x: spec.x, y: spec.y, vx, vy, radius, angle: 0 });
