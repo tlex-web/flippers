@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 
 import type {
   BallId,
-  BallSpec,
   BallState,
   CollisionEvent,
   FlipperState,
@@ -79,9 +78,9 @@ class SpyWorld implements PhysicsWorld {
     this.motorCalls.push({ id, direction });
   }
 
-  // --- Unused stubs (the FSM never calls these) ---------------------------
-  step(_dtSeconds: number): void {}
-  addBall(_spec: BallSpec): BallId {
+  // --- Unused stubs (the FSM never calls these; params omitted deliberately) ---
+  step(): void {}
+  addBall(): BallId {
     return 0;
   }
   getBalls(): readonly BallState[] {
