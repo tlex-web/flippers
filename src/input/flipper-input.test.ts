@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { FlipperInput } from "./flipper-input";
-import type { KeyEventLike } from "./flipper-input";
 
 /**
  * Unit proof for the first keyboard-input module in the codebase (D-10). Every
@@ -14,7 +13,7 @@ import type { KeyEventLike } from "./flipper-input";
  */
 
 /** Build a synthetic keydown/keyup with a spied `preventDefault`. */
-function ev(code: string, repeat = false): KeyEventLike & { preventDefault: ReturnType<typeof vi.fn> } {
+function ev(code: string, repeat = false) {
   return { code, repeat, preventDefault: vi.fn() };
 }
 
