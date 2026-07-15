@@ -210,6 +210,11 @@ export class PlanckWorld implements PhysicsWorld {
   private readonly eventPool: MutableCollisionEvent[] = [];
   private eventCount = 0;
 
+  // Reused output view handed back by `drainEvents()` — refilled with the live
+  // pooled records and truncated in place, so a per-frame draining consumer (the
+  // sandbox rAF loop) allocates NO new array per drain.
+  private readonly drainedEvents: MutableCollisionEvent[] = [];
+
   // One reusable WorldManifold shared by both contact read paths (post-solve +
   // syncContactPoints). Passing it into `getWorldManifold` avoids the fresh
   // `new WorldManifold()` Planck allocates when handed `null` (verified against
@@ -519,11 +524,18 @@ export class PlanckWorld implements PhysicsWorld {
   }
 
   drainEvents(): CollisionEvent[] {
-    // Hand back the live slice and reset the count so the pool is reused (and
-    // stays bounded) next cycle. The returned records are pooled and mutated on
-    // the next step — per the interface contract, copy out anything retained.
-    const drained = this.eventPool.slice(0, this.eventCount);
+    // Refill the reused view with the live pooled records and truncate it, then
+    // reset the count so the pool is recycled (and stays BOUNDED) next cycle —
+    // no new-array allocation per drain (mirrors the contact-point pool). The
+    // returned records are pooled and mutated on the next step; per the
+    // interface contract, copy out anything retained past the next drain/step.
+    const view = this.drainedEvents;
+    for (let i = 0; i < this.eventCount; i++) {
+      const slot = this.eventPool[i];
+      if (slot) view[i] = slot;
+    }
+    view.length = this.eventCount;
     this.eventCount = 0;
-    return drained;
+    return view;
   }
 }

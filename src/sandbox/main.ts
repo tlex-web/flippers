@@ -76,6 +76,13 @@ function main(): void {
     // Advance physics by whole fixed steps; drain the accumulator.
     const steps = loop.advance(deltaMs);
 
+    // Drain and discard collision events every frame. This sandbox has no event
+    // consumer yet (D-03: it asserts nothing), but `step()` pushes an event per
+    // contacting step — leaving them undrained would grow the adapter's event
+    // buffer without bound for the life of the tab. Draining resets the pool so
+    // it stays bounded; the reused-view drain allocates nothing per frame.
+    world.drainEvents();
+
     // Interpolate each ball between the loop's previous and current fixed states
     // (smooth motion independent of the render rate).
     const previous = loop.previous;
