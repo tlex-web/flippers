@@ -114,12 +114,13 @@ export interface PhysicsWorld {
   /** Pooled snapshot of every flipper (a max-speed test flipper this phase). */
   getFlippers(): readonly FlipperState[];
   /**
-   * Drive a flipper's motor for stress sweeping (engine-agnostic hook — the
-   * soak harness reverses direction at the angle limits to sweep flipper phase
-   * past the ball's max speed, D-04/D-05). `direction > 0` drives toward the
-   * upper angle limit, `direction < 0` toward the lower, `0` holds. Magnitude is
-   * ignored (the engine uses its stress-tuned motor speed); only the sign is
-   * read. No-op for an unknown id.
+   * Drive a flipper's motor (engine-agnostic hook, D-04/D-05). `direction > 0`
+   * RAISES the flipper toward its up/held-up cradle limit; `direction < 0`
+   * RETURNS it toward its rest/down limit; `0` holds. Only the SIGN is read: the
+   * adapter maps it to the feel-tuned raise/return speeds AND applies each
+   * flipper's engine-specific physical raise sign, so +1 raises BOTH the left bat
+   * and the reference-angle-mirrored right bat (which counter-rotate and so need
+   * opposite motor signs). No-op for an unknown id.
    */
   setFlipperMotor(id: number, direction: number): void;
   /** Static boundary/wall segments (built once; for debug-draw + containment). */

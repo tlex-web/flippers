@@ -400,6 +400,15 @@ function runCase(
   let prevY = launch.originY;
   let flipperDir = params.flipperDir;
 
+  // Sweep-reversal state for the aimed bat (index 0). We reverse from the OBSERVED
+  // motion direction vs the named world-angle limits — NOT from the motor sign — so
+  // it is independent of the adapter's per-flipper raise sign (the harness must not
+  // assume `+1 == toward FLIPPER_UPPER_ANGLE`; that per-flipper sign lives in the
+  // adapter now, D-05/gap 01). Seeded initial dir + deterministic angles keep replay
+  // byte-identical.
+  const fl0Init = world.getFlippers()[0];
+  let sweepPrevAngle = fl0Init ? fl0Init.angle : 0;
+
   // Reusable per-flipper pre-step angle buffer (grow-only, index-aligned with
   // getFlippers()). Filled BEFORE each world.step() so the intra-step swept
   // sector of EVERY bat is bounded by its own start angle (see the copy-out note
@@ -408,25 +417,32 @@ function runCase(
 
   for (let step = 1; step <= totalSteps; step++) {
     // Drive the flipper phase on the AIMED flipper (index 0 — the bat the launch
-    // targets): hold through the phase delay, then sweep back and forth by
-    // reversing the motor at the joint limits (a continuous fast target at peak
-    // ω on the up-leg). Its world angle equals the joint angle (referenceAngle 0),
-    // so the reference-relative limit comparison is valid for it.
+    // targets): hold through the phase delay, then sweep back and forth across its
+    // full arc at the feel speeds so some seeded phase has the ball arriving
+    // mid-sweep at peak ω. Reverse the motor just BEFORE the bat reaches the limit
+    // it is heading toward, detected from the OBSERVED motion direction (angleDelta)
+    // against the named world-angle limits (valid for index 0, whose world angle
+    // equals its joint angle, referenceAngle 0). Reading the observed direction —
+    // not the motor sign — keeps this independent of the adapter's per-flipper raise
+    // sign (gap 01); reversing BEFORE the limit keeps the bat sweeping SMOOTHLY at
+    // peak ω, avoiding the Box2D limit-jam whose jam-RELEASE burst would rotate the
+    // bat a large arc in one step with a stale (≈0) joint speed — defeating the very
+    // adaptive sub-stepping the FLIP-04 gate exists to prove.
     const flippers = world.getFlippers();
     const flPre = flippers[0];
     if (flPre) {
       if (step < params.flipperPhaseSteps) {
         world.setFlipperMotor(flPre.id, 0);
+        sweepPrevAngle = flPre.angle;
       } else {
-        if (flipperDir > 0 && flPre.angle >= FLIPPER_UPPER_ANGLE - FLIPPER_LIMIT_EPS) {
-          flipperDir = -1;
-        } else if (
-          flipperDir < 0 &&
-          flPre.angle <= FLIPPER_LOWER_ANGLE + FLIPPER_LIMIT_EPS
-        ) {
-          flipperDir = 1;
+        const angleDelta = flPre.angle - sweepPrevAngle;
+        const nearUpper = flPre.angle >= FLIPPER_UPPER_ANGLE - FLIPPER_LIMIT_EPS;
+        const nearLower = flPre.angle <= FLIPPER_LOWER_ANGLE + FLIPPER_LIMIT_EPS;
+        if ((angleDelta > 0 && nearUpper) || (angleDelta < 0 && nearLower)) {
+          flipperDir = -flipperDir; // approaching a limit → sweep back the other way
         }
         world.setFlipperMotor(flPre.id, flipperDir);
+        sweepPrevAngle = flPre.angle;
       }
     }
 

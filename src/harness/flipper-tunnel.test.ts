@@ -43,13 +43,16 @@ import type { SoakConfig, SoakFailure } from "./soak";
  * "bullet left true" wording, made to satisfy its explicit intent: "prove the
  * mechanism has teeth" (threat T-02-10).
  *
- * The launch speed (96 m/s) sits right at the tunnel onset so N=2's extra sample
- * cleanly closes it (0 tunnels) while N=1 opens it (deterministic tunnels).
+ * The launch speed (92 m/s) sits in the tunnel window so N=2's extra sample cleanly
+ * closes it (0 tunnels) while N=1 opens it (deterministic tunnels). It was retuned
+ * 96 → 92 (gap 01): correcting the mirror raise sign made the aimed bat's FAST leg
+ * (FLIPPER_UP_SPEED) sweep DOWN-slope instead of up, shifting the N=2 onset down to
+ * ~96; 92 sits safely inside the clean 89–95 window (measured ON=0, OFF=32/32).
  */
 
 const TEETH_SEED = 0xf11;
-const TEETH_SPEED = 96; // at the tunnel onset: N=2 closes it, N=1 opens it
-const TEETH_CASES = 32; // pinned: OFF yields ≥3 flipper tunnels, ON yields 0
+const TEETH_SPEED = 92; // in the tunnel window: N=2 closes it, N=1 opens it
+const TEETH_CASES = 32; // pinned: OFF yields 32/32 flipper tunnels, ON yields 0
 
 /**
  * The shared sub-stepping teeth base: flipper-primary drive (drop the ball

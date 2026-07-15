@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-  FIXED_DT,
-  FLIPPER_LOWER_ANGLE,
-  FLIPPER_UPPER_ANGLE,
-} from "../physics/constants";
+import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { KeyEventLike } from "../input/flipper-input";
 import { FlipperInput } from "../input/flipper-input";
@@ -31,6 +27,15 @@ import { FixedStepLoop } from "../sim/loop";
  * gives `main.ts` (plan 02-03 Task 2). So "raise begins within 1-2 fixed steps"
  * here IS the sub-frame (<= ~8.3 ms) guarantee versus a 60 fps (16.6 ms) render.
  *
+ * ── Raise direction is asserted against TRUE WORLD MOTION (gap 01) ──
+ * The 02 verification found a mirror sign-inversion: the FSM's `+1`/"raise" DROOPED
+ * the left bat while raising the right. These assertions therefore check the bat's
+ * TIP WORLD-Y — pivotY + length·sin(angle), where SMALLER y is physically HIGHER on
+ * the screen — and require that pressing EACH side's key lifts THAT side's tip UP
+ * and releasing lowers it, for BOTH the left AND the mirrored right flipper. They
+ * deliberately do NOT assert "the angle moves toward the constant named
+ * FLIPPER_UPPER_ANGLE" (the naming artifact that hid the bug).
+ *
  * Deterministic: no timers, no Math.random — Planck under a fixed step is
  * reproducible.
  */
@@ -47,6 +52,8 @@ function makeRig(): {
   leftId: number;
   rightId: number;
   angleOf: (id: number) => number;
+  /** True WORLD tip height (m): pivotY + length·sin(angle). Smaller = higher up. */
+  tipY: (id: number) => number;
   /** Drain the latch, feed the FSM, tick it, then run ONE fixed 120 Hz step. */
   step: () => void;
 } {
@@ -65,10 +72,15 @@ function makeRig(): {
   const leftId = left.id;
   const rightId = right.id;
 
-  const angleOf = (id: number): number => {
+  const stateOf = (id: number) => {
     const f = world.getFlippers().find((x) => x.id === id);
     if (!f) throw new Error(`flipper ${id} vanished`);
-    return f.angle;
+    return f;
+  };
+  const angleOf = (id: number): number => stateOf(id).angle;
+  const tipY = (id: number): number => {
+    const f = stateOf(id);
+    return f.pivotY + f.length * Math.sin(f.angle);
   };
 
   const step = (): void => {
@@ -84,16 +96,22 @@ function makeRig(): {
     if (n !== 1) throw new Error(`expected exactly 1 fixed step, got ${n}`);
   };
 
-  return { input, controller, leftId, rightId, angleOf, step };
+  return { input, controller, leftId, rightId, angleOf, tipY, step };
 }
 
-/** Drive one side's flipper fully DOWN to the lower limit and let it settle. */
-function pressThenRelease(rig: ReturnType<typeof makeRig>): void {
-  rig.input.handleKeyDown(key("KeyZ"));
-  for (let i = 0; i < 8; i++) rig.step(); // raise + reach the upper limit
-  rig.input.handleKeyUp(key("KeyZ"));
-  for (let i = 0; i < 30; i++) rig.step(); // return + settle at the lower limit
+/** Drive one side's flipper fully DOWN to its rest limit and let it settle. */
+function pressThenRelease(rig: ReturnType<typeof makeRig>, code: string): void {
+  rig.input.handleKeyDown(key(code));
+  for (let i = 0; i < 8; i++) rig.step(); // raise + reach the up limit
+  rig.input.handleKeyUp(key(code));
+  for (let i = 0; i < 30; i++) rig.step(); // return + settle at the rest/down limit
 }
+
+/** The two controllable sides, each with its original Space Cadet fidelity key. */
+const SIDES = [
+  { name: "left", code: "KeyZ", idOf: (r: ReturnType<typeof makeRig>) => r.leftId },
+  { name: "right", code: "Slash", idOf: (r: ReturnType<typeof makeRig>) => r.rightId },
+] as const;
 
 describe("flipper end-to-end: keyboard -> FSM -> setFlipperMotor -> Planck (FLIP-01)", () => {
   it("records the left flipper as the smaller-pivot-x flipper (explicit side->id map)", () => {
@@ -102,94 +120,83 @@ describe("flipper end-to-end: keyboard -> FSM -> setFlipperMotor -> Planck (FLIP
     expect(rig.leftId).not.toBe(rig.rightId);
   });
 
-  it("a left keydown raises the left flipper toward its upper limit within 1-2 fixed steps (sub-frame)", () => {
-    const rig = makeRig();
-    const rest = rig.angleOf(rig.leftId);
+  for (const side of SIDES) {
+    it(`a ${side.name} keydown RAISES the ${side.name} flipper (tip world-Y goes UP) sub-frame, and keyup returns it DOWN`, () => {
+      const rig = makeRig();
+      const id = side.idOf(rig);
+      const restTip = rig.tipY(id);
 
-    rig.input.handleKeyDown(key("KeyZ"));
+      rig.input.handleKeyDown(key(side.code));
 
-    // ONE fixed step (1/120 s = ~8.3 ms, sub-frame vs a 60 fps 16.6 ms frame) must
-    // already move the real bat measurably toward its upper limit.
-    rig.step();
-    const afterOne = rig.angleOf(rig.leftId);
-    expect(afterOne).toBeGreaterThan(rest + 0.1); // measurable, non-trivial rise
-    // Direction is toward the UPPER angle limit (rest sits between the limits).
-    expect(FLIPPER_UPPER_ANGLE).toBeGreaterThan(rest);
-    expect(afterOne - rest).toBeGreaterThan(0);
-
-    // A second step continues the raise up to (and pinned at) the upper limit.
-    rig.step();
-    expect(rig.angleOf(rig.leftId)).toBeGreaterThan(afterOne - 0.05); // still up
-    expect(rig.angleOf(rig.leftId)).toBeGreaterThan(FLIPPER_UPPER_ANGLE - 0.05);
-  });
-
-  it("a left keyup drives the flipper back down toward its lower limit (returning)", () => {
-    const rig = makeRig();
-
-    rig.input.handleKeyDown(key("KeyZ"));
-    for (let i = 0; i < 8; i++) rig.step(); // raise + hold up
-    const up = rig.angleOf(rig.leftId);
-    expect(up).toBeGreaterThan(FLIPPER_UPPER_ANGLE - 0.05); // genuinely up first
-
-    rig.input.handleKeyUp(key("KeyZ"));
-    let minAngle = Infinity;
-    for (let i = 0; i < 30; i++) {
+      // ONE fixed step (1/120 s = ~8.3 ms, sub-frame vs a 60 fps 16.6 ms frame) must
+      // already lift the real tip measurably UP (world −y => a SMALLER tip-Y).
       rig.step();
-      minAngle = Math.min(minAngle, rig.angleOf(rig.leftId));
-    }
-    // The bat came back down to (and settled at) the lower limit — a real drop of
-    // the full ~45 deg sweep, driven purely by the keyup edge through the FSM.
-    expect(minAngle).toBeLessThan(up - 0.5);
-    expect(minAngle).toBeLessThan(FLIPPER_LOWER_ANGLE + 0.05);
-  });
+      const afterOne = rig.tipY(id);
+      expect(afterOne).toBeLessThan(restTip - 0.02); // measurable, correct-direction rise
 
-  it("OS auto-repeat never re-triggers a flip end-to-end (no phantom re-snap)", () => {
+      // The raise continues up to (and pins at) the raised/held-up cradle limit.
+      for (let i = 0; i < 8; i++) rig.step();
+      const raised = rig.tipY(id);
+      expect(raised).toBeLessThan(restTip - 0.15); // clearly, physically UP
+
+      // Release: the tip comes back DOWN (world +y => a LARGER tip-Y) toward rest.
+      rig.input.handleKeyUp(key(side.code));
+      let maxTip = -Infinity;
+      for (let i = 0; i < 30; i++) {
+        rig.step();
+        maxTip = Math.max(maxTip, rig.tipY(id));
+      }
+      expect(maxTip).toBeGreaterThan(raised + 0.15); // a real drop of the full sweep
+    });
+  }
+
+  it("OS auto-repeat never re-triggers a flip end-to-end (no phantom re-snap up)", () => {
     const rig = makeRig();
 
-    // Put the left flipper fully DOWN and at rest first (so a phantom re-flip
-    // would be an unmistakable RISE).
-    pressThenRelease(rig);
-    const down = rig.angleOf(rig.leftId);
-    expect(down).toBeLessThan(FLIPPER_LOWER_ANGLE + 0.05);
+    // Put the left flipper fully DOWN and at rest first (so a phantom re-flip would
+    // be an unmistakable RISE of the tip).
+    pressThenRelease(rig, "KeyZ");
+    const downTip = rig.tipY(rig.leftId);
 
     // A repeat==true keydown latches NO press edge (input-level suppression)...
     rig.input.handleKeyDown(key("KeyZ", true));
     expect(rig.input.drainEdges().leftPress).toBe(false);
 
-    // ...and end-to-end: firing repeat keydowns across several fixed steps leaves
-    // the flipper DOWN — it never re-snaps up.
+    // ...and end-to-end: firing repeat keydowns across several fixed steps leaves the
+    // flipper DOWN — the tip never rises (would go to a SMALLER tip-Y if it re-flipped).
     for (let i = 0; i < 6; i++) {
       rig.input.handleKeyDown(key("KeyZ", true));
       rig.step();
     }
-    expect(rig.angleOf(rig.leftId)).toBeLessThan(down + 0.02); // no rise at all
+    expect(rig.tipY(rig.leftId)).toBeGreaterThan(downTip - 0.02); // no rise at all
   });
 
-  it("a one-sided (left) press leaves the right flipper unaffected", () => {
+  it("a one-sided (left) press raises the LEFT tip and leaves the right flipper unmoved", () => {
     const rig = makeRig();
-    const rightRest = rig.angleOf(rig.rightId);
+    const leftRest = rig.tipY(rig.leftId);
+    const rightRest = rig.tipY(rig.rightId);
 
     rig.input.handleKeyDown(key("KeyZ")); // LEFT key only
-    for (let i = 0; i < 4; i++) rig.step();
+    for (let i = 0; i < 5; i++) rig.step();
 
-    // The left flipper has clearly moved up...
-    expect(rig.angleOf(rig.leftId)).toBeGreaterThan(FLIPPER_UPPER_ANGLE - 0.05);
+    // The left flipper's tip has clearly risen (world up)...
+    expect(rig.tipY(rig.leftId)).toBeLessThan(leftRest - 0.15);
     // ...while the right flipper (never keyed) has not moved.
-    expect(Math.abs(rig.angleOf(rig.rightId) - rightRest)).toBeLessThan(0.02);
+    expect(Math.abs(rig.tipY(rig.rightId) - rightRest)).toBeLessThan(0.02);
   });
 
   it("a genuine (non-repeat) re-press after release raises the flipper again", () => {
     const rig = makeRig();
 
-    pressThenRelease(rig);
-    expect(rig.angleOf(rig.leftId)).toBeLessThan(FLIPPER_LOWER_ANGLE + 0.05);
+    pressThenRelease(rig, "KeyZ");
+    const downTip = rig.tipY(rig.leftId);
 
     rig.input.handleKeyDown(key("KeyZ")); // fresh, real press
-    let maxAngle = -Infinity;
+    let minTip = Infinity;
     for (let i = 0; i < 12; i++) {
       rig.step();
-      maxAngle = Math.max(maxAngle, rig.angleOf(rig.leftId));
+      minTip = Math.min(minTip, rig.tipY(rig.leftId));
     }
-    expect(maxAngle).toBeGreaterThan(FLIPPER_UPPER_ANGLE - 0.05); // raised again
+    expect(minTip).toBeLessThan(downTip - 0.15); // raised (tip up) again
   });
 });

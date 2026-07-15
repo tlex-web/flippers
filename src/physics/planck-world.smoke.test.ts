@@ -161,66 +161,98 @@ describe("two mirrored capsule flippers + feel-speed motor (02-01)", () => {
     expect(a.pivotX).not.toBe(b.pivotX);
   });
 
-  it("setFlipperMotor maps +1 -> fast raise, -1 -> softer return, 0 -> hold (per id)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
-    const first = world.getFlippers()[0];
-    if (!first) throw new Error("expected a flipper");
-    const id = first.id;
+  it("setFlipperMotor: +1 RAISES the tip (world up), -1 returns it down, at feel speeds — BOTH mirrored flippers", () => {
+    // The direction bug (02-VERIFICATION / gap 01): a body-angle-π mirror preserves
+    // rotational handedness, so a uniform sign→speed map RAISED the right bat but
+    // DROOPED the left on the same +1. This proves the adapter's per-flipper raise
+    // sign is correct: +1 lifts the TIP (true world −y) and −1 drops it for BOTH the
+    // left AND the reference-mirrored right bat, at the feel-tuned raise/return
+    // speeds. Direction is asserted against real tip world-Y, never "toward the
+    // constant named FLIPPER_UPPER_ANGLE".
+    const ids = new PlanckWorld().getFlippers().map((f) => f.id);
+    expect(ids.length).toBe(2);
 
-    const angleOf = (): number => {
-      const f = world.getFlippers().find((x) => x.id === id);
-      if (!f) throw new Error("flipper vanished");
-      return f.angle;
-    };
+    for (const id of ids) {
+      // A FRESH world per flipper so the OTHER (undriven) bat — which sits at its
+      // construction default — can never collide with the bat under test.
+      const world: PhysicsWorld = new PlanckWorld();
+      const other = ids.find((x) => x !== id);
+      const stateOf = (): { pivotY: number; length: number; angle: number } => {
+        const f = world.getFlippers().find((x) => x.id === id);
+        if (!f) throw new Error("flipper vanished");
+        return f;
+      };
+      const angleOf = (): number => stateOf().angle;
+      // True WORLD tip height: pivotY + length·sin(angle). Smaller y = higher up.
+      const tipY = (): number => {
+        const f = stateOf();
+        return f.pivotY + f.length * Math.sin(f.angle);
+      };
+      // Keep the other bat DOWN (out of the way) for the whole measurement.
+      const holdOtherDown = (): void => {
+        if (other !== undefined) world.setFlipperMotor(other, -1);
+      };
 
-    // The joint's high maxMotorTorque saturates the bat to the motor speed within
-    // one fixed step, so per-step |dθ/dt| ≈ the commanded speed. We measure the
-    // PEAK per-step speed each way, mid-arc only — a bat driven PAST a Box2D joint
-    // limit briefly jams (an engine quirk the soak/stability proofs sidestep by
-    // reversing before the limit / holding the bat), so we never park on a limit.
+      // Park the bat NEAR its rest/down end (drive the RETURN direction, softer
+      // speed) so the measured RAISE then sweeps the FULL ~45° arc; we measure the
+      // PEAK per-step speed mid-arc and never park hard on the limit we leave (a bat
+      // driven PAST a Box2D joint limit briefly jams — an engine quirk).
+      for (let i = 0; i < 6; i++) {
+        world.setFlipperMotor(id, -1);
+        holdOtherDown();
+        world.step(FIXED_DT);
+      }
+      const downTipY = tipY();
 
-    // Nudge off the rest limit into the middle of the arc (2 return steps).
-    world.setFlipperMotor(id, -1);
-    world.step(FIXED_DT);
-    world.step(FIXED_DT);
+      // +1 -> RAISE: peak |per-step angular speed| ≈ FLIPPER_UP_SPEED; tip rises.
+      let raise = 0;
+      let prev = angleOf();
+      for (let i = 0; i < 6; i++) {
+        world.setFlipperMotor(id, +1);
+        holdOtherDown();
+        world.step(FIXED_DT);
+        const cur = angleOf();
+        raise = Math.max(raise, Math.abs(cur - prev) / FIXED_DT);
+        prev = cur;
+      }
+      const upTipY = tipY();
 
-    // +1 -> raise: peak per-step angular speed (positive, ≈ FLIPPER_UP_SPEED).
-    world.setFlipperMotor(id, +1);
-    let raise = 0;
-    let prev = angleOf();
-    for (let i = 0; i < 2; i++) {
-      world.step(FIXED_DT);
-      const cur = angleOf();
-      raise = Math.max(raise, (cur - prev) / FIXED_DT);
-      prev = cur;
+      // -1 -> RETURN: peak |per-step angular speed| ≈ FLIPPER_RETURN_SPEED; tip drops.
+      let ret = 0;
+      prev = angleOf();
+      for (let i = 0; i < 6; i++) {
+        world.setFlipperMotor(id, -1);
+        holdOtherDown();
+        world.step(FIXED_DT);
+        const cur = angleOf();
+        ret = Math.max(ret, Math.abs(cur - prev) / FIXED_DT);
+        prev = cur;
+      }
+      const backDownTipY = tipY();
+
+      // TRUE raise direction (the crux): +1 lifts the tip (world −y), −1 drops it.
+      expect(upTipY).toBeLessThan(downTipY - 0.1); // +1 raised the tip well up
+      expect(backDownTipY).toBeGreaterThan(upTipY + 0.1); // −1 returned it down
+
+      // Feel speeds: raise ≈ FLIPPER_UP_SPEED (30), return ≈ FLIPPER_RETURN_SPEED
+      // (20), and the return is genuinely SOFTER than the raise — the D-05 remap.
+      expect(raise).toBeGreaterThan(FLIPPER_UP_SPEED * 0.85);
+      expect(raise).toBeLessThan(FLIPPER_UP_SPEED * 1.25);
+      expect(ret).toBeGreaterThan(FLIPPER_RETURN_SPEED * 0.85);
+      expect(ret).toBeLessThan(FLIPPER_RETURN_SPEED * 1.25);
+      expect(ret).toBeLessThan(raise);
+
+      // 0 -> hold: the bat barely moves over many steps (motor pins it, D-06(1)).
+      world.setFlipperMotor(id, 0);
+      const held = angleOf();
+      for (let i = 0; i < 15; i++) {
+        holdOtherDown();
+        world.step(FIXED_DT);
+      }
+      expect(Math.abs(angleOf() - held)).toBeLessThan(0.03);
     }
-
-    // -1 -> return: peak (most negative) per-step speed (≈ −FLIPPER_RETURN_SPEED).
-    world.setFlipperMotor(id, -1);
-    let ret = 0;
-    prev = angleOf();
-    for (let i = 0; i < 3; i++) {
-      world.step(FIXED_DT);
-      const cur = angleOf();
-      ret = Math.min(ret, (cur - prev) / FIXED_DT);
-      prev = cur;
-    }
-
-    // Raise ≈ FLIPPER_UP_SPEED (30), return ≈ −FLIPPER_RETURN_SPEED (−20), and the
-    // return is genuinely SOFTER than the raise — the whole point of the remap.
-    expect(raise).toBeGreaterThan(FLIPPER_UP_SPEED * 0.85);
-    expect(raise).toBeLessThan(FLIPPER_UP_SPEED * 1.25);
-    expect(ret).toBeLessThan(-FLIPPER_RETURN_SPEED * 0.85);
-    expect(ret).toBeGreaterThan(-FLIPPER_RETURN_SPEED * 1.25);
-    expect(Math.abs(ret)).toBeLessThan(raise);
-
-    // 0 -> hold: the bat barely moves over many steps (motor pins it, D-06(1)).
-    world.setFlipperMotor(id, 0);
-    const held = angleOf();
-    for (let i = 0; i < 15; i++) world.step(FIXED_DT);
-    expect(Math.abs(angleOf() - held)).toBeLessThan(0.03);
 
     // Unknown id is a no-op (does not throw).
-    expect(() => world.setFlipperMotor(9999, 1)).not.toThrow();
+    expect(() => new PlanckWorld().setFlipperMotor(9999, 1)).not.toThrow();
   });
 });

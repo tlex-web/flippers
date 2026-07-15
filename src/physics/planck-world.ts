@@ -87,10 +87,17 @@ const WALL_ID = -1;
 //     (the bottom-right corner rest ≈ (1.79, 2.79) and the floor balls the drop/
 //     energy proofs roll along y≈2.8, x∈[1.0,1.8]). The left flipper keeps the
 //     Phase-1 lower-left pivot; the mirrored right flipper points toward the left
-//     wall from the lower-center, its whole arc held above y≈2.6 and left of the
-//     fall column, so all Phase-1 proofs stay green. ---
+//     wall from the lower-center.
+//
+//     Right-flipper pivot moved 1.15 → 1.55 (gap 01): once the mirror raise-sign
+//     was corrected, BOTH bats raise their tip UP, and at x=1.15 the right bat's
+//     leftward reach overlapped the left bat's now-UP raised arc (they collided,
+//     and the left bat's tip ball sat inside the right bat). Shifting the right
+//     pivot right so its leftmost reach (≈ x 1.02) clears the left bat's raised
+//     tip (≈ x 0.88) removes the overlap while keeping the right arc left of the
+//     fall column and clear of the resting balls. ---
 const FLIPPER_PIVOT_L = { x: 0.35, y: 2.6 } as const;
-const FLIPPER_PIVOT_R = { x: 1.15, y: 2.35 } as const;
+const FLIPPER_PIVOT_R = { x: 1.55, y: 2.35 } as const;
 const FLIPPER_ID_L = 0;
 const FLIPPER_ID_R = 1;
 const FLIPPER_DENSITY = 1;
@@ -276,6 +283,8 @@ export class PlanckWorld implements PhysicsWorld {
     id: number;
     body: PlanckBody;
     joint: RevoluteJoint;
+    /** Motor-speed sign that RAISES this bat (tip toward -y). See buildFlipper. */
+    raiseSign: number;
   }[] = [];
 
   private readonly segments: readonly Segment[];
@@ -386,6 +395,17 @@ export class PlanckWorld implements PhysicsWorld {
    * math, and `bat.getAngle()` (≈π) reports the true orientation for the renderer
    * and swept-tunnel harness. The bat is NOT a bullet: its anti-tunnel guarantee
    * is D-01 sub-stepping (plan 02-04), never setBullet.
+   *
+   * PER-FLIPPER RAISE SIGN (the bug-fix core, D-05). A body-angle-π rotation
+   * PRESERVES rotational handedness — it is NOT a true geometric reflection — so a
+   * POSITIVE joint speed (increasing angle) sweeps the tip toward +y (DOWN, droop)
+   * on the un-mirrored left bat but toward −y (UP, raise) on the mirrored right
+   * bat. The two mirror-image flippers therefore counter-rotate and need OPPOSITE
+   * motor signs to both raise their tip. `raiseSign` captures that engine-specific
+   * fact here (left −1, right +1); `setFlipperMotor` multiplies the engine-agnostic
+   * `+1 = raise` command by it, so BOTH bats sweep their tip UP on +1 and drive to
+   * the SAME symmetric limits: +1 → each bat's raised/up limit (held-up cradle),
+   * −1 → each bat's rest/down limit. The controller stays engine-agnostic (D-05).
    */
   private buildFlipper(
     id: number,
@@ -396,6 +416,10 @@ export class PlanckWorld implements PhysicsWorld {
     const py = pivot.y;
     // Right flipper starts pointing −x (body angle π); left points +x (angle 0).
     const restAngle = mirror ? Math.PI : 0;
+    // Motor-speed sign that RAISES this bat (tip toward −y). A positive joint speed
+    // increases the angle, which drops the left (un-mirrored) tip but lifts the
+    // right (mirrored) tip — so raising needs −1 on the left, +1 on the right.
+    const raiseSign = mirror ? 1 : -1;
 
     // Static hinge the bat pivots around.
     const hinge = this.world.createBody({ position: Vec2(px, py) });
@@ -449,7 +473,7 @@ export class PlanckWorld implements PhysicsWorld {
     );
     this.world.createJoint(joint);
 
-    this.flipperJoints.push({ id, body: bat, joint });
+    this.flipperJoints.push({ id, body: bat, joint, raiseSign });
     this.flipperPool.push({
       id,
       pivotX: px,
@@ -636,16 +660,20 @@ export class PlanckWorld implements PhysicsWorld {
   setFlipperMotor(id: number, direction: number): void {
     const entry = this.flipperJoints.find((f) => f.id === id);
     if (!entry) return;
-    // Sign-only hook (D-05): the adapter maps it to the FEEL speeds — a snappy
-    // raise and a softer return — replacing the single Phase-1 stress speed.
-    // Mirroring lives in the joint geometry, so the sign→speed map is uniform.
+    // Sign-only hook (D-05): map the engine-agnostic command (+1 = RAISE toward the
+    // up/held-up limit, −1 = RETURN toward the rest/down limit, 0 = hold) to the
+    // FEEL speeds — a snappy raise and a softer return — then apply THIS bat's
+    // physical raise sign. The mirrored right bat counter-rotates, so raising it
+    // needs the opposite motor sign from the left; folding `raiseSign` in here (not
+    // in the controller) keeps the FSM engine-agnostic and makes +1 raise BOTH bats
+    // toward their own up limit (see buildFlipper). Uniform magnitude, per-bat sign.
     const speed =
       direction > 0
         ? FLIPPER_UP_SPEED
         : direction < 0
           ? -FLIPPER_RETURN_SPEED
           : 0;
-    entry.joint.setMotorSpeed(speed);
+    entry.joint.setMotorSpeed(speed * entry.raiseSign);
     entry.body.setAwake(true);
   }
 

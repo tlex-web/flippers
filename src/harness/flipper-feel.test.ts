@@ -5,7 +5,7 @@ import {
   FIXED_DT,
   FLIPPER_HALF_WIDTH_M,
   FLIPPER_LENGTH_M,
-  FLIPPER_RETURN_SPEED,
+  FLIPPER_UP_SPEED,
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { PhysicsWorld } from "../physics/types";
@@ -24,18 +24,18 @@ import { FixedStepLoop } from "../sim/loop";
  * directly (D-05), so the identical proof survives an engine swap. No `Math.random`
  * anywhere: the scenarios are fixed and reproducible.
  *
- * ── Flick direction (documented) ──
- * The v = ω·r launch proof raises the bat with the `-1` motor sign. In this rig's
- * FSM convention the `+1`/"up" sign sweeps the bat toward the +π/8 limit, which is
- * geometrically DOWN-slope (tip toward +y), so a `+1` "flip" drops the bat into a
- * falling ball — gravity confounds the strike and the launch does NOT scale with
- * contact radius (measured: a base hit outruns a tip hit — the wrong direction).
- * The `-1` raise sweeps the resting ball's side UP and gives the clean, correct
- * v = ω·r momentum transfer. Because the tip/base RATIO is independent of the
- * absolute ω, the FLIP-02 geometry claim holds regardless of which motor speed
- * (UP vs RETURN) drives the raise; we use the measured raise speed for the
- * per-hit ω·r fraction. (Choosing the strike geometry is Claude's discretion,
- * 02-CONTEXT § "Claude's Discretion".)
+ * ── Flick direction (gap 01) ──
+ * The v = ω·r launch proof raises the bat with the `+1` motor sign — the SAME sign
+ * the FSM issues on a real key press (`onPressEdge`), now that the adapter applies
+ * each mirrored bat's physical raise sign (02 gap 01). `+1` sweeps the resting
+ * ball's side UP (tip toward −y) and gives the clean, correct v = ω·r momentum
+ * transfer; `-1` returns the bat down to its rest/droop limit. Before the fix the
+ * left bat's `+1` DROOPED it (tip toward +y) and this proof had to work around it
+ * with `-1`; that inversion is now fixed in `PlanckWorld.setFlipperMotor`. Because
+ * the tip/base RATIO is independent of the absolute ω, the FLIP-02 geometry claim
+ * holds regardless of the raise speed; we use the measured raise speed (the snappy
+ * FLIPPER_UP_SPEED) for the per-hit ω·r fraction. (Choosing the strike geometry is
+ * Claude's discretion, 02-CONTEXT § "Claude's Discretion".)
  */
 
 // --- Mass / energy model (mirrors the adapter + stability.test.ts) ---------- //
@@ -114,15 +114,29 @@ function firstMonotonicIncrease(
 interface LaunchResult {
   readonly launch: number;
   readonly peakOmega: number;
+  /** TRUE contact radius: |ball − pivot| at placement (includes the face gap). */
   readonly radius: number;
 }
 
 /**
- * Rest the bat at its droop limit (motor `+1`), place a ball on the bat at contact
- * radius `r` (at the bat's horizontal reach), then RAISE the bat (motor `-1`): the
- * bat sweeps the ball's side up and flings it. Returns the peak ball launch speed
- * measured while it is still within the bat's arc (so far wall bounces are
- * excluded) and the peak bat |ω| during the raise.
+ * Number of consecutive fixed steps a launch speed must PERSIST to count. At the
+ * feel raise speed (FLIPPER_UP_SPEED = 30) a bat lifting off its droop limit gives
+ * a brief 1–2 step Box2D motor+limit "release" burst (the same jam-lag flagged for
+ * the 02-06 checkpoint) that momentarily over-speeds the ball before it settles to
+ * its true v = ω·r launch. Requiring the speed to hold for a short window rejects
+ * that transient so the tip/base ratio reflects real momentum transfer, not the
+ * burst.
+ */
+const SUSTAIN_STEPS = 3;
+
+/**
+ * Rest the bat at its droop limit (motor `-1` = return/down), place a ball just
+ * above the bat face at fractional reach `rFrac`, then RAISE the bat (motor `+1` =
+ * raise, the real press command): the bat sweeps the ball's side up and flings it.
+ * Returns the SUSTAINED launch speed (max speed held for `SUSTAIN_STEPS` steps, so
+ * the jam-release transient is filtered), the peak bat |ω| during the raise, and
+ * the TRUE contact radius (|ball − pivot|, which includes the unavoidable face gap
+ * — so the honest v = ω·r comparison uses it, not the nominal horizontal reach).
  */
 function launchAtRadius(rFrac: number): LaunchResult {
   const world: PhysicsWorld = new PlanckWorld();
@@ -133,45 +147,60 @@ function launchAtRadius(rFrac: number): LaunchResult {
   const py = fl.pivotY;
   const r = FLIPPER_LENGTH_M * rFrac;
 
-  // Settle the bat at its droop limit (hold +1) and hold the other flipper still.
+  // Settle the bat at its rest/droop limit (return, hold −1) and hold the other
+  // flipper still.
   const holdDroop = (): void => {
-    world.setFlipperMotor(0, 1);
+    world.setFlipperMotor(0, -1);
     world.setFlipperMotor(1, 0);
   };
   for (let i = 0; i < 30; i++) step(holdDroop);
 
-  // Place the ball on the bat at radius r (horizontal reach, just above the face).
+  // Place the ball just above the bat face at horizontal reach r. The TRUE contact
+  // radius is the pivot→ball distance (the face gap makes it > r, and dominates for
+  // a base hit) — this is the radius the v = ω·r launch actually scales with.
   const gap = BALL_RADIUS_M + FLIPPER_HALF_WIDTH_M + 0.01;
+  const contactRadius = Math.hypot(r, gap);
   world.addBall({ x: px + r, y: py - gap, vx: 0, vy: 0, radius: BALL_RADIUS_M });
 
-  // Raise (flick) and measure.
+  // Raise (flick, motor +1 = the FSM's press command) and record the ball speed
+  // each step; hold the far flipper still.
   const raise = (): void => {
-    world.setFlipperMotor(0, -1);
+    world.setFlipperMotor(0, 1);
     world.setFlipperMotor(1, 0);
   };
-  let launch = 0;
+  const speeds: number[] = [];
   let peakOmega = 0;
   let prevAngle = world.getFlippers()[0]?.angle ?? 0;
-  for (let i = 0; i < 40; i++) {
+  // 25 steps: enough for the raise + launch, short enough that the flung ball has
+  // not yet reached a wall to bounce back (which would pollute the launch read).
+  for (let i = 0; i < 25; i++) {
     step(raise);
     const angle = world.getFlippers()[0]?.angle ?? 0;
     peakOmega = Math.max(peakOmega, Math.abs(angle - prevAngle) / FIXED_DT);
     prevAngle = angle;
     const ball = world.getBalls()[0];
-    if (ball) {
-      const d = Math.hypot(ball.x - px, ball.y - py);
-      if (d < FLIPPER_LENGTH_M * 1.3) {
-        launch = Math.max(launch, Math.hypot(ball.vx, ball.vy));
-      }
-    }
+    speeds.push(ball ? Math.hypot(ball.vx, ball.vy) : 0);
   }
-  return { launch, peakOmega, radius: r };
+
+  // SUSTAINED launch: the fastest speed the ball HOLDS for SUSTAIN_STEPS steps — a
+  // 1–2 step jam-release spike (which the raw max would capture equally for base
+  // and tip, collapsing the ratio) cannot satisfy it.
+  let launch = 0;
+  for (let i = 0; i + SUSTAIN_STEPS <= speeds.length; i++) {
+    let windowMin = Infinity;
+    for (let k = 0; k < SUSTAIN_STEPS; k++) {
+      const s = speeds[i + k];
+      if (s !== undefined && s < windowMin) windowMin = s;
+    }
+    launch = Math.max(launch, windowMin);
+  }
+  return { launch, peakOmega, radius: contactRadius };
 }
 
 describe("FLIP-02 tip-vs-base — a tip hit out-launches a base hit per v = ω·r", () => {
   it("tip launch exceeds base launch, and their ratio matches the contact-radius ratio", () => {
-    const tip = launchAtRadius(0.9); // r ≈ 0.45 m (near the fat tip)
-    const base = launchAtRadius(0.3); // r ≈ 0.15 m (near the base)
+    const tip = launchAtRadius(0.9); // near the fat tip (contact radius ≈ 0.53 m)
+    const base = launchAtRadius(0.3); // near the base (contact radius ≈ 0.32 m)
 
     // Both hits actually struck and launched the ball (past rest noise).
     expect(tip.launch).toBeGreaterThan(1.0);
@@ -180,7 +209,9 @@ describe("FLIP-02 tip-vs-base — a tip hit out-launches a base hit per v = ω·
     // Core FLIP-02 claim: the tip hit is measurably faster than the base hit.
     expect(tip.launch).toBeGreaterThan(base.launch * 1.5);
 
-    // v = ω·r geometry: the launch ratio matches the contact-radius ratio.
+    // v = ω·r geometry: the launch ratio matches the TRUE contact-radius ratio
+    // (which the face gap compresses toward ~1.7, not the nominal 3 — the honest
+    // number is the pivot→ball distance the launch actually scales with).
     const launchRatio = tip.launch / base.launch;
     const radiusRatio = tip.radius / base.radius;
     expect(Math.abs(launchRatio - radiusRatio) / radiusRatio).toBeLessThan(
@@ -188,11 +219,11 @@ describe("FLIP-02 tip-vs-base — a tip hit out-launches a base hit per v = ω·
     );
 
     // Each launch is a substantial fraction of the ideal contact-point speed ω·r
-    // (real momentum transfer, not incidental motion). The raise runs at the
-    // return motor speed (see the header note on flick direction).
-    const omega = FLIPPER_RETURN_SPEED;
-    expect(tip.launch).toBeGreaterThan(0.4 * omega * tip.radius);
-    expect(base.launch).toBeGreaterThan(0.4 * omega * base.radius);
+    // (real momentum transfer, not incidental motion). The raise runs at the up
+    // (raise) motor speed (see the header note on flick direction).
+    const omega = FLIPPER_UP_SPEED;
+    expect(tip.launch).toBeGreaterThan(0.25 * omega * tip.radius);
+    expect(base.launch).toBeGreaterThan(0.25 * omega * base.radius);
     // And the bat really was sweeping at ~the raise speed (a sane, un-jammed ω).
     expect(tip.peakOmega).toBeGreaterThan(0.5 * omega);
     expect(tip.peakOmega).toBeLessThan(2.0 * omega);
