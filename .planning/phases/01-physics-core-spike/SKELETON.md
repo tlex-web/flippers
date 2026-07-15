@@ -11,10 +11,17 @@ There is NO database, NO routing, NO auth, NO backend, and NO deployment target 
 
 ## Architectural Decisions
 
+**Engine decision status: ✅ LOCKED — Planck-first CONFIRMED empirically (plan 01-07).**
+The tunnel-proof soak (`npm run soak`, plan 01-06, commit `1197173`) stays GREEN
+over 630 s simulated at ~10× the ball's real max velocity, and the stability/energy
+proof (`src/harness/stability.test.ts`, plan 01-07) is green — so both the
+tunnel-proof and the Phase-1 feel bar are met and the custom-swept-solver fallback
+is NOT triggered. Full rationale + evidence: `ENGINE-DECISION.md`.
+
 | Decision | Choice | Rationale |
 |---|---|---|
-| Physics engine | **Planck.js 1.5.0**, first (D-01) | Only mainstream JS engine with native continuous collision detection (`body.setBullet(true)`) — kills the #1 risk (ball tunneling through thin/fast geometry). Accessed ONLY through the interface. |
-| Engine fallback trigger | Custom swept circle-vs-segment/arc solver, ONLY if Planck empirically fails | Escalate to a hand-rolled swept solver ONLY if the interface-level soak gate fails the tunnel-proof or feel bar (D-01/D-02). Not a default bake-off. Cheap to swap because the interface is the contract. |
+| Physics engine | **Planck.js 1.5.0** — **CONFIRMED/LOCKED** (D-01/D-02; see `ENGINE-DECISION.md`) | Only mainstream JS engine with native continuous collision detection (`body.setBullet(true)` + world `continuousPhysics`) — kills the #1 risk (ball tunneling through thin/fast geometry). Empirically confirmed by the passing `npm run soak` tunnel-proof gate + the green stability/energy proof. Accessed ONLY through the interface. |
+| Engine fallback trigger | Custom swept circle-vs-segment/arc solver — **NOT triggered** | Would escalate to a hand-rolled swept solver ONLY if the interface-level soak gate failed the tunnel-proof or feel bar (D-01/D-02). Planck passed both, so the fallback is not built. Not a default bake-off. Cheap to revisit because the interface is the contract — a custom solver would be judged by the identical `npm run soak`. |
 | Engine boundary | Planck imported ONLY in `src/physics/planck-world.ts` | Everything else (loop, sandbox, harness) talks to `PhysicsWorld` — the identical soak proof runs against Planck or any future solver (D-05). |
 | Rendering (debug) | Canvas 2D, throwaway (D-06/D-07) | Minimal debug-draw for diagnosis only. NOT the Phase-5 renderer; do NOT adopt Planck's `Testbed`. The real procedural renderer is Phase 5. |
 | Language / build | TypeScript 7.0.2 (strict) + Vite 8.1.4; `tsc --noEmit` gate | Vector/state-heavy physics — types catch config errors; Vite HMR makes feel-tuning instant. Vite does not type-check, so `tsc --noEmit` gates separately. |
