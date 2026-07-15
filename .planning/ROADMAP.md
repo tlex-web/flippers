@@ -91,7 +91,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-06-PLAN.md — By-feel acceptance checkpoint: heavy-not-floaty verdict on the live rig (D-09) [wave 4]
+- [x] 02-06-PLAN.md — By-feel acceptance checkpoint: heavy-not-floaty verdict on the live rig (D-09) [wave 4]
 
 ### Phase 3: Table, Plunger & Event Bus
 

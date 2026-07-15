@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: 02-GAP-01 rig playability fix (symmetric flippers + centre feed)
-last_updated: "2026-07-15T23:45:00.000Z"
+status: ready_to_plan
+stopped_at: Phase 02 complete (7/6) — ready to discuss Phase 3
+last_updated: 2026-07-15T22:05:59.274Z
 last_activity: 2026-07-15
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 14
   percent: 17
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original.
-**Current focus:** Phase 02 — flippers-feel
+**Current focus:** Phase 3 — table, plunger & event bus
 
 ## Current Position
 
-Phase: 02 (flippers-feel) — EXECUTING
-Plan: 6 of 6
-Status: Ready to execute
+Phase: 3
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-07-15
 
 Progress: [█████████░] 92%
@@ -36,7 +36,7 @@ Progress: [█████████░] 92%
 
 **Velocity:**
 
-- Total plans completed: 7
+- Total plans completed: 14
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -45,6 +45,7 @@ Progress: [█████████░] 92%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
+| 02 | 7 | - | - |
 
 **Recent Trend:**
 
