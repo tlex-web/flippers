@@ -106,7 +106,13 @@ Plans:
   3. Plunger charge is visualized (pullback and/or charge meter) so a launch feels deliberate and its power is readable before release.
   4. Every ball-vs-element contact emits a typed collision event on a one-way bus, with the collision model and render model both derived from one `table/spec` source so what's hit and what's drawn cannot drift apart.
 
-**Plans**: TBD
+**Plans**: 5 plans (5 waves)
+Plans:
+- [ ] 03-01-PLAN.md — Engine-agnostic table spec + curve resolver (the single one-resolve origin; anchored Space Cadet descriptors) [wave 1]
+- [ ] 03-02-PLAN.md — Adapter builds fixtures from resolve(TABLE_SPEC) + real spec-driven flipper placement + re-anchored proofs + soak on real geometry [wave 2]
+- [ ] 03-03-PLAN.md — Hold-to-charge plunger stack (input->controller->generic applyImpulse hook) + proportional launch [wave 3]
+- [ ] 03-04-PLAN.md — Typed one-way collision bus: normalized event identity + sensor begin-contact + onPostStep seam + CollisionRouter [wave 4]
+- [ ] 03-05-PLAN.md — Wire plunger + router + demo consumer at the composition root + charge meter + real-table debug render [wave 5]
 
 ### Phase 4: Reactive Elements & Game Rules
 
@@ -166,7 +172,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 5/6 | In Progress|  |
-| 3. Table, Plunger & Event Bus | 0/TBD | Not started | - |
+| 3. Table, Plunger & Event Bus | 0/5 | Not started | - |
 | 4. Reactive Elements & Game Rules | 0/TBD | Not started | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |
