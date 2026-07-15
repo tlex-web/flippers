@@ -396,21 +396,24 @@ this.world.on("begin-contact", (contact) => {
 
 **A4 is the one to surface for user confirmation** if fidelity of relative positions matters more than the phase assumes — but D-03 already locked "anchored-approximate, judged by eye" as the intended path.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where exactly does the chute meet the playfield, and what is the chute axis vector?**
    - What we know: the plunger launches up-field (−y); the chute is a narrow lane on one side (right, per the original).
    - What's unclear: the precise entry point and any lateral tilt of the chute axis.
    - Recommendation: author the chute as a spec element with an explicit `axis` (or derive it from the chute polyline direction); tune `PLUNGER_AXIS` by feel. Claude's discretion (D-03).
+   - **RESOLVED:** Claude's discretion per D-03 - the chute element + up-field axis are authored in 03-01 Task 2 (`TABLE_SPEC`); `PLUNGER_AXIS` is tuned in 03-03 Task 2 and consumed by 03-03 Task 3's controller launch.
 
 2. **Router seam: `onPostStep` hook vs top-of-next-step drain?**
    - What we know: both are deterministic (one batch per fixed step).
    - What's unclear: whether the team wants the small `loop.ts` change.
    - Recommendation: add `onPostStep` (zero latency, symmetric with `onStep`); it does not touch planck-world/interface/soak, so it respects D-11.
+   - **RESOLVED:** `onPostStep` chosen - added to `loop.ts` in 03-04 Task 3 and wired to `router.dispatch()` at the fixed-step seam in 03-05 Task 1.
 
 3. **How much test re-anchoring does replacing the throwaway rig cause?**
    - What we know: `stability.test.ts`, `flipper-feel.test.ts`, `flipper-e2e.test.ts` hard-assume the 2×3 box + pivots.
    - Recommendation: budget a Wave-0 task to re-anchor these against the spec's flipper mounts *without* touching feel constants; keep the FLIP-04 soak/teeth calibration byte-identical by preserving the flipper fixture/feel exactly (only pivots move).
+   - **RESOLVED:** Budgeted as 03-02 Task 2 (re-anchor the rig-coupled proofs to the spec's flipper mounts, feel constants byte-identical); the FLIP-04 swept-tunnel calibration is preserved across 03-02 Task 2/Task 3.
 
 ## Environment Availability
 

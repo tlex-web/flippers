@@ -108,10 +108,24 @@ Plans:
 
 **Plans**: 5 plans (5 waves)
 Plans:
+**Wave 1**
+
 - [ ] 03-01-PLAN.md — Engine-agnostic table spec + curve resolver (the single one-resolve origin; anchored Space Cadet descriptors) [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — Adapter builds fixtures from resolve(TABLE_SPEC) + real spec-driven flipper placement + re-anchored proofs + soak on real geometry [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-03-PLAN.md — Hold-to-charge plunger stack (input->controller->generic applyImpulse hook) + proportional launch [wave 3]
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-04-PLAN.md — Typed one-way collision bus: normalized event identity + sensor begin-contact + onPostStep seam + CollisionRouter [wave 4]
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-05-PLAN.md — Wire plunger + router + demo consumer at the composition root + charge meter + real-table debug render [wave 5]
 
 ### Phase 4: Reactive Elements & Game Rules
