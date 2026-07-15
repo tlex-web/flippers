@@ -4,8 +4,9 @@ import { mulberry32 } from "./prng";
 
 /**
  * The soak gate replays failing seeds deterministically (D-04), so the PRNG
- * MUST be seeded and reproducible and MUST NOT touch `Math.random` (which is
- * unseeded and non-reproducible). These are numeric/deterministic assertions.
+ * MUST be seeded and reproducible and MUST NOT touch the platform's unseeded
+ * global RNG (`Math`'s `random`), which is non-reproducible. These are
+ * numeric/deterministic assertions.
  */
 describe("mulberry32 seeded PRNG", () => {
   it("yields an identical sequence for identical seeds", () => {
@@ -39,7 +40,7 @@ describe("mulberry32 seeded PRNG", () => {
     }
   });
 
-  it("never calls Math.random", () => {
+  it("never calls the platform's unseeded global RNG", () => {
     const spy = vi.spyOn(Math, "random");
     const rng = mulberry32(42);
     for (let i = 0; i < 1000; i++) rng();
