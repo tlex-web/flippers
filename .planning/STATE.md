@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-07-15T18:02:31.960Z"
+stopped_at: Closed 02-GAP-01 (mirrored flipper raise-direction inversion)
+last_updated: "2026-07-15T21:25:00.000Z"
 last_activity: 2026-07-15
 progress:
   total_phases: 6
@@ -93,6 +93,7 @@ Recent decisions affecting current work:
 - [Phase ?]: FLIP-04 gate proven: seeded green flipper-primary peak-omega swept gate (CCD+sub-stepping ON, >=630s simulated) + replayable RED sub-stepping teeth control
 - [Phase ?]: Sub-stepping teeth isolated with CCD off in both arms; bullet:true teeth is vacuous (CCD masks it, peak omega=30 cannot skip the 0.2m ball)
 - [Phase ?]: Feel proven as numbers: tip out-launches base per v=omega*r (2.62 vs 3.0), caught ball cradles jitter-free with monotonic energy
+- [Phase 02 GAP-01]: Fixed the verifier's BLOCKER (SC1/FLIP-01) — setFlipperMotor(id,+1) raised the right bat but DROOPED the left (a body-angle-pi mirror preserves rotational handedness, so the two counter-rotating bats need OPPOSITE motor signs to both raise). Folded a per-flipper raiseSign (mirror?+1:-1) into PlanckWorld.setFlipperMotor (D-05); FlipperController still drives +1=raise engine-agnostically. Symmetric +/-pi/8 limits mean flipping the sign drives each bat to the CORRECT limit (+1=up cradle, -1=rest). Right pivot moved 1.15->1.55 (D-11 throwaway rig) so the now-UP raised left bat no longer collides with it. Raise direction re-proven against TRUE world tip-Y for BOTH sides; feel v=omega*r re-proven with the correct +1 sign via a sustained-launch measure; FLIP-04 teeth re-calibrated (soak sweep reverses before the limit, sign-agnostic; teeth speed 96->92). All green: tsc/eslint 0, 71/71 tests, 2/2 soak gates. 02-06 human by-feel checkpoint now unblocked.
 
 ### Pending Todos
 
@@ -113,6 +114,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-15T18:02:31.946Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-07-15T21:25:00.000Z
+Stopped at: Closed 02-GAP-01 (mirrored flipper raise-direction inversion); phase re-validation green
 Resume file: None
