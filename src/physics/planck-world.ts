@@ -138,11 +138,18 @@ function segment(ax: number, ay: number, bx: number, by: number): Segment {
 /** Construction options for the Planck adapter. */
 export interface PlanckWorldOptions {
   /**
-   * Continuous collision detection (Planck `setBullet`) on every ball — the
-   * make-or-break anti-tunneling flag (PHYS-02/D-01). Defaults to TRUE. Set
-   * FALSE **only** for the soak's negative control, which flings the ball past
-   * its real max velocity at the thin wall with CCD OFF to prove the gate goes
-   * RED on real tunneling (i.e. that the green gate has teeth, not a false pass).
+   * Continuous collision detection master switch (PHYS-02/D-01). Defaults to
+   * TRUE. Set FALSE **only** for the soak's negative control, which flings the
+   * ball past its real max velocity at the thin wall with CCD OFF to prove the
+   * gate goes RED on real tunneling (i.e. that the green gate has teeth, not a
+   * false pass).
+   *
+   * NOTE: Box2D/Planck run CCD against STATIC bodies for every dynamic body
+   * regardless of the per-body `setBullet` flag — that flag only ADDS dynamic-
+   * vs-dynamic CCD. So merely clearing `setBullet` would still stop the ball at
+   * the static thin wall. To make a genuine CCD-off control this therefore also
+   * disables the world-level `continuousPhysics` (the TOI solver) so a fast ball
+   * actually tunnels through the static wall.
    */
   readonly bullet?: boolean;
 }
@@ -181,7 +188,12 @@ export class PlanckWorld implements PhysicsWorld {
     this.bulletEnabled = options?.bullet ?? true;
     // Gravity is the IN-PLANE projection along the tilted playfield (D-08),
     // NOT full vertical g — this is what makes the fall read as a heavy roll.
-    this.world = new World({ gravity: Vec2(0, IN_PLANE_GRAVITY) });
+    // `continuousPhysics` (the TOI solver) is the world-level CCD switch — off
+    // only for the negative control, so a fast ball tunnels the static wall.
+    this.world = new World({
+      gravity: Vec2(0, IN_PLANE_GRAVITY),
+      continuousPhysics: this.bulletEnabled,
+    });
     this.segments = this.buildBoundary();
     this.buildTestFlipper();
     this.world.on("post-solve", (contact, impulse) => {
