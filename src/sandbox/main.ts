@@ -28,8 +28,9 @@ import { PlungerController } from "../control/plunger-controller";
 import { FlipperInput } from "../input/flipper-input";
 import { PlungerInput } from "../input/plunger-input";
 import { FixedStepLoop } from "../sim/loop";
-import type { BallState, CollisionEvent } from "../physics/types";
-import { DRAIN_Y, PLUNGER_REST, TABLE_SPEC } from "../table/spec";
+import type { CollisionEvent } from "../physics/types";
+import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
+import { BallFeed } from "./ball-feed";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
 /**
@@ -43,8 +44,10 @@ const BALL_DENSITY = 1;
 /**
  * Ball feed: park ONE ball on the plunger at `PLUNGER_REST` (from the spec), so
  * the player launches every ball up the chute with Space. A fresh ball is re-fed
- * there only when the tracked one crosses the drain line (`DRAIN_Y`), and the
- * drained ball is REMOVED first, so exactly one ball ever exists.
+ * there only when the tracked one hits the drain sensor (on the bus, see
+ * `BallFeed`), and the drained ball is REMOVED first, so exactly one ball ever
+ * exists. (The rest position lies below `DRAIN_Y`, so a positional check would
+ * respawn the parked ball every frame — 03-REVIEW CR-01.)
  */
 const BALL_SPAWN = { x: PLUNGER_REST.x, y: PLUNGER_REST.y } as const;
 
@@ -98,7 +101,11 @@ function main(): void {
   plungerInput.attach();
   const plunger = new PlungerController(world);
 
-  let activeBallId = world.addBall(BALL_SPAWN);
+  // The collision bus (D-11): one router over the world's pooled event drain,
+  // dispatched once per fixed step at the loop's post-step seam. Built before
+  // the first ball so the feed can listen for the drain from the start.
+  const router = new CollisionRouter(world);
+  const feed = new BallFeed(world, router, BALL_SPAWN);
   const loop = new FixedStepLoop(world);
 
   // Side -> flipper-id mapping (D-09/D-10): the physically-LEFT flipper (smaller
@@ -131,17 +138,15 @@ function main(): void {
     // the charge with no launch; then advance the charge one fixed step.
     const plungerEdges = plungerInput.drainEdges();
     if (plungerEdges.press) plunger.onPressEdge();
-    if (plungerEdges.release) plunger.onReleaseEdge(activeBallId);
+    if (plungerEdges.release) plunger.onReleaseEdge(feed.activeBallId);
     if (plungerEdges.cancel) plunger.onCancelEdge();
     plunger.update();
   }
 
-  // The collision bus (D-11): one router over the world's pooled event drain,
-  // dispatched once per fixed step at the loop's post-step seam, with exactly
-  // ONE demo listener. The listener copies out only scalars into the string of
-  // a line it actually logs; it never keeps the pooled record, never calls back
-  // into the world, and carries no scoring, kick or rule logic (D-06/D-11).
-  const router = new CollisionRouter(world);
+  // Beside the feed's drain listener, exactly ONE demo listener. It copies out
+  // only scalars into the string of a line it actually logs; it never keeps the
+  // pooled record, never calls back into the world, and carries no scoring,
+  // kick or rule logic (D-06/D-11).
   let solidSinceLog = 0;
   router.register((e: CollisionEvent): void => {
     const kind = e.elementKind;
@@ -162,9 +167,12 @@ function main(): void {
 
   // Built ONCE and passed by reference, like onFixedStep: runs right after each
   // fixed step's world.step(), so every simulated step's events reach the
-  // listener as exactly one batch and the event pool stays bounded.
+  // listeners as exactly one batch and the event pool stays bounded. The feed
+  // then replaces a ball the batch reported drained, at this fixed-step
+  // boundary (never in the render frame), after the batch is delivered.
   function onPostStep(): void {
     router.dispatch();
+    feed.service();
   }
 
   const renderer = new DebugRenderer(canvas);
@@ -193,16 +201,6 @@ function main(): void {
     // fixed step (D-10), and `onPostStep` dispatches that step's events on the
     // bus (D-11) — both passed by reference, so no per-frame allocation.
     const steps = loop.advance(deltaMs, onFixedStep, onPostStep);
-
-    // Ball feed: once the tracked ball crosses the spec's drain line, REMOVE it
-    // and park a fresh one on the plunger, so exactly one ball ever exists.
-    // No steady-state allocation: `findBall` reuses the pooled snapshot and
-    // remove/add run only on the (rare) drain.
-    const activeBall = findBall(world.getBalls(), activeBallId);
-    if (activeBall && activeBall.y > DRAIN_Y) {
-      world.removeBall(activeBallId);
-      activeBallId = world.addBall(BALL_SPAWN);
-    }
 
     // Interpolate each ball between the loop's previous and current fixed states
     // (smooth motion independent of the render rate).
@@ -276,15 +274,6 @@ function growTo(pool: InterpolatedBall[], n: number): void {
   while (pool.length < n) {
     pool.push({ id: 0, x: 0, y: 0, vx: 0, vy: 0, radius: 0, angle: 0 });
   }
-}
-
-/** Find a ball by id in the pooled snapshot (no allocation). */
-function findBall(balls: readonly BallState[], id: number): BallState | undefined {
-  for (let i = 0; i < balls.length; i++) {
-    const b = balls[i];
-    if (b && b.id === id) return b;
-  }
-  return undefined;
 }
 
 main();
