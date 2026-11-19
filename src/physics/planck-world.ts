@@ -365,6 +365,15 @@ export class PlanckWorld implements PhysicsWorld {
       for (let i = 0; i < impulses.length; i++) normalImpulse += impulses[i] ?? 0;
       this.emitContact(contact, normalImpulse);
     });
+    // Sensors (lanes, rollovers, the drain) are never solved, so they never
+    // fire post-solve: report them once, when the overlap begins, with impulse
+    // 0. Solid contacts are left to post-solve so each is reported exactly once
+    // per solve with its real impulse (03-RESEARCH Pitfall 1).
+    this.world.on("begin-contact", (contact) => {
+      if (contact.getFixtureA().isSensor() || contact.getFixtureB().isSensor()) {
+        this.emitContact(contact, 0);
+      }
+    });
   }
 
   /**
