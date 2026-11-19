@@ -4,11 +4,13 @@
  * talks to physics exclusively through `PhysicsWorld` from `./types`, so the
  * engine stays swappable and the headless proof (D-05) is engine-independent.
  *
- * This first cut is one dynamic bullet ball falling under tilted-playfield
- * gravity inside a bounded box built from chain/edge static walls (including one
- * deliberately thin interior wall as a future tunneling target). Snapshots are
- * read out of pre-allocated pooled arrays that `step()` mutates — no per-frame
- * allocation on the render read path.
+ * The world is built from ONE resolved table spec (`src/table`, D-01/D-02): a
+ * single static body carries one fixture per wall/chute/drain/bumper element,
+ * each tagged with its spec `{ kind, id }`, and each spec flipper mount becomes
+ * a motorized capsule bat. The same resolve output backs `getBoundarySegments()`
+ * and `getElements()`, so the colliders and every consumer's geometry are the
+ * same vertices by construction. Snapshots are read out of pre-allocated pooled
+ * arrays that `step()` mutates — no per-frame allocation on the render read path.
  */
 
 import {
@@ -50,6 +52,12 @@ import type {
   Segment,
   Vec2 as Vec2Value,
 } from "./types";
+import { resolve, type ResolvedElement } from "../table/resolve";
+import {
+  PROOF_BOX_SPEC,
+  type ElementKind,
+  type TableSpec,
+} from "../table/spec";
 
 // --- Solver tuning (Box2D defaults; crank up only if bounces feel mushy). ---
 const VELOCITY_ITERATIONS = 8;
@@ -61,50 +69,9 @@ const BALL_DENSITY = 1;
 // --- Wall material: low grip so the ball slides along walls like real steel. ---
 const WALL_FRICTION = 0.1;
 
-// --- Bounded play box (meters). Test scaffold only — the real table
-//     geometry is Phase 3. Sized so a 0.2 m ball is comfortably inside. ---
-const WIDTH_M = 2;
-const HEIGHT_M = 3;
-
-// --- One deliberately THIN interior wall segment (a zero-width edge = the
-//     thinnest possible wall). Placed OFF the ball's fall column so it is a
-//     standing tunneling target for later stress plans without trapping the
-//     ball here. ---
-const THIN_WALL = { ax: 0.2, ay: 2.0, bx: 0.8, by: 2.0 } as const;
-
-// Stable id for the (single) static walls body used in collision events.
-const WALL_ID = -1;
-
-// --- Two mirrored FEEL flippers on the throwaway 2×3 m test rig (D-11). Their
-//     placement is test-scaffold geometry (a replaceable local const like the
-//     Phase-1 single flipper), NOT real table layout — that is
-//     Phase 3. Feel/torque/angle values live in constants.ts; only the pivots +
-//     capsule shape live here.
-//
-//     SYMMETRIC by construction (human-checkpoint fix): both pivots share ONE y
-//     and are mirrored in x about the box centre (x = WIDTH_M/2 = 1.0), so the
-//     pair reads as a level, mirror-image classic-pinball layout — left pivot
-//     lower-left, right pivot lower-right, both bats angling up toward the centre
-//     with a gap between the tips that a fed ball rests in and can be flipped from
-//     (the ball-feed drops onto the centre of the pair; see src/sandbox/main.ts).
-//
-//     FLIPPER_HALF_SEP is chosen so the two bats never overlap at ANY angle in
-//     their [−π/8, +π/8] limits. The tips reach FURTHEST toward centre at LEVEL
-//     (joint 0, cos 0 = 1), so the minimum centre-to-centre tip gap is
-//     2·HALF_SEP − 2·FLIPPER_LENGTH_M = 2·0.65 − 1.0 = 0.30 m — i.e. 0.16 m of
-//     clear air between the two tip circles (radius FLIPPER_TIP_RADIUS_M = 0.07
-//     each); at the droop/raise limits the gap only widens (cos π/8 < 1). The left
-//     pivot keeps its Phase-1 x/y (0.35, 2.6) so every harness proof that reads
-//     getFlippers()[0] is unaffected; the right pivot is its exact mirror (it was
-//     the asymmetric (1.55, 2.35), which sat lopsided in the bottom-right corner —
-//     the "not on the same height" / "balls roll off the right side" report). ---
-const BOX_CENTER_X = WIDTH_M / 2;
-const FLIPPER_HALF_SEP = 0.65;
-const FLIPPER_PIVOT_Y = 2.6;
-const FLIPPER_PIVOT_L = { x: BOX_CENTER_X - FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
-const FLIPPER_PIVOT_R = { x: BOX_CENTER_X + FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
-const FLIPPER_ID_L = 0;
-const FLIPPER_ID_R = 1;
+// --- Flipper bat material. Placement (pivot + mirror) comes from the table
+//     spec's flipper mounts; feel/torque/angle values live in constants.ts; only
+//     the capsule shape lives here. ---
 const FLIPPER_DENSITY = 1;
 
 // --- Capsule bat geometry (local body frame, meters; D-07). The pivot is at
@@ -181,9 +148,12 @@ interface MutableFlipperState {
   tipRadius: number;
 }
 
-/** Identity stamped onto each Planck body's userData for event classification. */
+/**
+ * Identity stamped onto Planck userData for event classification: on each
+ * static table FIXTURE (spec `{ kind, id }`) and on ball / flipper BODIES.
+ */
 interface BodyTag {
-  kind: "ball" | "wall" | "flipper";
+  kind: "ball" | ElementKind;
   id: number;
 }
 
@@ -205,20 +175,21 @@ function classifyContact(
   a: BodyTag["kind"],
   b: BodyTag["kind"],
 ): CollisionEventType | null {
-  // Direct pair comparison — no per-contact `new Set`/array literal (this runs
+  // Direct comparisons — no per-contact `new Set`/array literal (this runs
   // inside `world.step()` on the 60fps path; steady-state zero allocation).
-  if ((a === "ball" && b === "wall") || (a === "wall" && b === "ball")) {
-    return "ball-wall";
-  }
-  if ((a === "ball" && b === "flipper") || (a === "flipper" && b === "ball")) {
-    return "ball-flipper";
-  }
+  // Coarse on purpose: any non-ball, non-flipper element reads as "ball-wall".
   if (a === "ball" && b === "ball") return "ball-ball";
+  if (a === "ball") return b === "flipper" ? "ball-flipper" : "ball-wall";
+  if (b === "ball") return a === "flipper" ? "ball-flipper" : "ball-wall";
   return null;
 }
 
-function segment(ax: number, ay: number, bx: number, by: number): Segment {
-  return { a: { x: ax, y: ay }, b: { x: bx, y: by } };
+/** Fixture tag first (static table elements), body tag as the fallback. */
+function tagOf(fixture: {
+  getUserData(): unknown;
+  getBody(): { getUserData(): unknown };
+}): BodyTag | null {
+  return asTag(fixture.getUserData()) ?? asTag(fixture.getBody().getUserData());
 }
 
 /** Construction options for the Planck adapter. */
@@ -252,6 +223,14 @@ export interface PlanckWorldOptions {
    * ball's translational `setBullet` CCD is unaffected either way.
    */
   readonly subStepping?: boolean;
+
+  /**
+   * The table to build (D-01/D-05). Every static collider and both flipper
+   * mounts come from this one spec via a single `resolve()`. Defaults to
+   * `PROOF_BOX_SPEC`, the harness fixture the Phase-1/2 proofs are calibrated
+   * against; the sandbox composition root passes `TABLE_SPEC`.
+   */
+  readonly table?: TableSpec;
 }
 
 export class PlanckWorld implements PhysicsWorld {
@@ -292,6 +271,10 @@ export class PlanckWorld implements PhysicsWorld {
     raiseSign: number;
   }[] = [];
 
+  /** The one resolve output (D-01): fixtures, segments and getElements() all read it. */
+  private readonly elements: readonly ResolvedElement[];
+
+  /** Solid (non-sensor) segments of `elements`, same object references. */
   private readonly segments: readonly Segment[];
 
   // Collision-event pool: grow-only, mutated in place. `eventCount` is the live
@@ -328,14 +311,13 @@ export class PlanckWorld implements PhysicsWorld {
       gravity: Vec2(0, IN_PLANE_GRAVITY),
       continuousPhysics: this.bulletEnabled,
     });
-    this.segments = this.buildBoundary();
-    // Two mirrored capsule flippers (D-07/D-11). N flippers is additive: the
-    // joint/pool registries are index-iterated in step().
-    this.buildFlipper(FLIPPER_ID_L, FLIPPER_PIVOT_L, false);
-    this.buildFlipper(FLIPPER_ID_R, FLIPPER_PIVOT_R, true);
+    // ONE resolve (D-01): validates the spec (throws before any body exists on a
+    // malformed descriptor) and is the single origin of every collider below.
+    this.elements = resolve(options?.table ?? PROOF_BOX_SPEC);
+    this.segments = this.buildTable(this.elements);
     this.world.on("post-solve", (contact, impulse) => {
-      const a = asTag(contact.getFixtureA().getBody().getUserData());
-      const b = asTag(contact.getFixtureB().getBody().getUserData());
+      const a = tagOf(contact.getFixtureA());
+      const b = tagOf(contact.getFixtureB());
       if (!a || !b) return;
       const type = classifyContact(a.kind, b.kind);
       if (!type) return;
@@ -355,34 +337,62 @@ export class PlanckWorld implements PhysicsWorld {
     });
   }
 
-  /** Build the bounded box from a chain loop + one thin interior edge (static). */
-  private buildBoundary(): readonly Segment[] {
-    const w = WIDTH_M;
-    const h = HEIGHT_M;
+  /**
+   * Build the table from the resolved spec. ONE static body receives, in spec
+   * order, one fixture per non-mount element: a two-vertex open polyline becomes
+   * an Edge, any longer or looped polyline a Chain of its vertices, a circle a
+   * Circle offset to its center. Each fixture is tagged with its spec
+   * `{ kind, id }` and takes `isSensor` from the element. Flipper mounts are
+   * built after every static fixture, in spec order, so the body/fixture
+   * creation order for a given spec is fixed (the calibrated proofs depend on
+   * it). Returns the solid boundary segments: the concatenated `segments` of
+   * every non-sensor, non-mount element, same object references.
+   */
+  private buildTable(elements: readonly ResolvedElement[]): readonly Segment[] {
     const walls = this.world.createBody(); // static by default
-    const wallTag: BodyTag = { kind: "wall", id: WALL_ID };
-    walls.setUserData(wallTag);
-
-    // Perimeter as a closed chain of edges (chain shape, loop = true).
-    const corners = [Vec2(0, 0), Vec2(w, 0), Vec2(w, h), Vec2(0, h)];
-    walls.createFixture(new Chain(corners, true), { friction: WALL_FRICTION });
-
-    // One deliberately thin interior wall (edge shape) — future tunneling target.
-    walls.createFixture(
-      new Edge(
-        Vec2(THIN_WALL.ax, THIN_WALL.ay),
-        Vec2(THIN_WALL.bx, THIN_WALL.by),
-      ),
-      { friction: WALL_FRICTION },
-    );
-
-    return [
-      segment(0, 0, w, 0),
-      segment(w, 0, w, h),
-      segment(w, h, 0, h),
-      segment(0, h, 0, 0),
-      segment(THIN_WALL.ax, THIN_WALL.ay, THIN_WALL.bx, THIN_WALL.by),
-    ];
+    const solid: Segment[] = [];
+    for (const el of elements) {
+      if (el.mount) continue;
+      const fixtureOpts = {
+        friction: WALL_FRICTION,
+        isSensor: el.sensor,
+        userData: { kind: el.kind, id: el.id } satisfies BodyTag,
+      };
+      if (el.circle) {
+        const c = el.circle;
+        walls.createFixture(
+          new Circle(Vec2(c.center.x, c.center.y), c.radius),
+          fixtureOpts,
+        );
+      } else {
+        const v = el.vertices;
+        const first = v[0];
+        const second = v[1];
+        if (!el.loop && v.length === 2 && first && second) {
+          walls.createFixture(
+            new Edge(Vec2(first.x, first.y), Vec2(second.x, second.y)),
+            fixtureOpts,
+          );
+        } else {
+          walls.createFixture(
+            new Chain(
+              v.map((p) => Vec2(p.x, p.y)),
+              el.loop,
+            ),
+            fixtureOpts,
+          );
+        }
+      }
+      if (!el.sensor) {
+        for (const seg of el.segments) solid.push(seg);
+      }
+    }
+    // Flipper mounts (D-05): N flippers is additive — the joint/pool registries
+    // are index-iterated in step().
+    for (const el of elements) {
+      if (el.mount) this.buildFlipper(el.id, el.mount.pivot, el.mount.mirror);
+    }
+    return solid;
   }
 
   /**

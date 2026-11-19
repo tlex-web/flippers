@@ -1,15 +1,18 @@
 /**
- * Physics sandbox entry — the Walking Skeleton's user-visible slice (plan 01-03).
+ * Sandbox entry — our original table (D-03) on screen through the one spec.
  *
- * Wires the whole stack end-to-end: it constructs the Planck world (the ONLY
- * engine-specific line is `new PlanckWorld()`, the composition root), drives it
- * through the engine-agnostic fixed-step loop, and renders the INTERPOLATED ball
- * + walls + velocity + contacts + HUD via the throwaway Canvas debug renderer.
- * Every read of world state goes through the `PhysicsWorld` interface — this file
- * never imports `planck` (D-05/D-07).
+ * Wires the whole stack end-to-end: it constructs the Planck world from
+ * `TABLE_SPEC` (the ONLY engine-specific line is `new PlanckWorld(...)`, the
+ * composition root), drives it through the engine-agnostic fixed-step loop, and
+ * renders the INTERPOLATED ball + table outline + flippers + velocity + contacts
+ * + HUD via the Canvas debug renderer. The outline (outer walls, right-side
+ * launch chute, drain funnel, trough walls) and both flipper mounts all come
+ * from the single resolve of the spec, so what is drawn is what is hit. Every
+ * read of world state goes through the `PhysicsWorld` interface — this file
+ * never imports the engine (D-05/D-07).
  *
- * This is a DIAGNOSIS tool only (D-03): it asserts nothing about pass/fail. The
- * tunnel-proof pass/fail gate is the headless soak (plan 01-06).
+ * This is a DIAGNOSIS tool only: it asserts nothing about pass/fail. The
+ * tunnel-proof gates stay headless (`npm run soak`).
  */
 
 import { PlanckWorld } from "../physics/planck-world";
@@ -17,6 +20,7 @@ import { FlipperController } from "../control/flipper-controller";
 import { FlipperInput } from "../input/flipper-input";
 import { FixedStepLoop } from "../sim/loop";
 import type { BallState } from "../physics/types";
+import { DRAIN_Y, PLAYFIELD_CENTER_X, TABLE_SPEC } from "../table/spec";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
 /**
@@ -28,15 +32,14 @@ import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw
 const BALL_DENSITY = 1;
 
 /**
- * Ball feed (D-11): drop ONE ball straight DOWN onto the CENTRE of the mirrored
- * flipper pair (box centre x = WIDTH_M/2 = 1.0), from near the top of the 2 m × 3 m
- * box, so it falls into the gap between the two bats and comes to rest cradled in
- * the pair — where either flipper can catch it, hold it, and flip it (tip vs base).
- * A fresh ball is re-fed only when the tracked one drains off the pair to the floor
- * (see FEED_DRAIN_Y), and the drained ball is REMOVED first, so exactly one
- * catchable ball ever exists. Throwaway scaffold — NOT real table geometry.
+ * Ball feed: drop ONE ball into the upper playfield, just right of the
+ * playfield axis, so it falls through the open field toward the funnel and the
+ * flipper pair, where either bat can catch, hold and flip it. A fresh ball is
+ * re-fed only when the tracked one crosses the drain line (`DRAIN_Y`, from the
+ * spec), and the drained ball is REMOVED first, so exactly one ball ever exists.
+ * A stand-in feed until the plunger launches balls up the chute.
  */
-const BALL_SPAWN = { x: 1.0, y: 0.5, vx: 0 } as const;
+const BALL_SPAWN = { x: PLAYFIELD_CENTER_X + 0.05, y: 1.4, vx: 0 } as const;
 
 /** Frame-rate smoothing factor for the FPS readout (0..1; higher = snappier). */
 const FPS_SMOOTHING = 0.1;
@@ -47,15 +50,6 @@ const HZ_WINDOW_MS = 500;
 /** Throttle (ms) for HUD number updates — keeps the readout legible. */
 const HUD_UPDATE_MS = 200;
 
-/**
- * Ball-feed drain line (meters, world y). Both flipper pivots sit at y ≈ 2.6 and a
- * ball cradled in the pair rests around y ≈ 2.5–2.6; a ball that has instead rolled
- * off the pair onto the floor sits near y ≈ 2.8. Once the tracked ball's center
- * passes this line it has left the catchable zone, so the rig removes it and drops
- * a fresh one onto the centre (D-11). Throwaway scaffold — NOT table geometry.
- */
-const FEED_DRAIN_Y = 2.75;
-
 function main(): void {
   const canvas = document.getElementById("stage");
   if (!(canvas instanceof HTMLCanvasElement)) {
@@ -64,7 +58,7 @@ function main(): void {
 
   // Composition root: the one engine-specific construction. Everything else
   // below talks to the world through the `PhysicsWorld` interface only.
-  const world = new PlanckWorld();
+  const world = new PlanckWorld({ table: TABLE_SPEC });
 
   // Keyboard input + flipper FSM (D-10). Constructed ONCE here (never inside
   // frame()). `attach()` registers the window keydown/keyup/blur + document
@@ -144,14 +138,12 @@ function main(): void {
     // it stays bounded; the reused-view drain allocates nothing per frame.
     world.drainEvents();
 
-    // Ball-feed rig (D-11): once the tracked ball drains off the flipper pair onto
-    // the floor, REMOVE it and drop a fresh one onto the centre, so exactly one
-    // catchable ball ever exists (the previous rig left drained balls in the world,
-    // so several piled up in the corner). Throwaway scaffold — NOT real table
-    // geometry. No steady-state allocation: `findBall` reuses the pooled snapshot
-    // and remove/add run only on the (rare) drain.
+    // Ball feed: once the tracked ball crosses the spec's drain line, REMOVE it
+    // and drop a fresh one into the upper field, so exactly one ball ever exists.
+    // No steady-state allocation: `findBall` reuses the pooled snapshot and
+    // remove/add run only on the (rare) drain.
     const activeBall = findBall(world.getBalls(), activeBallId);
-    if (activeBall && activeBall.y > FEED_DRAIN_Y) {
+    if (activeBall && activeBall.y > DRAIN_Y) {
       world.removeBall(activeBallId);
       activeBallId = world.addBall(BALL_SPAWN);
     }

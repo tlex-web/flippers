@@ -1,0 +1,126 @@
+import { describe, expect, it } from "vitest";
+
+import { sweptEscaped } from "../harness/containment";
+import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
+import { PlanckWorld } from "../physics/planck-world";
+import type { Vec2 } from "../physics/types";
+import {
+  HEIGHT_M,
+  PLAYFIELD_CENTER_X,
+  PLUNGER_REST,
+  PLUNGER_ZONE,
+  TABLE_SPEC,
+  WIDTH_M,
+  mirrorX,
+  type MountSpec,
+} from "./spec";
+
+/**
+ * Real-table smoke proof (03-01): the world built from `TABLE_SPEC` has its two
+ * spec-mounted flippers, keeps a dropped ball inside the walls, parks a ball on
+ * the plunger, and exposes only solid geometry as its containment boundary.
+ * Node env, no DOM; reads the world through the engine-agnostic interface.
+ */
+
+/** Sandbox drop point (mirrors BALL_SPAWN in src/sandbox/main.ts). */
+const DROP_POINT: Vec2 = { x: PLAYFIELD_CENTER_X + 0.05, y: 1.4 };
+
+function mounts(): MountSpec[] {
+  const out: MountSpec[] = [];
+  for (const el of TABLE_SPEC) if ("pivot" in el) out.push(el);
+  return out;
+}
+
+function makeTableWorld(): PlanckWorld {
+  const world = new PlanckWorld({ table: TABLE_SPEC });
+  // Freeze both bats (the controller's resting == motor 0 invariant) before any
+  // ball exists, exactly as the sandbox does.
+  for (const f of world.getFlippers()) world.setFlipperMotor(f.id, 0);
+  return world;
+}
+
+describe("TABLE_SPEC world", () => {
+  it("mounts exactly two flippers at the spec pivots, right mirrored from left", () => {
+    const world = makeTableWorld();
+    const flippers = world.getFlippers();
+    expect(flippers).toHaveLength(2);
+    const specMounts = mounts();
+    for (const m of specMounts) {
+      const f = flippers.find((x) => x.id === m.id);
+      expect(f).toBeDefined();
+      expect(f?.pivotX).toBe(m.pivot.x);
+      expect(f?.pivotY).toBe(m.pivot.y);
+    }
+    const left = specMounts.find((m) => !m.mirror);
+    const right = specMounts.find((m) => m.mirror);
+    expect(left && right).toBeTruthy();
+    if (left && right) expect(right.pivot).toEqual(mirrorX(left.pivot));
+  });
+
+  it("keeps a ball dropped at the sandbox feed point inside the walls for 6 s", () => {
+    const world = makeTableWorld();
+    const id = world.addBall(DROP_POINT);
+    const walls = world.getBoundarySegments();
+    let prev: Vec2 = { x: DROP_POINT.x, y: DROP_POINT.y };
+    const steps = Math.round(6 / FIXED_DT);
+    for (let i = 0; i < steps; i++) {
+      world.step(FIXED_DT);
+      const b = world.getBalls().find((x) => x.id === id);
+      expect(b).toBeDefined();
+      if (!b) return;
+      expect(Number.isFinite(b.x) && Number.isFinite(b.y)).toBe(true);
+      const next: Vec2 = { x: b.x, y: b.y };
+      if (sweptEscaped(prev, next, BALL_RADIUS_M - 0.05, walls)) {
+        throw new Error(
+          `ball escaped at step ${i}: (${prev.x},${prev.y}) -> (${next.x},${next.y})`,
+        );
+      }
+      prev = next;
+    }
+  });
+
+  it("parks a ball placed at PLUNGER_REST inside PLUNGER_ZONE", () => {
+    const world = makeTableWorld();
+    const id = world.addBall(PLUNGER_REST);
+    const steps = Math.round(2 / FIXED_DT);
+    for (let i = 0; i < steps; i++) world.step(FIXED_DT);
+    const b = world.getBalls().find((x) => x.id === id);
+    expect(b).toBeDefined();
+    if (!b) return;
+    expect(b.x).toBeGreaterThanOrEqual(PLUNGER_ZONE.minX);
+    expect(b.x).toBeLessThanOrEqual(PLUNGER_ZONE.maxX);
+    expect(b.y).toBeGreaterThanOrEqual(PLUNGER_ZONE.minY);
+    expect(b.y).toBeLessThanOrEqual(PLUNGER_ZONE.maxY);
+  });
+
+  it("excludes the drain sensor from the boundary and keeps every endpoint in bounds", () => {
+    const world = makeTableWorld();
+    const walls = world.getBoundarySegments();
+    expect(walls.length).toBeGreaterThan(0);
+    const drain = TABLE_SPEC.find((el) => el.kind === "drain");
+    expect(drain && "path" in drain).toBe(true);
+    if (drain && "path" in drain) {
+      const [d0, d1] = drain.path;
+      for (const s of walls) {
+        const isDrain =
+          (s.a.x === d0?.x && s.a.y === d0?.y && s.b.x === d1?.x && s.b.y === d1?.y) ||
+          (s.a.x === d1?.x && s.a.y === d1?.y && s.b.x === d0?.x && s.b.y === d0?.y);
+        expect(isDrain).toBe(false);
+      }
+    }
+    for (const s of walls) {
+      for (const p of [s.a, s.b]) {
+        expect(p.x).toBeGreaterThanOrEqual(0);
+        expect(p.x).toBeLessThanOrEqual(WIDTH_M);
+        expect(p.y).toBeGreaterThanOrEqual(0);
+        expect(p.y).toBeLessThanOrEqual(HEIGHT_M);
+      }
+    }
+  });
+
+  it("has unique ids and exactly two flipper mounts", () => {
+    const ids = TABLE_SPEC.map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(mounts()).toHaveLength(2);
+  });
+});
