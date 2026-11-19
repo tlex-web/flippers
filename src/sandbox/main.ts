@@ -12,17 +12,23 @@
  * interface — this file never imports the engine (D-05/D-07). Every ball is
  * parked on the plunger and launched with Space.
  *
+ * Every contact flows through the one-way collision bus (D-11): a
+ * `CollisionRouter` drains the world once per fixed step and fans the batch to
+ * a single demo listener that logs what the ball touched. No scoring, kicks or
+ * rules live here (D-06); those are Phase 4 consumers of the same bus.
+ *
  * This is a DIAGNOSIS tool only: it asserts nothing about pass/fail. The
  * tunnel-proof gates stay headless (`npm run soak`).
  */
 
 import { PlanckWorld } from "../physics/planck-world";
+import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { FlipperInput } from "../input/flipper-input";
 import { PlungerInput } from "../input/plunger-input";
 import { FixedStepLoop } from "../sim/loop";
-import type { BallState } from "../physics/types";
+import type { BallState, CollisionEvent } from "../physics/types";
 import { DRAIN_Y, PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
@@ -50,6 +56,14 @@ const HZ_WINDOW_MS = 500;
 
 /** Throttle (ms) for HUD number updates — keeps the readout legible. */
 const HUD_UPDATE_MS = 200;
+
+/**
+ * Demo bus consumer throttle: solid contacts (walls, chute, bumpers, slings,
+ * flippers, other balls) log at most once per this many events, because a
+ * resting or rolling ball reports one every step. Sensor crossings are rare by
+ * construction and always log (threat T-03-17: keep the console legible).
+ */
+const SOLID_LOG_EVERY = 30;
 
 function main(): void {
   const canvas = document.getElementById("stage");
@@ -122,6 +136,37 @@ function main(): void {
     plunger.update();
   }
 
+  // The collision bus (D-11): one router over the world's pooled event drain,
+  // dispatched once per fixed step at the loop's post-step seam, with exactly
+  // ONE demo listener. The listener copies out only scalars into the string of
+  // a line it actually logs; it never keeps the pooled record, never calls back
+  // into the world, and carries no scoring, kick or rule logic (D-06/D-11).
+  const router = new CollisionRouter(world);
+  let solidSinceLog = 0;
+  router.register((e: CollisionEvent): void => {
+    const kind = e.elementKind;
+    if (kind === "lane" || kind === "rollover" || kind === "drain") {
+      console.log(
+        `[bus] ball ${e.ballId} ${kind} #${e.elementId} at (${e.point.x.toFixed(2)}, ${e.point.y.toFixed(2)})`,
+      );
+      return;
+    }
+    // Strings are built only for a line that is actually logged.
+    solidSinceLog++;
+    if (solidSinceLog < SOLID_LOG_EVERY) return;
+    solidSinceLog = 0;
+    console.log(
+      `[bus] ball ${e.ballId} ${kind} #${e.elementId} at (${e.point.x.toFixed(2)}, ${e.point.y.toFixed(2)}) impulse ${e.normalImpulse.toFixed(3)}`,
+    );
+  });
+
+  // Built ONCE and passed by reference, like onFixedStep: runs right after each
+  // fixed step's world.step(), so every simulated step's events reach the
+  // listener as exactly one batch and the event pool stays bounded.
+  function onPostStep(): void {
+    router.dispatch();
+  }
+
   const renderer = new DebugRenderer(canvas);
   renderer.resize(world);
   window.addEventListener("resize", () => renderer.resize(world));
@@ -145,15 +190,9 @@ function main(): void {
 
     // Advance physics by whole fixed steps; drain the accumulator. The stable
     // `onFixedStep` reference drains input + ticks the FSM at the top of each
-    // fixed step (D-10) — passed by reference, so no per-frame allocation.
-    const steps = loop.advance(deltaMs, onFixedStep);
-
-    // Drain and discard collision events every frame. This sandbox has no event
-    // consumer yet (D-03: it asserts nothing), but `step()` pushes an event per
-    // contacting step — leaving them undrained would grow the adapter's event
-    // buffer without bound for the life of the tab. Draining resets the pool so
-    // it stays bounded; the reused-view drain allocates nothing per frame.
-    world.drainEvents();
+    // fixed step (D-10), and `onPostStep` dispatches that step's events on the
+    // bus (D-11) — both passed by reference, so no per-frame allocation.
+    const steps = loop.advance(deltaMs, onFixedStep, onPostStep);
 
     // Ball feed: once the tracked ball crosses the spec's drain line, REMOVE it
     // and park a fresh one on the plunger, so exactly one ball ever exists.
