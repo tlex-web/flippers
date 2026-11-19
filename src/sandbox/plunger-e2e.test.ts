@@ -9,6 +9,8 @@ import {
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, BallState, Vec2 } from "../physics/types";
+import type { KeyEventLike } from "../input/flipper-input";
+import { PlungerInput } from "../input/plunger-input";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { FixedStepLoop } from "../sim/loop";
@@ -168,5 +170,76 @@ describe("plunger end-to-end: charge -> release -> applyImpulse -> real chute (L
     expect(r.climb).toBeGreaterThan(0.3);
     expect(r.aboveTopStep).toBe(-1);
     expect(inZone(r.final)).toBe(true);
+  });
+});
+
+/** A synthetic KeyboardEvent-shaped object (no real DOM needed). */
+function key(code: string, repeat = false): KeyEventLike {
+  return { code, repeat, preventDefault: () => {} };
+}
+
+/**
+ * The keyboard leg: `PlungerInput` is drained at the top of each fixed step and
+ * its edges feed the controller exactly as `main.ts` does (press, release,
+ * cancel, then `update()`).
+ */
+function keyboardStep(rig: Rig, input: PlungerInput): void {
+  rig.step(() => {
+    const e = input.drainEdges();
+    if (e.press) rig.plunger.onPressEdge();
+    if (e.release) rig.plunger.onReleaseEdge(rig.ballId);
+    if (e.cancel) rig.plunger.onCancelEdge();
+    rig.plunger.update();
+  });
+}
+
+describe("plunger end-to-end: Space keyboard -> latch -> controller -> launch (LNCH-01)", () => {
+  it("Space down, a held auto-repeat stretch, then Space up launches the ball out of the chute", () => {
+    const rig = makeRig();
+    const input = new PlungerInput();
+
+    input.handleKeyDown(key("Space"));
+    for (let i = 0; i < STEPS_TO_CAP + 10; i++) {
+      if (i % 4 === 0) input.handleKeyDown(key("Space", true)); // OS auto-repeat
+      keyboardStep(rig, input);
+    }
+    expect(rig.plunger.getCharge()).toBe(1);
+    input.handleKeyUp(key("Space"));
+
+    let aboveTop = false;
+    let onField = false;
+    for (let i = 0; i < WATCH_STEPS; i++) {
+      keyboardStep(rig, input);
+      const b = rig.ball();
+      if (b.y < rig.chuteTopY) aboveTop = true;
+      if (aboveTop && b.x < rig.chuteX) onField = true;
+    }
+    expect(aboveTop).toBe(true);
+    expect(onField).toBe(true);
+  });
+
+  it("a blur mid-hold launches nothing: the ball stays parked in PLUNGER_ZONE", () => {
+    const rig = makeRig();
+    const input = new PlungerInput();
+    const restY = rig.ball().y;
+
+    input.handleKeyDown(key("Space"));
+    for (let i = 0; i < 40; i++) keyboardStep(rig, input);
+    expect(rig.plunger.getCharge()).toBeGreaterThan(0);
+
+    input.handleBlur();
+    keyboardStep(rig, input);
+    expect(rig.plunger.getCharge()).toBe(0);
+    expect(rig.plunger.getPhase()).toBe("idle");
+
+    // The keyup that arrives after refocus must not fire the ball either.
+    input.handleKeyUp(key("Space"));
+    let minY = rig.ball().y;
+    for (let i = 0; i < WATCH_STEPS; i++) {
+      keyboardStep(rig, input);
+      minY = Math.min(minY, rig.ball().y);
+    }
+    expect(restY - minY).toBeLessThan(0.01);
+    expect(inZone(rig.ball())).toBe(true);
   });
 });
