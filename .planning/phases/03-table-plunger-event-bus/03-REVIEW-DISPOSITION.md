@@ -5,11 +5,11 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "The plunger rest position is below the drain line, so the parked ball respawns every frame and launches are lost"
   - id: CR-02
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "Sensor events (lane/rollover/drain) report a stale point from an unrelated contact"
   - id: WR-01
     severity: warning
@@ -25,11 +25,11 @@ findings:
     title: "The flipper is drawn 0.07 m longer than its collider at both ends, so what is drawn is not what is hit"
   - id: WR-04
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "A throwing bus listener permanently freezes the game loop and desyncs the accumulator"
   - id: WR-05
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The real-table containment gate cannot see bumpers"
   - id: IN-01
     severity: info
@@ -51,22 +51,22 @@ findings:
     severity: info
     disposition: open
     title: "`drainEvents()` exposes the adapter's internal reused array as mutable"
-open: 12
+open: 8
 total: 12
-recorded: 2026-11-19T22:41:35.364Z
+recorded: 2026-11-19T23:01:53.216Z
 ---
 
 # Phase 03: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
-| CR-02 | critical | open | - |
+| CR-01 | critical | fixed | 03-REVIEW-FIX.md |
+| CR-02 | critical | fixed | 03-REVIEW-FIX.md |
 | WR-01 | warning | open | - |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
-| WR-05 | warning | open | - |
+| WR-04 | warning | fixed | 03-REVIEW-FIX.md |
+| WR-05 | warning | fixed | 03-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
