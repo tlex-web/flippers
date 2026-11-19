@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 03
 current_phase_name: Table, Plunger & Event Bus
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-11-19T21:47:10.957Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-11-19T21:54:27.324Z"
 last_activity: 2026-11-19
 last_activity_desc: Phase 03 execution started
-state_head: fcb127ee594896914f417229827695a5b44642a4
+state_head: 95163e6d4ad01b827aaa34f69304c7ab7d0c33c8
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 16
+  completed_plans: 17
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-19)
 ## Current Position
 
 Phase: 03 (Table, Plunger & Event Bus) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-11-19 — Phase 03 execution started
 
@@ -75,6 +75,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P01 | 13min | 3 tasks | 9 files |
 | Phase 03 P02 | 11min | 2 tasks | 5 files |
 | Phase 03 P03 | 5min | 2 tasks | 8 files |
+| Phase 03 P04 | 4min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,8 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-02: seeded flow proof draws 8 drops from one mulberry32(0x0302) stream over OPEN_FIELD_REGION; mutation-checked (trap pocket and sweep obstruction both go red)
 - [Phase 03]: 03-03: soak harness takes SoakConfig.table (default PROOF_BOX_SPEC) + originRegion with a seeded clearance filter (MAX_ORIGIN_DRAWS 64, throws with seed); circles (bumpers) are rejected too since they are not boundary segments
 - [Phase 03]: 03-03: real-table 630 s soak gate (TABLE_SPEC, OPEN_FIELD_REGION, 60 m/s) green first run with a CCD-off RED control on the same geometry; no spec fix needed; five primitive proofs pinned to PROOF_BOX_SPEC ahead of the 03-04 default flip
+- [Phase 03]: 03-04: PlanckWorldOptions.table default flipped to TABLE_SPEC (D-05); every primitive proof names PROOF_BOX_SPEC; unmodified keyboard e2e passes on the real bats
+- [Phase 03]: 03-04: FlipperController typed against FlipperWorld = Pick<PhysicsWorld, getFlippers | setFlipperMotor>, so 03-05's applyImpulse growth never reaches its spy
 
 ### Pending Todos
 
@@ -141,6 +144,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-19T21:47:10.187Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-11-19T21:54:26.541Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
