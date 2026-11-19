@@ -27,7 +27,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Table (TBL)
 
-- [ ] **TBL-01**: The table is an original layout built from standard pinball elements — launch chute (right side), upper bumper cluster, ramps/guide walls, lanes, outer walls, and center-bottom drain funnel — positioned for good ball flow
+- [x] **TBL-01**: The table is an original layout built from standard pinball elements — launch chute (right side), upper bumper cluster, ramps/guide walls, lanes, outer walls, and center-bottom drain funnel — positioned for good ball flow
 
 ### Reactive Elements (ELEM)
 
@@ -106,7 +106,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | FLIP-04 | Phase 2 | Complete |
 | LNCH-01 | Phase 3 | Complete |
 | LNCH-02 | Phase 3 | Complete |
-| TBL-01 | Phase 3 | Pending |
+| TBL-01 | Phase 3 | Complete |
 | ELEM-01 | Phase 4 | Pending |
 | ELEM-02 | Phase 4 | Pending |
 | ELEM-03 | Phase 4 | Pending |

@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 03
 current_phase_name: Table, Plunger & Event Bus
-status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-11-19T22:12:56.697Z"
+status: verifying
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-11-19T22:26:38.680Z"
 last_activity: 2026-11-19
 last_activity_desc: Phase 03 execution started
-state_head: e260359d2e2dce5bdb487d0777a0a44f60bbe47b
+state_head: fe2428fa15cae56bb53e269fc08c50d83c4a7646
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-19)
 
 Phase: 03 (Table, Plunger & Event Bus) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-19 — Phase 03 execution started
 
 Progress: [███░░░░░░░] 33%
@@ -77,6 +77,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P03 | 5min | 2 tasks | 8 files |
 | Phase 03 P04 | 4min | 2 tasks | 5 files |
 | Phase 03 P05 | 14min | 3 tasks | 10 files |
+| Phase 03 P06 | 10min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-05: plunger is impulse-on-release via generic PhysicsWorld.applyImpulse (center of mass, rejects non-finite/unknown id); 1.5 charge/s, impulse 0.4-1.5 kg*m/s (3.1-11.9 m/s); full charge exits the chute, tap falls back
 - [Phase 03]: 03-05: PlungerController charge = heldSteps * RATE * FIXED_DT (a running float sum missed the cap at 0.9999999999999984); meter and impulse read the same getCharge()
 - [Phase 03]: 03-05: PlungerInput latches a distinct cancel edge on blur/hidden and clears held, so focus loss never launches; sandbox spawns every ball at PLUNGER_REST, meter/pullback drawn outside the cabinet
+- [Phase 03]: 03-06: CollisionEvent is normalized (ballId + elementKind/elementId from TABLE_SPEC, CollisionPartnerKind = ElementKind | ball); raw pair removed; type stays coarse; exported pure normalizeContact
+- [Phase 03]: 03-06: sensors emit on begin-contact only (impulse 0, point = ball center); solids stay on post-solve; shared zero-alloc emitContact reserves a slot only for ball pairs
+- [Phase 03]: 03-06: CollisionRouter (src/app) drains once per fixed step at the new FixedStepLoop onPostStep seam, fans out in registration order, zero-copy, one-way; sandbox has one throttled logging listener
 
 ### Pending Todos
 
@@ -148,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-19T22:12:55.961Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-11-19T22:26:37.919Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
