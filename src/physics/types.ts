@@ -68,6 +68,11 @@ export interface FlipperState {
   readonly pivotX: number;
   readonly pivotY: number;
   readonly angle: number;
+  /**
+   * Pivot to the tip EXTREME (meters), not to the tip circle's center: the
+   * collider spans local x ∈ [0, length], with the hinge circle centred at
+   * `tipRadius` and the tip circle at `length - tipRadius`.
+   */
   readonly length: number;
   readonly halfWidth: number;
   /**

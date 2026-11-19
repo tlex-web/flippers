@@ -296,19 +296,25 @@ export class DebugRenderer {
       // rounded tip (and hinge) of radius tipRadius. The loop iterates every
       // flipper, so the mirrored second bat draws for free; the body `angle`
       // already carries the mirror (≈π), so this needs no per-flipper casing.
+      //
+      // Drawn from the FlipperState contract so what is drawn is what is hit
+      // (03-REVIEW WR-03): `length` is pivot-to-tip EXTREME, so the tip circle
+      // is centred at length - tipRadius and the hinge circle at tipRadius; the
+      // stadium spans local x ∈ [0, length], exactly the collider's extent.
       const tr = f.tipRadius * PIXELS_PER_METER;
       const len = f.length * PIXELS_PER_METER;
+      const tipC = len - tr;
       ctx.save();
       ctx.translate(f.pivotX * PIXELS_PER_METER, f.pivotY * PIXELS_PER_METER);
       ctx.rotate(f.angle);
-      // Core: from the pivot along local +x by length, half-thickness tipRadius.
-      ctx.fillRect(0, -tr, len, tr * 2);
+      // Core: between the hinge and tip circle centres, half-thickness tipRadius.
+      ctx.fillRect(tr, -tr, tipC - tr, tr * 2);
       // Rounded tip + rounded hinge (no per-frame allocation — ctx paths only).
       ctx.beginPath();
-      ctx.arc(len, 0, tr, 0, Math.PI * 2);
+      ctx.arc(tipC, 0, tr, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(0, 0, tr, 0, Math.PI * 2);
+      ctx.arc(tr, 0, tr, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
