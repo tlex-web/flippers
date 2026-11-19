@@ -22,8 +22,8 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Launch (LNCH)
 
-- [ ] **LNCH-01**: Player launches the ball with a hold-to-charge plunger that fires a proportional impulse up the launch chute
-- [ ] **LNCH-02**: Plunger charge is visualized (pullback and/or charge meter) so launch feels intentional
+- [x] **LNCH-01**: Player launches the ball with a hold-to-charge plunger that fires a proportional impulse up the launch chute
+- [x] **LNCH-02**: Plunger charge is visualized (pullback and/or charge meter) so launch feels intentional
 
 ### Table (TBL)
 
@@ -104,8 +104,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | FLIP-02 | Phase 2 | Complete |
 | FLIP-03 | Phase 2 | Complete |
 | FLIP-04 | Phase 2 | Complete |
-| LNCH-01 | Phase 3 | Pending |
-| LNCH-02 | Phase 3 | Pending |
+| LNCH-01 | Phase 3 | Complete |
+| LNCH-02 | Phase 3 | Complete |
 | TBL-01 | Phase 3 | Pending |
 | ELEM-01 | Phase 4 | Pending |
 | ELEM-02 | Phase 4 | Pending |

@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 03
 current_phase_name: Table, Plunger & Event Bus
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-11-19T21:54:27.324Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-11-19T22:12:56.697Z"
 last_activity: 2026-11-19
 last_activity_desc: Phase 03 execution started
-state_head: 95163e6d4ad01b827aaa34f69304c7ab7d0c33c8
+state_head: e260359d2e2dce5bdb487d0777a0a44f60bbe47b
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-19)
 ## Current Position
 
 Phase: 03 (Table, Plunger & Event Bus) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-11-19 — Phase 03 execution started
 
@@ -76,6 +76,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P02 | 11min | 2 tasks | 5 files |
 | Phase 03 P03 | 5min | 2 tasks | 8 files |
 | Phase 03 P04 | 4min | 2 tasks | 5 files |
+| Phase 03 P05 | 14min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-03: real-table 630 s soak gate (TABLE_SPEC, OPEN_FIELD_REGION, 60 m/s) green first run with a CCD-off RED control on the same geometry; no spec fix needed; five primitive proofs pinned to PROOF_BOX_SPEC ahead of the 03-04 default flip
 - [Phase 03]: 03-04: PlanckWorldOptions.table default flipped to TABLE_SPEC (D-05); every primitive proof names PROOF_BOX_SPEC; unmodified keyboard e2e passes on the real bats
 - [Phase 03]: 03-04: FlipperController typed against FlipperWorld = Pick<PhysicsWorld, getFlippers | setFlipperMotor>, so 03-05's applyImpulse growth never reaches its spy
+- [Phase 03]: 03-05: plunger is impulse-on-release via generic PhysicsWorld.applyImpulse (center of mass, rejects non-finite/unknown id); 1.5 charge/s, impulse 0.4-1.5 kg*m/s (3.1-11.9 m/s); full charge exits the chute, tap falls back
+- [Phase 03]: 03-05: PlungerController charge = heldSteps * RATE * FIXED_DT (a running float sum missed the cap at 0.9999999999999984); meter and impulse read the same getCharge()
+- [Phase 03]: 03-05: PlungerInput latches a distinct cancel edge on blur/hidden and clears held, so focus loss never launches; sandbox spawns every ball at PLUNGER_REST, meter/pullback drawn outside the cabinet
 
 ### Pending Todos
 
@@ -144,6 +148,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-19T21:54:26.541Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-11-19T22:12:55.961Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
