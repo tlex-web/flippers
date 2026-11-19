@@ -18,9 +18,9 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-15)
+See: .planning/PROJECT.md (updated 2026-11-19)
 
-**Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original.
+**Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
 **Current focus:** Phase 3 — table, plunger & event bus
 
 ## Current Position
@@ -103,7 +103,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 3]: Faithful Space Cadet table geometry must be transcribed from the SpaceCadetPinball decompilation (behavior/coordinates only, never assets) — ARCHITECTURE.md flags this as MEDIUM-confidence data-transcription work; budget research time before layout.
+- [Phase 3]: Table layout is an original design authored in 03-01 from standard pinball elements (positions chosen for good ball flow, sized from the unchanged Phase-2 feel constants) — no external layout source.
 - [Phase 2]: Rotational CCD (angular sub-stepping + capsule/speculative contacts) is a narrower, less-documented subproblem than linear CCD — warrants a focused research pass before building.
 
 ## Deferred Items
@@ -112,7 +112,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Progression | Rank/mission/hyperspace/wormhole/multiball layer (v2) | Deferred | Roadmap creation |
+| Progression | Original rank/mission/lock-jackpot/multiball layer (v2) | Deferred | Roadmap creation |
 
 ## Session Continuity
 

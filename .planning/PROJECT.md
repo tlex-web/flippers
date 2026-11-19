@@ -1,12 +1,12 @@
-# Space Cadet Pinball — Browser Edition
+# Flippers — Browser Pinball
 
 ## What This Is
 
-A browser-based recreation of Windows XP's *3D Pinball for Windows – Space Cadet*. It rebuilds the classic space-themed pinball table as an HTML5 game rendered entirely in code — no ripped or hand-painted art, with sound synthesized at runtime. Built as a portfolio/demo piece: a faithful, polished pinball game anyone can play in their browser with no install.
+A browser-based pinball game with an original space-themed table, built as an HTML5 game rendered entirely in code — no hand-painted or copied art, with sound synthesized at runtime. Built as a portfolio/demo piece: a polished pinball game anyone can play in their browser with no install.
 
 ## Core Value
 
-The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original. If the physics and flipper feel are wrong, nothing else matters.
+The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball. If the physics and flipper feel are wrong, nothing else matters.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
 - [ ] Ball launches via a plunger with variable power (hold to charge, release to fire)
-- [ ] Space Cadet table layout recreated: launch chute, bumper cluster, ramps, lanes, and drain positioned like the original
+- [ ] Original space-themed table layout built from standard pinball elements: right-side launch chute, upper bumper cluster, lanes/rollovers, guide walls/ramps, and center-bottom drain funnel, positioned for good ball flow
 - [ ] Bumpers and targets react (bounce + visual flash + sound) and award points
 - [ ] Live score display
 - [ ] Tilt / nudge mechanic (nudge the table, over-nudge triggers tilt)
@@ -37,25 +37,24 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 
 - Mission / rank / promotion progression system — deferred to a later milestone; de-risk the core loop first
 - Multiball mode — deferred alongside the mission system
-- Pixel-faithful replica of the original XP artwork — deliberately using a clean procedural style instead (avoids copyright and an art pipeline)
-- Extracting or redistributing original Microsoft / Cinematronics assets (art, audio) — copyright risk; procedural approach sidesteps it
+- Copying any existing table's art, layout, names, or sounds — this is an original table in a clean procedural style (avoids copyright and an art pipeline)
+- Extracting or redistributing any third-party game assets (art, audio) — copyright risk; procedural approach sidesteps it
 - Windows native `.exe` — browser-first for reach and simplicity
 - Mobile / touch controls — desktop keyboard first; may revisit
 - Multiplayer, online leaderboards, accounts — not core to v1 value
-- Level editor / multiple tables — single faithful table for v1
+- Level editor / multiple tables — single original table for v1
 
 ## Context
 
-- **Reference game:** *3D Pinball for Windows – Space Cadet* (Microsoft; bundled with Plus!/2000/XP). Originally the "Space Cadet" table from Cinematronics/Maxis *Full Tilt! Pinball*.
+- **Genre:** Original space-themed pinball — a broad, well-established pinball theme; the table layout, names, and rules are our own design.
 - **Rendering approach:** Everything drawn in code (procedural geometry + gradients), so there is no asset pipeline. Sound is synthesized via the Web Audio API rather than shipped as files.
 - **Technical crux:** Pinball demands fast, stable 2D physics with continuous collision detection — the make-or-break risk is the ball tunneling through thin flippers/walls at high speed. This is the area to prove out first.
-- **Useful reference:** An open-source decompilation of the original ("SpaceCadetPinball") documents the table geometry and mechanics, which can guide a faithful layout/behavior recreation without copying any assets.
 
 ## Constraints
 
 - **Platform**: Browser (HTML5) — must run in modern browsers with no install.
-- **Assets**: Procedural rendering and synthesized audio only — no ripped or redistributed original art/sound (copyright + simplicity).
-- **Fidelity**: Faithful gameplay and table layout, but an original clean visual style — not a pixel-perfect copy.
+- **Assets**: Procedural rendering and synthesized audio only — no ripped or redistributed third-party art/sound (copyright + simplicity).
+- **Fidelity**: Original table design built on standard pinball conventions; authentic-feeling physics; clean procedural visual style.
 - **Performance**: Stable 60fps physics/rendering — non-negotiable for feel.
 - **Quality bar**: Portfolio-grade polish — shareable and impressive.
 
@@ -67,7 +66,7 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 |----------|-----------|---------|
 | Browser (HTML5) over Windows native | Simplest to build and share; no install; portfolio-friendly | — Pending |
 | Procedural runtime rendering over baked/ripped art | Near-zero assets; avoids copyright; enables an own clean style | — Pending |
-| Recreate Space Cadet's actual table layout | Faithfulness is the point; the layout is the game's identity | — Pending |
+| Original table design (not a recreation of any existing table) | Avoids copying another game's layout, names, or signature mechanics; standard pinball elements arranged for good ball flow | ✓ Decided 2026-11-19 |
 | Core pinball loop first; missions/ranks/multiball deferred | De-risk the physics and feel before layering progression systems | — Pending |
 | Synthesized audio (Web Audio) over sound files | Keeps asset load at zero; retro pinball sfx synthesize convincingly | — Pending |
 
@@ -89,4 +88,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-16 after Phase 2 (Flippers & Feel) completion*
+*Last updated: 2026-11-19 after re-scope to an original table (quick task 261119-sbr)*

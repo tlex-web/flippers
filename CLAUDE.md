@@ -1,17 +1,17 @@
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
-**Space Cadet Pinball — Browser Edition**
+**Flippers — Browser Pinball**
 
-A browser-based recreation of Windows XP's *3D Pinball for Windows – Space Cadet*. It rebuilds the classic space-themed pinball table as an HTML5 game rendered entirely in code — no ripped or hand-painted art, with sound synthesized at runtime. Built as a portfolio/demo piece: a faithful, polished pinball game anyone can play in their browser with no install.
+A browser-based pinball game with an original space-themed table, built as an HTML5 game rendered entirely in code — no hand-painted or copied art, with sound synthesized at runtime. Built as a portfolio/demo piece: a polished pinball game anyone can play in their browser with no install.
 
-**Core Value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original. If the physics and flipper feel are wrong, nothing else matters.
+**Core Value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball. If the physics and flipper feel are wrong, nothing else matters.
 
 ### Constraints
 
 - **Platform**: Browser (HTML5) — must run in modern browsers with no install.
-- **Assets**: Procedural rendering and synthesized audio only — no ripped or redistributed original art/sound (copyright + simplicity).
-- **Fidelity**: Faithful gameplay and table layout, but an original clean visual style — not a pixel-perfect copy.
+- **Assets**: Procedural rendering and synthesized audio only — no ripped or redistributed third-party art/sound (copyright + simplicity).
+- **Fidelity**: Original table design built on standard pinball conventions; authentic-feeling physics; clean procedural visual style.
 - **Performance**: Stable 60fps physics/rendering — non-negotiable for feel.
 - **Quality bar**: Portfolio-grade polish — shareable and impressive.
 <!-- GSD:project-end -->

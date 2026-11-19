@@ -1,8 +1,8 @@
-# Roadmap: Space Cadet Pinball — Browser Edition
+# Roadmap: Flippers — Browser Pinball
 
 ## Overview
 
-This roadmap is ordered by risk and dependency, not feature convenience. The entire risk profile lives in one place — a fast ball tunneling through thin geometry — so the physics core (Phase 1) is proven in isolation before any table exists, and the flippers (Phase 2, the project's Core Value) are their own phase because rotational collision is a distinct hard problem. Only once feel is retired does the real Space Cadet table get built (Phase 3), turned into a game with scoring and rules (Phase 4), dressed in procedural rendering and synthesized audio (Phase 5), and finally raised to portfolio-grade with juice and polish (Phase 6). Every phase yields something playable or observably testable.
+This roadmap is ordered by risk and dependency, not feature convenience. The entire risk profile lives in one place — a fast ball tunneling through thin geometry — so the physics core (Phase 1) is proven in isolation before any table exists, and the flippers (Phase 2, the project's Core Value) are their own phase because rotational collision is a distinct hard problem. Only once feel is retired does an original table get built (Phase 3), turned into a game with scoring and rules (Phase 4), dressed in procedural rendering and synthesized audio (Phase 5), and finally raised to portfolio-grade with juice and polish (Phase 6). Every phase yields something playable or observably testable.
 
 ## Phases
 
@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Physics Core Spike** - Tunnel-proof, frame-rate-independent ball physics proven in isolation; engine decision locked (completed 2026-07-15)
 - [ ] **Phase 2: Flippers & Feel** - Two keyboard flippers with rotational CCD, momentum transfer, and cradle — the Core Value
-- [ ] **Phase 3: Table, Plunger & Event Bus** - The real Space Cadet layout, a hold-to-charge plunger, and a typed collision-event bus
+- [ ] **Phase 3: Table, Plunger & Event Bus** - An original space-themed table layout, a hold-to-charge plunger, and a typed collision-event bus
 - [ ] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works
 - [ ] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX
 - [ ] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score
@@ -95,13 +95,13 @@ Plans:
 
 ### Phase 3: Table, Plunger & Event Bus
 
-**Goal**: The real Space Cadet playfield exists and a ball can be charged and launched into it, with a single table/spec coordinate source and a typed collision-event bus wired and ready for downstream rules, rendering, and audio.
+**Goal**: An original space-themed playfield exists and a ball can be charged and launched into it, with a single table/spec coordinate source and a typed collision-event bus wired and ready for downstream rules, rendering, and audio.
 **Mode:** mvp
 **Depends on**: Phase 1, Phase 2
 **Requirements**: LNCH-01, LNCH-02, TBL-01
 **Success Criteria** (what must be TRUE):
 
-  1. The playfield recreates Space Cadet's layout — launch chute, upper bumper cluster, ramps, lanes, outer walls, and center-bottom drain funnel — in their original relative positions (behavior/coordinates only, no ripped assets).
+  1. The playfield is an original layout built from standard pinball elements — launch chute (right side), upper bumper cluster, ramps/guide walls, lanes, outer walls, and center-bottom drain funnel, with two lower flippers in an inverted-V — positioned for good ball flow (procedural geometry only; no layout, names, or assets copied from any existing table).
   2. The player holds to charge and releases the plunger to fire a proportional impulse that sends the ball up the launch chute onto the playfield.
   3. Plunger charge is visualized (pullback and/or charge meter) so a launch feels deliberate and its power is readable before release.
   4. Every ball-vs-element contact emits a typed collision event on a one-way bus, with the collision model and render model both derived from one `table/spec` source so what's hit and what's drawn cannot drift apart.
@@ -110,7 +110,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Engine-agnostic table spec + curve resolver (the single one-resolve origin; anchored Space Cadet descriptors) [wave 1]
+- [ ] 03-01-PLAN.md — Engine-agnostic table spec + curve resolver (the single one-resolve origin; original-layout descriptors) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -130,7 +130,7 @@ Plans:
 
 ### Phase 4: Reactive Elements & Game Rules
 
-**Goal**: The table becomes a game — reactive elements bounce and score off the event bus, a 3-ball loop runs to game-over, and nudge/tilt behaves faithfully.
+**Goal**: The table becomes a game — reactive elements bounce and score off the event bus, a 3-ball loop runs to game-over, and nudge/tilt behaves like a real table.
 **Mode:** mvp
 **Depends on**: Phase 3
 **Requirements**: ELEM-01, ELEM-02, ELEM-03, GAME-01, GAME-02, GAME-03

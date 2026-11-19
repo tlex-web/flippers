@@ -1,11 +1,11 @@
-# Requirements: Space Cadet Pinball — Browser Edition
+# Requirements: Flippers — Browser Pinball
 
 **Defined:** 2026-07-15
-**Core Value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying and faithful to the original.
+**Core Value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
 
 ## v1 Requirements
 
-Requirements for the initial release: a polished, faithful, browser-playable core pinball table on the Space Cadet layout. Each maps to a roadmap phase.
+Requirements for the initial release: a polished, browser-playable core pinball game on an original space-themed table. Each maps to a roadmap phase.
 
 ### Physics (PHYS)
 
@@ -27,7 +27,7 @@ Requirements for the initial release: a polished, faithful, browser-playable cor
 
 ### Table (TBL)
 
-- [ ] **TBL-01**: The table recreates Space Cadet's layout — launch chute, upper bumper cluster, ramps, lanes, outer walls, and center-bottom drain funnel
+- [ ] **TBL-01**: The table is an original layout built from standard pinball elements — launch chute (right side), upper bumper cluster, ramps/guide walls, lanes, outer walls, and center-bottom drain funnel — positioned for good ball flow
 
 ### Reactive Elements (ELEM)
 
@@ -64,16 +64,16 @@ Requirements for the initial release: a polished, faithful, browser-playable cor
 
 ## v2 Requirements
 
-Deferred to a future "Space Cadet progression" milestone. Documented but not in the current roadmap. All sit on top of collision events the v1 core loop already emits — low physics risk (except multiball).
+Deferred to a future progression milestone. Documented but not in the current roadmap. All sit on top of collision events the v1 core loop already emits — low physics risk (except multiball).
 
 ### Progression
 
-- **RANK-01**: Rank/promotion system (Cadet → Fleet Admiral) tracked via rank lights
-- **MISS-01**: Mission engine plus ~20 data-driven mission definitions with fuel timers and lit-light choreography
-- **HYP-01**: Hyperspace lights (0–4) cascade → center post / extra ball / gravity well
-- **BONUS-01**: Bonus + multiplier via booster drop targets, tallied and paid out at end of ball
+- **RANK-01**: Original rank/progression ladder (rank names TBD) tracked via rank lights
+- **MISS-01**: Mission/mode engine with original, data-driven mission definitions (names and content TBD), timed objectives, and lit-light choreography
+- **LOCK-01**: Ball-lock + jackpot feature — locking balls lights a jackpot shot (original rule design)
+- **BONUS-01**: Bonus + multiplier via a drop-target bank, tallied and paid out at end of ball
 - **XBALL-01**: Extra ball / "Shoot Again" reward hooked into the ball-count loop
-- **WORM-01**: Wormholes (capture + timed re-eject)
+- **SCOOP-01**: Capture scoop/saucer — holds the ball, then re-ejects it after a timed delay
 - **MBALL-01**: Multiball — the one deferred feature with real physics risk (ball-ball collision + multi-body CCD). v1 physics stays N-ball-ready so this is additive, not a rewrite.
 
 ## Out of Scope
@@ -83,13 +83,13 @@ Explicitly excluded. Documented to prevent scope creep.
 | Feature | Reason |
 |---------|--------|
 | Multiple tables / level editor | Each table is a full physics+layout effort; an editor is its own product |
-| 3D rendered table / rotating camera | Off-brief; original was 2.5D pre-rendered; true 3D is a much larger project |
-| Pixel-perfect replica of XP artwork | Copyright risk + an art pipeline this project deliberately avoids |
+| 3D rendered table / rotating camera | Off-brief; the target is a 2D top-down table with 2.5D depth cues; true 3D is a much larger project |
+| Copying any existing table's art, layout, names, or sounds | Copyright risk + this is an original table; all art is procedural |
 | Mobile / touch controls | A separate UX design problem; desktop keyboard feel comes first |
 | Online leaderboards / accounts / multiplayer | Backend/auth/anti-cheat — none core to "does it feel good" |
 | Settings/tuning UI (physics knobs, keybinds, difficulty) | Config bloat; sane fixed defaults, maybe a mute toggle. Tune in code, not UI |
 | Save/resume mid-game state | Serializing live physics is fiddly and needless for minutes-long sessions |
-| Loading original audio samples | Copyright + the asset pipeline this project rejects; audio is synthesized |
+| Loading audio sample files | Copyright + the asset pipeline this project rejects; audio is synthesized |
 
 ## Traceability
 
@@ -133,4 +133,4 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-15*
-*Last updated: 2026-07-15 after roadmap creation (traceability populated)*
+*Last updated: 2026-11-19 after re-scope to an original table (quick task 261119-sbr)*

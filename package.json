@@ -1,9 +1,9 @@
 {
-  "name": "space-cadet-pinball",
+  "name": "flippers",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Browser-based procedural recreation of 3D Pinball for Windows – Space Cadet.",
+  "description": "Browser-based pinball with an original space-themed table, procedural rendering, and synthesized audio.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
