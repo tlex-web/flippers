@@ -5,6 +5,7 @@ import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { Vec2 } from "../physics/types";
 import {
+  BUMPER_RADIUS_M,
   DRAIN_Y,
   HEIGHT_M,
   PLAYFIELD_CENTER_X,
@@ -159,5 +160,67 @@ describe("getElements() / getBoundarySegments() identity", () => {
         expect(boundary.some((b) => b === seg)).toBe(false);
       }
     }
+  });
+});
+
+/**
+ * Bumper-cluster tracer (03-02 Task 1, D-06): the three upper bumpers exist as
+ * inert solid circles built through the one resolve, and a real solver contact
+ * lands on the lower bumper's spec position. Events are read only through
+ * `type`, `point` and `normalImpulse`, the fields that survive 03-06.
+ */
+describe("TABLE_SPEC bumper cluster", () => {
+  it("has exactly three bumper circles of radius BUMPER_RADIUS_M", () => {
+    const world = makeTableWorld();
+    const bumpers = world.getElements().filter((el) => el.kind === "bumper");
+    expect(bumpers.map((el) => el.id).sort((a, b) => a - b)).toEqual([200, 201, 202]);
+    for (const el of bumpers) {
+      expect(el.circle).not.toBeNull();
+      expect(el.circle?.radius).toBe(BUMPER_RADIUS_M);
+      expect(el.sensor).toBe(false);
+    }
+  });
+
+  it("deflects a dropped ball off bumper 202's rim without adding energy", () => {
+    const world = makeTableWorld();
+    const bumper = world.getElements().find((el) => el.id === 202);
+    const c = bumper?.circle;
+    expect(c).toBeDefined();
+    if (!c) return;
+    const drop: Vec2 = { x: c.center.x + 0.05, y: c.center.y - 1.0 };
+    const id = world.addBall(drop);
+    world.drainEvents();
+
+    let prevSpeed = 0;
+    let contactStep = -1;
+    let speedBefore = 0;
+    const steps = Math.round(2 / FIXED_DT);
+    for (let i = 0; i < steps; i++) {
+      world.step(FIXED_DT);
+      const b = world.getBalls().find((x) => x.id === id);
+      if (!b) throw new Error("ball vanished");
+      const speed = Math.hypot(b.vx, b.vy);
+      const events = world.drainEvents();
+      if (contactStep < 0) {
+        for (const e of events) {
+          if (e.type !== "ball-wall" || e.normalImpulse <= 0) continue;
+          const d = Math.hypot(e.point.x - c.center.x, e.point.y - c.center.y);
+          // The first contact of the drop is the bumper rim, nothing else.
+          expect(Math.abs(d - BUMPER_RADIUS_M)).toBeLessThanOrEqual(0.02);
+          contactStep = i;
+          speedBefore = prevSpeed;
+          break;
+        }
+        if (contactStep === i) {
+          // Inert (D-06): no kick, so the bounce never adds speed.
+          expect(speed).toBeLessThanOrEqual(speedBefore * 1.01);
+          // It deflected sideways off the rim.
+          expect(Math.abs(b.vx)).toBeGreaterThan(0.1);
+          return;
+        }
+      }
+      prevSpeed = speed;
+    }
+    throw new Error("no bumper contact within 2 s");
   });
 });

@@ -14,6 +14,7 @@
  * already modeled as reduced in-plane gravity, so no tilt geometry lives here).
  */
 
+import { BALL_RADIUS_M } from "../physics/constants";
 import type { Vec2 } from "../physics/types";
 
 /**
@@ -179,6 +180,25 @@ export const PLUNGER_ZONE = {
   maxY: HEIGHT_M,
 } as const;
 
+/**
+ * Bumper radius (meters), ball-relative: 1.1 · BALL_RADIUS_M = 0.22 m. A pop
+ * bumper reads slightly larger than the ball, and every bumper gap below is
+ * sized against this value so the ball always weaves through the cluster.
+ */
+export const BUMPER_RADIUS_M = 1.1 * BALL_RADIUS_M;
+
+/**
+ * Upper-left bumper of the three-bumper cluster. The upper-right one is its
+ * mirror. The 1.0 m top-pair spacing leaves a 0.56 m gap between rims.
+ */
+const BUMPER_UPPER_LEFT: Vec2 = { x: 0.95, y: 2.55 };
+
+/**
+ * Lower (center) bumper of the cluster, on the mirror axis. Its rim gap to each
+ * upper bumper is ≈ 0.46 m, wider than the 0.40 m ball, so no wedge forms.
+ */
+const BUMPER_LOWER: Vec2 = { x: PLAYFIELD_CENTER_X, y: 3.3 };
+
 /** Left flipper hinge. The right hinge is its mirror. */
 const LEFT_PIVOT: Vec2 = { x: 0.69, y: 5.45 };
 
@@ -199,7 +219,8 @@ const LEFT_TROUGH: readonly Vec2[] = [
  * right-side launch chute, a center-bottom drain funnel, and two lower flippers
  * in a classic inverted-V whose droop-limit tip gap (~0.46 m) is wider than the
  * 0.40 m ball. Right-hand elements are derived from their left twins with
- * `mirrorX`. Ids: 0/1 flipper mounts, 1xx static walls, 6xx sensors.
+ * `mirrorX`. Ids: 0/1 flipper mounts, 1xx static walls, 2xx bumpers,
+ * 6xx sensors.
  */
 export const TABLE_SPEC: TableSpec = [
   {
@@ -227,6 +248,11 @@ export const TABLE_SPEC: TableSpec = [
   { id: 121, kind: "wall", path: LEFT_FUNNEL.map(mirrorX) },
   { id: 130, kind: "wall", path: LEFT_TROUGH },
   { id: 131, kind: "wall", path: LEFT_TROUGH.map(mirrorX) },
+  // Upper bumper cluster (D-06: inert solid circles, ordinary wall material,
+  // no kick and no score this phase).
+  { id: 200, kind: "bumper", center: BUMPER_UPPER_LEFT, radius: BUMPER_RADIUS_M },
+  { id: 201, kind: "bumper", center: mirrorX(BUMPER_UPPER_LEFT), radius: BUMPER_RADIUS_M },
+  { id: 202, kind: "bumper", center: BUMPER_LOWER, radius: BUMPER_RADIUS_M },
   {
     id: 600,
     kind: "drain",
