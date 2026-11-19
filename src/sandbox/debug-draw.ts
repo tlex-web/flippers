@@ -15,7 +15,7 @@
  * per-frame heap allocation on the render path (threat T-03-01).
  */
 
-import { PIXELS_PER_METER } from "../physics/constants";
+import { BALL_RADIUS_M, PIXELS_PER_METER } from "../physics/constants";
 import type {
   BallState,
   FlipperState,
@@ -23,7 +23,7 @@ import type {
   Vec2,
 } from "../physics/types";
 import type { ResolvedElement } from "../table/resolve";
-import type { ElementKind } from "../table/spec";
+import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
 
 /** A ball snapshot at its drawn (interpolated) position — a mutable `BallState`. */
 export type InterpolatedBall = { -readonly [K in keyof BallState]: BallState[K] };
@@ -57,6 +57,33 @@ const COL_BALL_EDGE = "#e07a1f";
 const COL_VEL = "#ef476f";
 const COL_CONTACT = "#06d6a0";
 const COL_HUD = "#e0e6f0";
+const COL_METER_FRAME = "#9fb3c8";
+const COL_METER_TICK = "rgba(159, 179, 200, 0.45)";
+const COL_METER_FILL = "#f4a261";
+const COL_METER_FULL = "#ef476f";
+const COL_PLUNGER = "#c9d6e3";
+
+/*
+ * Plunger charge meter + pullback (D-10). The meter is an outlined vertical bar
+ * just right of the cabinet's chute wall, spanning PLUNGER_ZONE's height, that
+ * fills bottom to top with the controller's normalized charge. The pullback is
+ * the plunger tip under the resting ball, displaced down by charge * 0.15 m.
+ * Both sit OUTSIDE the playfield, so they never cover the ball or a wall; the
+ * renderer widens its bounds by the margins below to make room for them.
+ */
+/** Gap (m) between the cabinet's right wall and the meter. */
+const METER_GAP_M = 0.08;
+/** Meter bar width (m). */
+const METER_WIDTH_M = 0.14;
+/** Extra world margin (m) right of the cabinet for the meter. */
+const METER_MARGIN_X_M = METER_GAP_M + METER_WIDTH_M + 0.04;
+/** Pullback travel (m) at full charge. */
+const PULLBACK_M = 0.15;
+/** Plunger-tip bar thickness (m) and its inset (m) from each chute wall. */
+const PLUNGER_TIP_THICK_M = 0.04;
+const PLUNGER_TIP_INSET_M = 0.06;
+/** Extra world margin (m) below the cabinet for the pullback travel. */
+const PULLBACK_MARGIN_Y_M = PULLBACK_M + PLUNGER_TIP_THICK_M + 0.06;
 
 /**
  * Per-kind element styling, built ONCE at module load (no per-frame object or
@@ -155,6 +182,9 @@ export class DebugRenderer {
    */
   resize(world: PhysicsWorld): void {
     const b = boundsOf(world.getElements());
+    // Room for the plunger meter (right) and the pullback travel (below).
+    b.maxX += METER_MARGIN_X_M;
+    b.maxY += PULLBACK_MARGIN_Y_M;
     this.offX = PAD - b.minX * PIXELS_PER_METER;
     this.offY = PAD - b.minY * PIXELS_PER_METER;
     this.boxWpx = (b.maxX - b.minX) * PIXELS_PER_METER + PAD * 2;
@@ -177,11 +207,14 @@ export class DebugRenderer {
   /**
    * Render one frame from interface state. `balls` are the drawn (interpolated)
    * positions computed by the caller from the loop's previous/current pair.
+   * `plungerCharge` is the controller's normalized charge in [0, 1], the same
+   * value the launch impulse is computed from (D-10).
    */
   draw(
     world: PhysicsWorld,
     balls: readonly InterpolatedBall[],
     hud: HudData,
+    plungerCharge: number,
   ): void {
     const ctx = this.ctx;
     const dpr = this.dpr;
@@ -198,6 +231,7 @@ export class DebugRenderer {
 
     this.drawElements(world.getElements());
     this.drawFlippers(world.getFlippers());
+    this.drawChargeMeter(plungerCharge);
     this.drawBalls(balls);
     this.drawVelocities(balls);
     this.drawContacts(world.getContactPoints());
@@ -278,6 +312,58 @@ export class DebugRenderer {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  /**
+   * Draw the charge meter beside the chute and the plunger pullback under the
+   * resting ball. Reads only the scalar charge; module-level colors, no
+   * allocation.
+   */
+  private drawChargeMeter(charge: number): void {
+    const ctx = this.ctx;
+    const c = Math.min(Math.max(charge, 0), 1);
+    const z = PLUNGER_ZONE;
+    const ppm = PIXELS_PER_METER;
+
+    // Meter: outlined bar spanning the zone's height, filled bottom to top.
+    const x = (z.maxX + METER_GAP_M) * ppm;
+    const w = METER_WIDTH_M * ppm;
+    const top = z.minY * ppm;
+    const h = (z.maxY - z.minY) * ppm;
+    if (c > 0) {
+      ctx.fillStyle = c >= 1 ? COL_METER_FULL : COL_METER_FILL;
+      ctx.fillRect(x, top + h * (1 - c), w, h * c);
+    }
+    // Quarter ticks, so a level is easy to read before release.
+    ctx.strokeStyle = COL_METER_TICK;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let q = 1; q < 4; q++) {
+      const ty = top + (h * q) / 4;
+      ctx.moveTo(x, ty);
+      ctx.lineTo(x + w, ty);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = COL_METER_FRAME;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, top, w, h);
+
+    // Pullback: the plunger tip starts at the resting ball's underside and
+    // moves down with the charge; a rod runs from it to the bottom margin.
+    const tipY = (PLUNGER_REST.y + BALL_RADIUS_M + c * PULLBACK_M) * ppm;
+    const tipX0 = (z.minX + PLUNGER_TIP_INSET_M) * ppm;
+    const tipX1 = (z.maxX - PLUNGER_TIP_INSET_M) * ppm;
+    const thick = PLUNGER_TIP_THICK_M * ppm;
+    ctx.fillStyle = COL_PLUNGER;
+    ctx.fillRect(tipX0, tipY, tipX1 - tipX0, thick);
+    const rodBottom = (z.maxY + PULLBACK_MARGIN_Y_M) * ppm;
+    const rodX = PLUNGER_REST.x * ppm;
+    ctx.strokeStyle = COL_PLUNGER;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(rodX, tipY + thick);
+    ctx.lineTo(rodX, rodBottom);
+    ctx.stroke();
   }
 
   private drawBalls(balls: readonly InterpolatedBall[]): void {

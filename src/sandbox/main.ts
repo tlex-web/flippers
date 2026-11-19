@@ -5,11 +5,12 @@
  * `TABLE_SPEC` (the ONLY engine-specific line is `new PlanckWorld(...)`, the
  * composition root), drives it through the engine-agnostic fixed-step loop, and
  * renders the INTERPOLATED ball + table outline + flippers + velocity + contacts
- * + HUD via the Canvas debug renderer. The outline (outer walls, right-side
- * launch chute, drain funnel, trough walls) and both flipper mounts all come
- * from the single resolve of the spec, so what is drawn is what is hit. Every
- * read of world state goes through the `PhysicsWorld` interface — this file
- * never imports the engine (D-05/D-07).
+ * + HUD + plunger charge meter via the Canvas debug renderer. The outline
+ * (outer walls, right-side launch chute, drain funnel, trough walls) and both
+ * flipper mounts all come from the single resolve of the spec, so what is drawn
+ * is what is hit. Every read of world state goes through the `PhysicsWorld`
+ * interface — this file never imports the engine (D-05/D-07). Every ball is
+ * parked on the plunger and launched with Space.
  *
  * This is a DIAGNOSIS tool only: it asserts nothing about pass/fail. The
  * tunnel-proof gates stay headless (`npm run soak`).
@@ -17,10 +18,12 @@
 
 import { PlanckWorld } from "../physics/planck-world";
 import { FlipperController } from "../control/flipper-controller";
+import { PlungerController } from "../control/plunger-controller";
 import { FlipperInput } from "../input/flipper-input";
+import { PlungerInput } from "../input/plunger-input";
 import { FixedStepLoop } from "../sim/loop";
 import type { BallState } from "../physics/types";
-import { DRAIN_Y, PLAYFIELD_CENTER_X, TABLE_SPEC } from "../table/spec";
+import { DRAIN_Y, PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
 /**
@@ -32,14 +35,12 @@ import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw
 const BALL_DENSITY = 1;
 
 /**
- * Ball feed: drop ONE ball into the upper playfield, just right of the
- * playfield axis, so it falls through the open field toward the funnel and the
- * flipper pair, where either bat can catch, hold and flip it. A fresh ball is
- * re-fed only when the tracked one crosses the drain line (`DRAIN_Y`, from the
- * spec), and the drained ball is REMOVED first, so exactly one ball ever exists.
- * A stand-in feed until the plunger launches balls up the chute.
+ * Ball feed: park ONE ball on the plunger at `PLUNGER_REST` (from the spec), so
+ * the player launches every ball up the chute with Space. A fresh ball is re-fed
+ * there only when the tracked one crosses the drain line (`DRAIN_Y`), and the
+ * drained ball is REMOVED first, so exactly one ball ever exists.
  */
-const BALL_SPAWN = { x: PLAYFIELD_CENTER_X + 0.05, y: 1.4, vx: 0 } as const;
+const BALL_SPAWN = { x: PLUNGER_REST.x, y: PLUNGER_REST.y } as const;
 
 /** Frame-rate smoothing factor for the FPS readout (0..1; higher = snappier). */
 const FPS_SMOOTHING = 0.1;
@@ -76,6 +77,13 @@ function main(): void {
   input.attach();
   const controller = new FlipperController(world);
 
+  // Plunger (D-07/D-08): Space edge latch + engine-agnostic charge controller,
+  // built ONCE beside the flipper stack. The controller launches only through
+  // `applyImpulse`, and only a ball resting in PLUNGER_ZONE.
+  const plungerInput = new PlungerInput();
+  plungerInput.attach();
+  const plunger = new PlungerController(world);
+
   let activeBallId = world.addBall(BALL_SPAWN);
   const loop = new FixedStepLoop(world);
 
@@ -103,6 +111,15 @@ function main(): void {
     if (edges.rightPress) controller.onPressEdge(rightFlipperId);
     if (edges.rightRelease) controller.onReleaseEdge(rightFlipperId);
     controller.update();
+
+    // Plunger: same top-of-step drain. Press starts the charge, release launches
+    // the tracked ball (if it rests on the plunger), cancel (focus loss) drops
+    // the charge with no launch; then advance the charge one fixed step.
+    const plungerEdges = plungerInput.drainEdges();
+    if (plungerEdges.press) plunger.onPressEdge();
+    if (plungerEdges.release) plunger.onReleaseEdge(activeBallId);
+    if (plungerEdges.cancel) plunger.onCancelEdge();
+    plunger.update();
   }
 
   const renderer = new DebugRenderer(canvas);
@@ -139,7 +156,7 @@ function main(): void {
     world.drainEvents();
 
     // Ball feed: once the tracked ball crosses the spec's drain line, REMOVE it
-    // and drop a fresh one into the upper field, so exactly one ball ever exists.
+    // and park a fresh one on the plunger, so exactly one ball ever exists.
     // No steady-state allocation: `findBall` reuses the pooled snapshot and
     // remove/add run only on the (rare) drain.
     const activeBall = findBall(world.getBalls(), activeBallId);
@@ -206,7 +223,9 @@ function main(): void {
       hudElapsedMs = 0;
     }
 
-    renderer.draw(world, interpolated, hud);
+    // The charge meter reads the live controller value every frame (not the
+    // HUD throttle), so the meter tracks the hold step by step.
+    renderer.draw(world, interpolated, hud, plunger.getCharge());
     requestAnimationFrame(frame);
   }
 
