@@ -55,7 +55,7 @@ Invariants checked at HEAD:
 - the rollover event's point lies within one step of the falling ball's center (it was 5.9 m away pre-fix);
 - an overlapping sensor no longer adds a phantom point to `getContactPoints()` (it was 2 vs 1 pre-fix).
 
-### WR-01: `addBall` steps the entire world outside the loop
+### WR-01: `addBall` steps the entire world outside the loop, which breaks the one-batch-per-step bus contract and determinism
 
 **Files modified:** `src/physics/planck-world.ts`, `src/physics/collision-event.test.ts`
 **Commit:** 19bfc44
@@ -63,14 +63,14 @@ Invariants checked at HEAD:
 **Applied fix:** A `priming` flag suppresses post-solve (solid) events during `primeBallCcd`'s hidden step. Those reports carried a fake priming impulse, or duplicated contacts that the next real step reports anyway. Sensor begin-contacts are kept: a begin fires only once per overlap and the contact outlives the prime step, so dropping it would lose the overlap for good. CR-01 already moved the runtime `addBall` to the post-step seam, so a respawn now lands at a deterministic step boundary. The new test feeds a ball between steps while another is parked: the pool is empty afterwards (2 leaked events pre-fix, confirmed by disabling the guard).
 **Note:** The prime step still runs the whole world for one extra 1/120 s. I did not change that, because the FLIP-04 calibration reads flipper[0]'s post-prime angle on PROOF_BOX_SPEC, and deactivating other bodies would move that calibration. A human should decide whether the remaining extra step needs a deeper fix, such as a throwaway priming world.
 
-### WR-02: Render interpolation pairs balls by array index
+### WR-02: Render interpolation pairs balls by array index, so a respawn draws a one-frame streak from the drain to the plunger
 
 **Files modified:** `src/sandbox/main.ts`
 **Commit:** e888375
 **Status:** fixed: requires human verification (render-path logic; no headless test, the sandbox frame needs a DOM)
 **Applied fix:** The interpolation loop lerps only when `previous[i].id === current[i].id`. Otherwise it draws the current state, so a respawn or a swap-remove no longer paints a ghost streak.
 
-### WR-03: The flipper is drawn 0.07 m longer than its collider at both ends
+### WR-03: The flipper is drawn 0.07 m longer than its collider at both ends, so what is drawn is not what is hit
 
 **Files modified:** `src/sandbox/debug-draw.ts`, `src/physics/types.ts`
 **Commit:** 5fe65e4
