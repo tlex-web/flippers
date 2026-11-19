@@ -25,6 +25,8 @@ import {
   FLIPPER_UPPER_ANGLE,
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
+import type { TableSpec } from "../table/spec";
 import { flipperSweptTunnel, sweptEscaped } from "./containment";
 import { mulberry32 } from "./prng";
 import type {
@@ -33,6 +35,14 @@ import type {
   Segment,
   Vec2,
 } from "../physics/types";
+
+/** An axis-aligned spawn box for launch origins (meters). */
+export interface OriginRegion {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
 
 /** Which stress target a case's launch is aimed at. */
 export type LaunchMode = "thin-wall" | "flipper" | "free";
@@ -89,6 +99,20 @@ export interface SoakConfig {
    * it is never used by the CCD-on gate.
    */
   readonly flipperNegativeControl?: boolean;
+  /**
+   * The table the DEFAULT Planck factory builds. Defaults to `PROOF_BOX_SPEC`,
+   * the calibrated fixture every Phase-1/2 gate (proof-box soak, FLIP-04, the
+   * negative controls) assumes; pass `TABLE_SPEC` to soak the real playfield.
+   * Ignored when a custom `makeWorld` is supplied.
+   */
+  readonly table?: TableSpec;
+  /**
+   * Explicit spawn box for launch origins. When absent, origins are drawn from
+   * the derived upper-region AABB (inside the walls, above the thin-wall
+   * target), exactly as before. Either way every drawn origin passes the
+   * clearance filter (see `MAX_ORIGIN_DRAWS`).
+   */
+  readonly originRegion?: OriginRegion;
   /**
    * Injectable world factory — defaults to the Planck adapter. Keeps the soak
    * engine-agnostic (D-05): swap in any `PhysicsWorld` and the proof is unchanged.
@@ -189,6 +213,18 @@ const FLIPPER_LIMIT_EPS = 0.02;
 /** Max flipper phase-offset delay (fixed steps) before a case starts sweeping. */
 const MAX_FLIPPER_PHASE_STEPS = 60;
 
+/**
+ * Max origin draws per case before the clearance filter gives up. A drawn
+ * origin strictly closer than `BALL_RADIUS_M + LAUNCH_MARGIN` to a solid
+ * boundary segment (or than `radius + BALL_RADIUS_M + LAUNCH_MARGIN` to a
+ * circle's center) is redrawn from the SAME case stream; if every draw is
+ * rejected the run THROWS naming the case seed, so a spawn region with no
+ * valid origin fails loudly instead of silently skipping cases. The first
+ * valid draw consumes no extra rng values, so a case whose first draw is clear
+ * (every `PROOF_BOX_SPEC` case) replays byte-identically.
+ */
+export const MAX_ORIGIN_DRAWS = 64;
+
 // --- Geometry helpers (interface-only; no engine coupling) ----------------- //
 
 interface Bounds {
@@ -216,6 +252,48 @@ function boundsOf(walls: readonly Segment[]): Bounds {
 
 function segLength(s: Segment): number {
   return Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
+}
+
+/** Shortest distance from (px, py) to segment s. */
+function pointSegmentDistance(px: number, py: number, s: Segment): number {
+  const dx = s.b.x - s.a.x;
+  const dy = s.b.y - s.a.y;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((px - s.a.x) * dx + (py - s.a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (s.a.x + t * dx), py - (s.a.y + t * dy));
+}
+
+/** A launch-origin acceptance test (true = the ball may spawn here). */
+type OriginFilter = (x: number, y: number) => boolean;
+
+/**
+ * Origin clearance filter, read off the interface alone: a spawn point is
+ * clear iff it is at least `BALL_RADIUS_M + LAUNCH_MARGIN` from every solid
+ * boundary segment and at least `radius + BALL_RADIUS_M + LAUNCH_MARGIN` from
+ * every circle element's center (bumpers are circles, not segments, so the
+ * boundary alone would let a ball spawn inside one).
+ */
+function originClearanceFilter(
+  world: PhysicsWorld,
+  boundary: readonly Segment[],
+): OriginFilter {
+  const clearance = BALL_RADIUS_M + LAUNCH_MARGIN;
+  const circles = world
+    .getElements()
+    .map((el) => el.circle)
+    .filter((c): c is NonNullable<typeof c> => c !== null);
+  return (x, y) => {
+    for (const s of boundary) {
+      if (pointSegmentDistance(x, y, s) < clearance) return false;
+    }
+    for (const c of circles) {
+      if (Math.hypot(x - c.center.x, y - c.center.y) < c.radius + clearance) {
+        return false;
+      }
+    }
+    return true;
+  };
 }
 
 /**
@@ -299,18 +377,38 @@ function makeCaseParams(
   config: SoakConfig,
   target: Vec2,
   bounds: Bounds,
+  isClear: OriginFilter,
 ): CaseParams {
   const rng = mulberry32(caseSeed);
   const margin = BALL_RADIUS_M + LAUNCH_MARGIN;
 
-  // Origin: an interior point in the upper region (above the thin wall / flipper
-  // targets) so aimed launches travel DOWN the field into the stress targets.
-  const loX = bounds.minX + margin;
-  const hiX = bounds.maxX - margin;
-  const loY = bounds.minY + margin;
-  const hiY = target.y - margin;
-  const originX = loX + rng() * Math.max(0, hiX - loX);
-  const originY = loY + rng() * Math.max(0, hiY - loY);
+  // Origin: the explicit spawn box when configured; otherwise an interior point
+  // in the upper region (above the thin wall / flipper targets) so aimed
+  // launches travel DOWN the field into the stress targets.
+  const region = config.originRegion;
+  const loX = region ? region.minX : bounds.minX + margin;
+  const hiX = region ? region.maxX : bounds.maxX - margin;
+  const loY = region ? region.minY : bounds.minY + margin;
+  const hiY = region ? region.maxY : target.y - margin;
+  // Clearance filter: redraw (x then y, same stream) until clear. The first
+  // accepted draw consumes exactly the two values it always did.
+  let originX = NaN;
+  let originY = NaN;
+  let accepted = false;
+  for (let draw = 0; draw < MAX_ORIGIN_DRAWS; draw++) {
+    originX = loX + rng() * Math.max(0, hiX - loX);
+    originY = loY + rng() * Math.max(0, hiY - loY);
+    if (isClear(originX, originY)) {
+      accepted = true;
+      break;
+    }
+  }
+  if (!accepted) {
+    throw new Error(
+      `soak: no clear launch origin for case seed=${caseSeed} after ` +
+        `${MAX_ORIGIN_DRAWS} draws in x[${loX}, ${hiX}] y[${loY}, ${hiY}]`,
+    );
+  }
 
   const angle = rng() * Math.PI * 2;
   // Every case exceeds the ball's real max velocity (see maxLaunchSpeed docs).
@@ -370,7 +468,13 @@ function runCase(
   const thin = thinWallTarget(boundary);
   const flipper = flipperTarget(world);
 
-  const params = makeCaseParams(caseSeed, config, thin, bounds);
+  const params = makeCaseParams(
+    caseSeed,
+    config,
+    thin,
+    bounds,
+    originClearanceFilter(world, boundary),
+  );
 
   // The flipper negative control isolates the flipper-swept invariant: it drops
   // the ball straight through the bat and SUPPRESSES the boundary check (a CCD-off
@@ -558,7 +662,10 @@ export function runSoak(config: SoakConfig): SoakResult {
   // Thread the sub-stepping switch into the default Planck adapter (the FLIP-04
   // teeth control passes { subStepping: false }); when undefined the adapter's
   // default (true) applies. `bullet` is passed independently so the two switches
-  // stay orthogonal (CCD vs the rotational sub-stepping guarantee).
+  // stay orthogonal (CCD vs the rotational sub-stepping guarantee). The table is
+  // named explicitly (default PROOF_BOX_SPEC) so the calibrated gates never
+  // depend on the adapter's own default.
+  const table = config.table ?? PROOF_BOX_SPEC;
   const makeWorld =
     config.makeWorld ??
     ((options) =>
@@ -567,8 +674,8 @@ export function runSoak(config: SoakConfig): SoakResult {
         // applies (exactOptionalPropertyTypes forbids passing an explicit
         // `undefined`); pass the concrete boolean only for the teeth control.
         config.subStepping === undefined
-          ? { bullet: options.bullet }
-          : { bullet: options.bullet, subStepping: config.subStepping },
+          ? { bullet: options.bullet, table }
+          : { bullet: options.bullet, subStepping: config.subStepping, table },
       ));
   const caseSeeds = config.seeds
     ? [...config.seeds]
