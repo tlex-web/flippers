@@ -8,7 +8,7 @@ import type { SoakConfig } from "./soak";
  * The REAL-TABLE tunnel-proof gate (D-01, T-03-07): the same seeded
  * swept-containment soak as `soak.gate.test.ts`, run on TABLE_SPEC's seams,
  * arcs and pockets with origins drawn from OPEN_FIELD_REGION. With CCD on the
- * ball must never escape a wall or pass through either bat over >= 600
+ * ball must never escape a wall, enter a bumper, or pass through either bat over >= 600
  * SIMULATED seconds at ~10x its real max speed. Excluded from `npm test`; runs
  * under `npm run soak` (vitest.gate.config.ts). Env vars override density for
  * CI tuning; the defaults ARE the full gate.

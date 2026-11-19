@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { OPEN_FIELD_REGION, TABLE_SPEC, BUMPER_RADIUS_M } from "../table/spec";
-import { runSoak } from "./soak";
+import { circleSweptEscaped, runSoak } from "./soak";
 import type { SoakConfig, SoakFailure } from "./soak";
 
 /**
@@ -17,6 +17,9 @@ import type { SoakConfig, SoakFailure } from "./soak";
  *   3. Deterministic replay of that failure from its logged seed.
  *   4. Filter exhaustion: a spawn region with no valid origin throws with the
  *      case seed instead of silently skipping (the gate can never go vacuous).
+ *   5. Bumpers are in the invariant (03-REVIEW WR-05): a CCD-off launch at
+ *      bumper 202 goes red as a "circle" escape; the same aim with CCD on stays
+ *      green.
  */
 
 const REAL_TABLE = { table: TABLE_SPEC, originRegion: OPEN_FIELD_REGION } as const;
@@ -58,12 +61,15 @@ describe("table soak — swept containment on TABLE_SPEC", () => {
   });
 
   it("(2) CCD-off RED control: a max-velocity launch tunnels a real-table wall", () => {
-    const result = runSoak(NEGATIVE_CONTROL);
+    // Every case runs: since bumpers joined the invariant (03-REVIEW WR-05) a
+    // CCD-off ball can trip a "circle" escape first, and this control is about
+    // the BOUNDARY invariant's teeth on this geometry.
+    const result = runSoak({ ...NEGATIVE_CONTROL, stopOnFirstFailure: false });
 
     expect(result.bullet).toBe(false);
     expect(result.passed).toBe(false);
 
-    const failure = firstFailure(result.failures);
+    const failure = firstFailure(result.failures.filter((f) => f.kind === "boundary"));
     expect(failure.kind).toBe("boundary");
     expect(typeof failure.seed).toBe("number");
     expect(Number.isFinite(failure.seed)).toBe(true);
@@ -109,5 +115,58 @@ describe("table soak — swept containment on TABLE_SPEC", () => {
         bullet: true,
       }),
     ).toThrow(/seed/);
+  });
+});
+
+describe("table soak — bumpers are part of the swept invariant (03-REVIEW WR-05)", () => {
+  const bumper = TABLE_SPEC.find((el) => el.id === 202);
+  if (!bumper || !("center" in bumper)) throw new Error("bumper 202 missing");
+  const center = bumper.center;
+
+  /** Max-velocity launches from just above bumper 202, aimed at its center. */
+  const AT_BUMPER: SoakConfig = {
+    table: TABLE_SPEC,
+    originRegion: { minX: 1.3, maxX: 1.6, minY: 1.9, maxY: 2.3 },
+    aimTarget: center,
+    forceMode: "thin-wall",
+    seed: 0x202,
+    durationSeconds: 1,
+    maxLaunchSpeed: 80,
+    cases: 6,
+  };
+
+  it("(5a) CCD-off RED control: a launch at bumper 202 trips a circle escape", () => {
+    const result = runSoak({ ...AT_BUMPER, bullet: false });
+    expect(result.passed).toBe(false);
+    expect(result.failures.some((f) => f.kind === "circle")).toBe(true);
+  });
+
+  it("(5b) the same launches with CCD on never enter a bumper", () => {
+    const result = runSoak({ ...AT_BUMPER, bullet: true });
+    expect(result.failures).toEqual([]);
+    expect(result.passed).toBe(true);
+  });
+
+  it("(5c) the circle check: pass-through and penetration trip; a clear chord does not", () => {
+    const disk = [{ center, radius: BUMPER_RADIUS_M }];
+    const r = 0.15;
+    const band = BUMPER_RADIUS_M + r;
+    // Straight through the disk between two clear endpoints.
+    expect(
+      circleSweptEscaped({ x: center.x, y: center.y - 1 }, { x: center.x, y: center.y + 1 }, r, disk),
+    ).toBe(true);
+    // Ends inside the band.
+    expect(
+      circleSweptEscaped({ x: center.x, y: center.y - 1 }, { x: center.x, y: center.y - band + 0.01 }, r, disk),
+    ).toBe(true);
+    // A chord that stays just outside the band (tangent-parallel, as after a bounce).
+    expect(
+      circleSweptEscaped(
+        { x: center.x - 0.3, y: center.y - band - 0.01 },
+        { x: center.x + 0.3, y: center.y - band - 0.01 },
+        r,
+        disk,
+      ),
+    ).toBe(false);
   });
 });

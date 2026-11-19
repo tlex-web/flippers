@@ -114,6 +114,13 @@ export interface SoakConfig {
    */
   readonly originRegion?: OriginRegion;
   /**
+   * NEGATIVE CONTROLS ONLY: replaces the derived thin-wall target as the aim
+   * point of "thin-wall" launches (e.g. bumper 202's center, so a CCD-off run
+   * proves the circle invariant has teeth). Absent = the shortest solid
+   * segment's midpoint, exactly as before.
+   */
+  readonly aimTarget?: Vec2;
+  /**
    * Injectable world factory — defaults to the Planck adapter. Keeps the soak
    * engine-agnostic (D-05): swap in any `PhysicsWorld` and the proof is unchanged.
    */
@@ -156,8 +163,11 @@ export interface CaseParams {
   readonly flipperPhaseSteps: number;
 }
 
-/** Which barrier the ball tunnelled through. */
-export type EscapeKind = "boundary" | "flipper";
+/**
+ * Which barrier the ball tunnelled through: a boundary wall segment, a solid
+ * circle element (a bumper, 03-REVIEW WR-05), or a moving flipper bat.
+ */
+export type EscapeKind = "boundary" | "circle" | "flipper";
 
 /** A recorded escape: everything needed to replay and diagnose the failure. */
 export interface SoakFailure {
@@ -262,6 +272,46 @@ function pointSegmentDistance(px: number, py: number, s: Segment): number {
   let t = len2 === 0 ? 0 : ((px - s.a.x) * dx + (py - s.a.y) * dy) / len2;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(px - (s.a.x + t * dx), py - (s.a.y + t * dy));
+}
+
+/** A solid circle element's disk (bumpers), read off `getElements()`. */
+export interface SolidCircle {
+  readonly center: Vec2;
+  readonly radius: number;
+}
+
+/** Every solid (non-sensor) circle element of the world. */
+function solidCircles(world: PhysicsWorld): SolidCircle[] {
+  const out: SolidCircle[] = [];
+  for (const el of world.getElements()) {
+    if (el.circle && !el.sensor) out.push(el.circle);
+  }
+  return out;
+}
+
+/**
+ * Swept containment against solid circles (03-REVIEW WR-05). Circle elements
+ * resolve to no boundary segments, so `sweptEscaped` cannot see bumpers. The
+ * circle analogue of its "swept path strictly within `radius` of a wall" rule:
+ * trips iff the chord `prev -> next` comes strictly closer than
+ * `c.radius + radius` to a circle's center — a ball ending inside the disk
+ * (penetration) or crossing it between two clear endpoints (pass-through). A
+ * legitimate bounce off a convex disk keeps both legs in the outer half-plane
+ * of the tangent at contact, so its chord never enters that band.
+ */
+export function circleSweptEscaped(
+  prev: Vec2,
+  next: Vec2,
+  radius: number,
+  circles: readonly SolidCircle[],
+): boolean {
+  const chord: Segment = { a: prev, b: next };
+  for (const c of circles) {
+    if (pointSegmentDistance(c.center.x, c.center.y, chord) < c.radius + radius) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** A launch-origin acceptance test (true = the ball may spawn here). */
@@ -465,8 +515,9 @@ function runCase(
   const world = makeWorld({ bullet });
   const boundary = world.getBoundarySegments();
   const bounds = boundsOf(boundary);
-  const thin = thinWallTarget(boundary);
+  const thin = config.aimTarget ?? thinWallTarget(boundary);
   const flipper = flipperTarget(world);
+  const circles = solidCircles(world);
 
   const params = makeCaseParams(
     caseSeed,
@@ -582,9 +633,16 @@ function runCase(
     //      flippers (not just index 0) makes this the FLIP-04 two-flipper gate:
     //      the ball can never be swept through by EITHER bat. Proves the property
     //      independently of Planck's CCD (D-03), rather than leaning on the engine.
+    //   3. Solid circles (bumpers) — not in the boundary segments, so checked
+    //      with the circle analogue of (1) (03-REVIEW WR-05). Suppressed with
+    //      the boundary check under the flipper negative control.
     const escapedBoundary = ignoreBoundary
       ? false
       : sweptEscaped(prev, next, effRadius, boundary);
+    const escapedCircle =
+      !ignoreBoundary && !escapedBoundary
+        ? circleSweptEscaped(prev, next, effRadius, circles)
+        : false;
     let escapedFlipper = false;
     let trippedFlipper: FlipperState | null = null;
     const flippersPost = world.getFlippers();
@@ -610,13 +668,13 @@ function runCase(
       }
     }
 
-    if (escapedBoundary || escapedFlipper) {
+    if (escapedBoundary || escapedCircle || escapedFlipper) {
       // Record the flipper that tripped (or, for a boundary escape, the aimed
       // flipper as context) so the failure replays with full state.
       const recordFl = trippedFlipper ?? flippersPost[0] ?? null;
       const failure: SoakFailure = {
         seed: caseSeed,
-        kind: escapedBoundary ? "boundary" : "flipper",
+        kind: escapedBoundary ? "boundary" : escapedCircle ? "circle" : "flipper",
         step,
         simTime: step * FIXED_DT,
         params,
