@@ -56,8 +56,15 @@ export interface ResolvedElement {
   readonly circle: { readonly center: Vec2; readonly radius: number } | null;
   /** True for non-solid triggers (drain line, lanes, rollovers). */
   readonly sensor: boolean;
-  /** Set for flipper mounts, else null. */
-  readonly mount: { readonly pivot: Vec2; readonly mirror: boolean } | null;
+  /**
+   * Set for flipper mounts, else null. `restPose` (default false) asks the
+   * adapter to build the bat at its droop limit with a zero construction motor.
+   */
+  readonly mount: {
+    readonly pivot: Vec2;
+    readonly mirror: boolean;
+    readonly restPose: boolean;
+  } | null;
 }
 
 function fail(el: ElementSpec, reason: string): never {
@@ -259,7 +266,7 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
         segments: [],
         circle: null,
         sensor: false,
-        mount: { pivot, mirror: el.mirror },
+        mount: { pivot, mirror: el.mirror, restPose: el.restPose ?? false },
       });
     }
   }

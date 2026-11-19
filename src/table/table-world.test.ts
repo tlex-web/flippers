@@ -1,19 +1,29 @@
 import { describe, expect, it } from "vitest";
 
 import { sweptEscaped } from "../harness/containment";
-import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
+import { mulberry32 } from "../harness/prng";
+import {
+  BALL_RADIUS_M,
+  FIXED_DT,
+  FLIPPER_LENGTH_M,
+  FLIPPER_TIP_RADIUS_M,
+} from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
-import type { Vec2 } from "../physics/types";
+import type { FlipperState, Segment, Vec2 } from "../physics/types";
+import { resolve } from "./resolve";
 import {
   BUMPER_RADIUS_M,
   DRAIN_Y,
   HEIGHT_M,
+  OPEN_FIELD_REGION,
   PLAYFIELD_CENTER_X,
   PLUNGER_REST,
   PLUNGER_ZONE,
   TABLE_SPEC,
   WIDTH_M,
+  mirrorPath,
   mirrorX,
+  type ElementKind,
   type MountSpec,
 } from "./spec";
 
@@ -222,5 +232,189 @@ describe("TABLE_SPEC bumper cluster", () => {
       prevSpeed = speed;
     }
     throw new Error("no bumper contact within 2 s");
+  });
+});
+
+/** World-space tip of a bat: pivot + length·(cos, sin)(angle). */
+function tipOf(f: FlipperState): Vec2 {
+  return {
+    x: f.pivotX + f.length * Math.cos(f.angle),
+    y: f.pivotY + f.length * Math.sin(f.angle),
+  };
+}
+
+/** Distance from point p to segment s. */
+function distToSegment(p: Vec2, s: Segment): number {
+  const dx = s.b.x - s.a.x;
+  const dy = s.b.y - s.a.y;
+  const len2 = dx * dx + dy * dy;
+  const t =
+    len2 > 0
+      ? Math.max(0, Math.min(1, ((p.x - s.a.x) * dx + (p.y - s.a.y) * dy) / len2))
+      : 0;
+  return Math.hypot(p.x - (s.a.x + t * dx), p.y - (s.a.y + t * dy));
+}
+
+/**
+ * The completed original layout (03-02 Task 2, D-03/D-05/D-06): inventory of
+ * standard elements, the resting inverted-V, an unobstructed flipper sweep, and
+ * seeded drain flow with swept containment. All on `TABLE_SPEC`.
+ */
+describe("TABLE_SPEC layout", () => {
+  it("(a) has the standard element inventory with unique ids; sensors are not boundary", () => {
+    const world = makeTableWorld();
+    const elements = world.getElements();
+    const ofKind = (k: ElementKind) => elements.filter((el) => el.kind === k);
+    expect(ofKind("bumper").length).toBeGreaterThanOrEqual(3);
+    expect(ofKind("slingshot").length).toBeGreaterThanOrEqual(2);
+    for (const el of ofKind("slingshot")) {
+      expect(el.sensor).toBe(false);
+      expect(el.loop).toBe(true);
+    }
+    expect(ofKind("rollover").length).toBeGreaterThanOrEqual(3);
+    for (const el of ofKind("rollover")) expect(el.sensor).toBe(true);
+    expect(ofKind("lane").length).toBeGreaterThanOrEqual(2);
+    for (const el of ofKind("lane")) expect(el.sensor).toBe(true);
+    expect(ofKind("drain")).toHaveLength(1);
+    expect(ofKind("drain")[0]?.sensor).toBe(true);
+    expect(ofKind("chute").length).toBeGreaterThanOrEqual(1);
+    expect(ofKind("flipper")).toHaveLength(2);
+
+    const ids = elements.map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    const boundary = world.getBoundarySegments();
+    for (const el of elements) {
+      if (!el.sensor) continue;
+      for (const seg of el.segments) expect(boundary.includes(seg)).toBe(false);
+    }
+  });
+
+  it("derives right-hand twins with mirrorPath, arcs included", () => {
+    const arcPath = [
+      { x: 0.2, y: 1.0 },
+      { center: { x: 0.6, y: 1.0 }, radius: 0.4, a0: Math.PI, a1: 1.5 * Math.PI },
+      { x: 1.2, y: 0.6 },
+    ];
+    const [left, right] = resolve([
+      { id: 1, kind: "wall", path: arcPath },
+      { id: 2, kind: "wall", path: mirrorPath(arcPath) },
+    ]);
+    expect(left && right).toBeTruthy();
+    if (!left || !right) return;
+    expect(right.vertices).toHaveLength(left.vertices.length);
+    left.vertices.forEach((v, i) => {
+      const m = mirrorX(v);
+      expect(right.vertices[i]?.x).toBeCloseTo(m.x, 12);
+      expect(right.vertices[i]?.y).toBeCloseTo(m.y, 12);
+    });
+  });
+
+  it("(b) rests the flippers at construction as a symmetric inverted-V wider than the ball", () => {
+    const world = makeTableWorld();
+    const flippers = world.getFlippers();
+    expect(flippers).toHaveLength(2);
+    const tips = flippers.map(tipOf);
+    flippers.forEach((f, i) => {
+      // y-down: the tip lies BELOW its pivot.
+      expect(tips[i]?.y).toBeGreaterThan(f.pivotY);
+    });
+    const [t0, t1] = tips;
+    if (!t0 || !t1) throw new Error("missing tip");
+    expect(Math.abs(t0.y - t1.y)).toBeLessThan(1e-6);
+    const gap = Math.hypot(t0.x - t1.x, t0.y - t1.y) - 2 * FLIPPER_TIP_RADIUS_M;
+    expect(gap).toBeGreaterThan(2 * BALL_RADIUS_M);
+
+    // The pose holds: one simulated second at motor 0 leaves both bats at rest.
+    const before = flippers.map((f) => f.angle);
+    for (let i = 0; i < 120; i++) world.step(FIXED_DT);
+    world.getFlippers().forEach((f, i) => {
+      expect(Math.abs(f.angle - (before[i] ?? NaN))).toBeLessThan(1e-3);
+    });
+  });
+
+  it("(c) sweeps each bat through its full raise and return with nothing in the way", () => {
+    const minRange = 0.9 * 2 * FLIPPER_LENGTH_M * Math.sin(Math.PI / 8);
+    for (const target of [0, 1]) {
+      const world = makeTableWorld();
+      let minY = Infinity;
+      let maxY = -Infinity;
+      const sample = (): void => {
+        const f = world.getFlippers().find((x) => x.id === target);
+        if (!f) throw new Error(`no flipper ${target}`);
+        const y = tipOf(f).y;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      };
+      sample();
+      world.setFlipperMotor(target, 1);
+      for (let i = 0; i < 30; i++) {
+        world.step(FIXED_DT);
+        sample();
+      }
+      world.setFlipperMotor(target, -1);
+      for (let i = 0; i < 40; i++) {
+        world.step(FIXED_DT);
+        sample();
+      }
+      expect(maxY - minY, `bat ${target} tip-y range`).toBeGreaterThanOrEqual(minRange);
+    }
+  });
+
+  it("(d) drains seeded open-field drops within 30 s with no trap and no escape", () => {
+    const probe = makeTableWorld();
+    const walls = probe.getBoundarySegments();
+    const circles = probe
+      .getElements()
+      .flatMap((el) => (el.circle && !el.sensor ? [el.circle] : []));
+    const clearance = BALL_RADIUS_M + 0.05;
+    const tooClose = (p: Vec2): boolean =>
+      walls.some((s) => distToSegment(p, s) < clearance) ||
+      circles.some(
+        (c) => Math.abs(Math.hypot(p.x - c.center.x, p.y - c.center.y) - c.radius) < clearance,
+      );
+
+    // One seeded stream for all eight drops (replay: same seed, same index).
+    const SEED = 0x0302;
+    const rng = mulberry32(SEED);
+    const R = OPEN_FIELD_REGION;
+    const maxSteps = Math.round(30 / FIXED_DT);
+    for (let k = 0; k < 8; k++) {
+      let drop: Vec2 | null = null;
+      for (let tries = 0; tries < 1000 && !drop; tries++) {
+        const p = {
+          x: R.minX + rng() * (R.maxX - R.minX),
+          y: R.minY + rng() * (R.maxY - R.minY),
+        };
+        if (!tooClose(p)) drop = p;
+      }
+      if (!drop) throw new Error(`seed ${SEED} ball ${k}: no admissible drop point`);
+      const where = `seed ${SEED} ball ${k}, drop (${drop.x.toFixed(4)}, ${drop.y.toFixed(4)})`;
+
+      const world = makeTableWorld();
+      const id = world.addBall(drop);
+      const boundary = world.getBoundarySegments();
+      let prev: Vec2 = { x: drop.x, y: drop.y };
+      let drained = false;
+      for (let i = 0; i < maxSteps; i++) {
+        world.step(FIXED_DT);
+        const b = world.getBalls().find((x) => x.id === id);
+        if (!b) throw new Error(`${where}: ball vanished`);
+        const next: Vec2 = { x: b.x, y: b.y };
+        if (sweptEscaped(prev, next, BALL_RADIUS_M - 0.05, boundary)) {
+          throw new Error(`${where}: escaped at step ${i}`);
+        }
+        prev = next;
+        if (b.y > DRAIN_Y) {
+          drained = true;
+          break;
+        }
+      }
+      if (!drained) {
+        throw new Error(
+          `${where}: still in play after 30 s at (${prev.x.toFixed(3)}, ${prev.y.toFixed(3)})`,
+        );
+      }
+    }
   });
 });

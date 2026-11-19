@@ -102,9 +102,16 @@ describe("resolve() — shape", () => {
 
   it("a mount yields mount set and no segments", () => {
     const [el] = resolve([{ id: 0, kind: "flipper", pivot: { x: 0.7, y: 5.4 }, mirror: true }]);
-    expect(el?.mount).toEqual({ pivot: { x: 0.7, y: 5.4 }, mirror: true });
+    expect(el?.mount).toEqual({ pivot: { x: 0.7, y: 5.4 }, mirror: true, restPose: false });
     expect(el?.segments).toHaveLength(0);
     expect(el?.circle).toBeNull();
+  });
+
+  it("carries a mount's restPose through", () => {
+    const [el] = resolve([
+      { id: 0, kind: "flipper", pivot: { x: 0.7, y: 5.4 }, mirror: false, restPose: true },
+    ]);
+    expect(el?.mount?.restPose).toBe(true);
   });
 });
 

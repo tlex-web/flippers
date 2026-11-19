@@ -390,7 +390,9 @@ export class PlanckWorld implements PhysicsWorld {
     // Flipper mounts (D-05): N flippers is additive — the joint/pool registries
     // are index-iterated in step().
     for (const el of elements) {
-      if (el.mount) this.buildFlipper(el.id, el.mount.pivot, el.mount.mirror);
+      if (el.mount) {
+        this.buildFlipper(el.id, el.mount.pivot, el.mount.mirror, el.mount.restPose);
+      }
     }
     return solid;
   }
@@ -421,11 +423,23 @@ export class PlanckWorld implements PhysicsWorld {
    * `+1 = raise` command by it, so BOTH bats sweep their tip UP on +1 and drive to
    * the SAME symmetric limits: +1 → each bat's raised/up limit (held-up cradle),
    * −1 → each bat's rest/down limit. The controller stays engine-agnostic (D-05).
+   *
+   * REST POSE (`restPose`, playfield mounts only, D-05). The joint geometry is
+   * identical either way: the bat is still created level, so referenceAngle and
+   * the limits are unchanged. With `restPose` the joint's construction motor
+   * speed is 0 (nothing drives into a limit, the Phase-2 startup limit-jam) and,
+   * right after the joint exists, the bat is placed at its DROOP limit — the one
+   * opposite its raise direction: +FLIPPER_UPPER_ANGLE on the left (raiseSign
+   * −1), FLIPPER_LOWER_ANGLE on the mirrored right (raiseSign +1) — so the pair
+   * starts as a resting, mirror-symmetric inverted-V. Without `restPose` (the
+   * harness proof box) the exact pre-existing path runs, construction motor
+   * included, which keeps the FLIP-04 calibration byte-identical.
    */
   private buildFlipper(
     id: number,
     pivot: { readonly x: number; readonly y: number },
     mirror: boolean,
+    restPose: boolean,
   ): void {
     const px = pivot.x;
     const py = pivot.y;
@@ -470,19 +484,18 @@ export class PlanckWorld implements PhysicsWorld {
     const tag: BodyTag = { kind: "flipper", id };
     bat.setUserData(tag);
 
-    // Motorized revolute joint: motor ON (default drives toward the rest/upper
-    // limit), high max torque, bounded ~45° arc. The limits are reference-
-    // relative (referenceAngle = restAngle), so the mirror reuses them. The idle
-    // pose the human sees is NOT this default speed — the sandbox composition root
-    // constructs the FlipperController (which commands motor 0) BEFORE the first
-    // ball, so both bats freeze at their symmetric construction angle (level, joint
-    // 0) rather than drifting one prime-step apart (main.ts, "not on the same
-    // height" fix). Left unchanged here so the FLIP-04 soak/teeth calibration — which
-    // reads flipper[0]'s post-prime angle — is byte-for-byte preserved.
+    // Motorized revolute joint: motor ON, high max torque, bounded ~45° arc. The
+    // limits are reference-relative (referenceAngle = restAngle), so the mirror
+    // reuses them. Construction motor speed: 0 for a rest-pose mount (posed at
+    // its droop limit below); otherwise the default FLIPPER_UP_SPEED, left
+    // unchanged so the FLIP-04 soak/teeth calibration — which reads flipper[0]'s
+    // post-prime angle on the proof box — is byte-for-byte preserved. Either way
+    // the composition root constructs the FlipperController (motor 0) before the
+    // first ball, so the idle pose is the construction pose.
     const joint = new RevoluteJoint(
       {
         enableMotor: true,
-        motorSpeed: FLIPPER_UP_SPEED,
+        motorSpeed: restPose ? 0 : FLIPPER_UP_SPEED,
         maxMotorTorque: FLIPPER_MAX_MOTOR_TORQUE,
         enableLimit: true,
         lowerAngle: FLIPPER_LOWER_ANGLE,
@@ -493,6 +506,13 @@ export class PlanckWorld implements PhysicsWorld {
       Vec2(px, py),
     );
     this.world.createJoint(joint);
+
+    if (restPose) {
+      // Droop limit = the limit opposite the raise direction (joint angle is
+      // body angle minus the level referenceAngle `restAngle`).
+      const droop = raiseSign < 0 ? FLIPPER_UPPER_ANGLE : FLIPPER_LOWER_ANGLE;
+      bat.setTransform(Vec2(px, py), restAngle + droop);
+    }
 
     this.flipperJoints.push({ id, body: bat, joint, raiseSign });
     this.flipperPool.push({
