@@ -742,6 +742,22 @@ export class PlanckWorld implements PhysicsWorld {
     entry.body.setAwake(true);
   }
 
+  applyImpulse(ballId: BallId, ix: number, iy: number): void {
+    // Structural twin of setFlipperMotor: find by id, no-op when absent. A
+    // non-finite component is rejected too (threat T-03-10/T-03-13), so a bad
+    // caller can never inject NaN/Infinity into the solver. Called only between
+    // fixed steps, so the velocity change lands cleanly on the next step.
+    if (!Number.isFinite(ix) || !Number.isFinite(iy)) return;
+    for (let i = 0; i < this.balls.length; i++) {
+      const entry = this.balls[i];
+      if (!entry || entry.id !== ballId) continue;
+      // At the world center of mass -> purely linear, no torque; wake = true so
+      // a ball asleep on the plunger responds.
+      entry.body.applyLinearImpulse(Vec2(ix, iy), entry.body.getWorldCenter(), true);
+      return;
+    }
+  }
+
   getElements(): readonly ResolvedElement[] {
     return this.elements;
   }

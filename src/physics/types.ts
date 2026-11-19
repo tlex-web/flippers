@@ -132,6 +132,16 @@ export interface PhysicsWorld {
    */
   setFlipperMotor(id: number, direction: number): void;
   /**
+   * Apply a world-space linear impulse `(ix, iy)` in kg·m/s at a ball's center of
+   * mass (engine-agnostic hook, D-09). Purely linear: it changes the ball's
+   * velocity by impulse / mass and adds no spin, and it wakes the ball. Call it
+   * only BETWEEN fixed steps (the top-of-step hook), never inside `step()`.
+   * No-op for an unknown id or a non-finite component. It is generic, not
+   * plunger-specific: the plunger launch uses it today and the Phase 4 nudge
+   * reuses it.
+   */
+  applyImpulse(ballId: BallId, ix: number, iy: number): void;
+  /**
    * The id-keyed resolved table, built ONCE at construction from the table spec
    * (D-01/D-02). Returns the SAME array on every call. It is the single source
    * both the renderer and the containment harness derive from: the engine's
