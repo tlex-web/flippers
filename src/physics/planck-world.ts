@@ -339,6 +339,17 @@ export class PlanckWorld implements PhysicsWorld {
   // during `world.step()`, sync runs after it returns).
   private readonly scratchWm = new WorldManifold();
 
+  /**
+   * True only inside `primeBallCcd`'s hidden `world.step` (03-REVIEW WR-01).
+   * Solid (post-solve) events from that step are discarded: the priming
+   * impulse is thrown away with the restored spawn state, and any contact that
+   * persists is reported again by the next real step, so keeping them would
+   * merge a fake or duplicate report into that step's batch. Sensor
+   * begin-contacts are KEPT: a begin fires once per overlap, and the contact
+   * outlives the prime step, so dropping it would lose the overlap for good.
+   */
+  private priming = false;
+
   constructor(options?: PlanckWorldOptions) {
     // CCD defaults ON; the soak's negative control passes { bullet: false }.
     this.bulletEnabled = options?.bullet ?? true;
@@ -360,6 +371,7 @@ export class PlanckWorld implements PhysicsWorld {
     // Solid contacts are reported once per solve with their summed normal
     // impulse (a hit-strength proxy).
     this.world.on("post-solve", (contact, impulse) => {
+      if (this.priming) return;
       let normalImpulse = 0;
       const impulses = impulse.normalImpulses;
       for (let i = 0; i < impulses.length; i++) normalImpulse += impulses[i] ?? 0;
@@ -690,7 +702,16 @@ export class PlanckWorld implements PhysicsWorld {
     // One direct sub-step: the broad+narrow phase creates the ball↔primer
     // contact and puts the ball in a solver island, arming its CCD. The primer
     // has no BodyTag, so `post-solve` ignores it → no spurious collision event.
-    this.world.step(FIXED_DT, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    // The step runs the WHOLE world (load-bearing: the FLIP-04 calibration reads
+    // flipper[0]'s post-prime angle), so its solid events — the new ball on the
+    // floor, any other ball's contacts — are suppressed (see `priming`); the
+    // caller runs addBall at a fixed-step boundary (sandbox: `onPostStep`).
+    this.priming = true;
+    try {
+      this.world.step(FIXED_DT, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    } finally {
+      this.priming = false;
+    }
 
     this.world.destroyBody(primer);
 

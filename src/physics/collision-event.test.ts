@@ -156,3 +156,28 @@ describe("normalizeContact (D-12): order-independent identity", () => {
     expect(b).toEqual(a);
   });
 });
+
+/**
+ * Regression for 03-REVIEW WR-01: `addBall`'s CCD-priming step runs the whole
+ * world outside the fixed-step loop. Its solid contacts must not leak into the
+ * next real step's batch (the priming impulse is discarded with the restored
+ * spawn state); a contact that persists is reported by the next real step.
+ */
+describe("addBall's CCD-priming step emits no solid events (WR-01)", () => {
+  it("feeding a ball between steps adds nothing to the pool until a real step", () => {
+    const world = new PlanckWorld();
+    for (const f of world.getFlippers()) world.setFlipperMotor(f.id, 0);
+    // A ball parked and settled on the plunger: its floor contact is live.
+    const loop = new FixedStepLoop(world);
+    const parked = world.addBall({ x: 3.15, y: 6.2 });
+    for (let i = 0; i < 60; i++) loop.advance(FIXED_DT * 1000);
+    world.drainEvents();
+
+    // Feed a second ball in free air between steps, as the sandbox feed does.
+    world.addBall({ x: 1.45, y: 3.0 });
+    expect(world.drainEvents()).toHaveLength(0);
+
+    // The parked ball is untouched by the hidden step's discarded reports.
+    expect(world.getBalls().some((b) => b.id === parked)).toBe(true);
+  });
+});
