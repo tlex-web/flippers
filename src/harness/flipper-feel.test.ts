@@ -8,6 +8,7 @@ import {
   FLIPPER_UP_SPEED,
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 
@@ -139,7 +140,7 @@ const SUSTAIN_STEPS = 3;
  * — so the honest v = ω·r comparison uses it, not the nominal horizontal reach).
  */
 function launchAtRadius(rFrac: number): LaunchResult {
-  const world: PhysicsWorld = new PlanckWorld();
+  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
   const step = makeStepper(world);
   const fl = world.getFlippers()[0];
   if (!fl) throw new Error("expected the left flipper");
@@ -259,7 +260,7 @@ interface CradleTrace {
  * release the hold to show the ball then does NOT stay put.
  */
 function cradleTrace(hold: boolean): CradleTrace {
-  const world: PhysicsWorld = new PlanckWorld();
+  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
   const step = makeStepper(world);
   const fl = world.getFlippers()[0];
   if (!fl) throw new Error("expected the left flipper");

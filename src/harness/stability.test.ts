@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 
@@ -190,7 +191,7 @@ function firstMonotonicIncrease(
 
 describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   it("a dropped ball settles to rest and then sits perfectly still (no jitter)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     // Drop straight down onto the CENTRE of the mirrored pair; held at the droop
     // limit the two bats form a deep, rigid V that catches and steadies the ball.
     world.addBall({ x: 1.0, y: 0.4, vx: 0 });
@@ -221,7 +222,7 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   });
 
   it("a ball seeded into a wall corner settles to rest (no corner-sticking)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     const b = bounds(world);
     const r = BALL_RADIUS_M;
     const step = makeStepper(world);
@@ -248,7 +249,7 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   });
 
   it("kinetic energy is monotonically non-increasing once undisturbed (never spontaneously gains speed)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     const b = bounds(world);
     const step = makeStepper(world);
 

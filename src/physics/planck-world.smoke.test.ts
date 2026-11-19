@@ -8,6 +8,7 @@ import {
   MAX_FRAME_MS,
 } from "./constants";
 import { PlanckWorld } from "./planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { PhysicsWorld, Segment } from "./types";
 import { FixedStepLoop } from "../sim/loop";
 
@@ -22,7 +23,7 @@ import { FixedStepLoop } from "../sim/loop";
 const START = { x: 1.5, y: 0.4 } as const;
 
 function makeWorldWithBall(): { world: PhysicsWorld; id: number } {
-  const world = new PlanckWorld();
+  const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
   const id = world.addBall(START);
   return { world, id };
 }
@@ -141,7 +142,7 @@ function frameMsSeq(): number[] {
  */
 describe("two mirrored capsule flippers + feel-speed motor (02-01)", () => {
   it("getFlippers returns two mirrored flippers with distinct ids and a finite tipRadius", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     const flippers = world.getFlippers();
 
     expect(flippers.length).toBe(2);
@@ -169,13 +170,13 @@ describe("two mirrored capsule flippers + feel-speed motor (02-01)", () => {
     // left AND the reference-mirrored right bat, at the feel-tuned raise/return
     // speeds. Direction is asserted against real tip world-Y, never "toward the
     // constant named FLIPPER_UPPER_ANGLE".
-    const ids = new PlanckWorld().getFlippers().map((f) => f.id);
+    const ids = new PlanckWorld({ table: PROOF_BOX_SPEC }).getFlippers().map((f) => f.id);
     expect(ids.length).toBe(2);
 
     for (const id of ids) {
       // A FRESH world per flipper so the OTHER (undriven) bat — which sits at its
       // construction default — can never collide with the bat under test.
-      const world: PhysicsWorld = new PlanckWorld();
+      const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
       const other = ids.find((x) => x !== id);
       const stateOf = (): { pivotY: number; length: number; angle: number } => {
         const f = world.getFlippers().find((x) => x.id === id);
@@ -253,6 +254,6 @@ describe("two mirrored capsule flippers + feel-speed motor (02-01)", () => {
     }
 
     // Unknown id is a no-op (does not throw).
-    expect(() => new PlanckWorld().setFlipperMotor(9999, 1)).not.toThrow();
+    expect(() => new PlanckWorld({ table: PROOF_BOX_SPEC }).setFlipperMotor(9999, 1)).not.toThrow();
   });
 });

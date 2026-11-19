@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { FIXED_DT, MAX_FRAME_MS } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld, Segment } from "../physics/types";
 import { FixedStepLoop } from "./loop";
 
@@ -40,7 +41,7 @@ const FRAME_60_HZ = 1000 / 60;
 const START = { x: 1.0, y: 0.4 } as const;
 
 function makeRig(): { loop: FixedStepLoop; world: PhysicsWorld } {
-  const world: PhysicsWorld = new PlanckWorld();
+  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
   world.addBall(START);
   return { loop: new FixedStepLoop(world), world };
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "./loop";
 
@@ -50,7 +51,7 @@ interface Rig {
 }
 
 function makeRig(): Rig {
-  const world: PhysicsWorld = new PlanckWorld();
+  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
   world.addBall(START);
   return { loop: new FixedStepLoop(world), world };
 }
