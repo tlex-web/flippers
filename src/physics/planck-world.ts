@@ -22,6 +22,7 @@ import {
   Vec2,
   World,
   WorldManifold,
+  type Contact,
 } from "planck";
 
 import {
@@ -47,6 +48,7 @@ import type {
   BallState,
   CollisionEvent,
   CollisionEventType,
+  CollisionPartnerKind,
   FlipperState,
   PhysicsWorld,
   Segment,
@@ -129,12 +131,20 @@ interface MutableVec2 {
 }
 
 /** Internal, mutable collision event — pooled and mutated in place (never re-allocated per step). */
-interface MutableCollisionEvent {
-  type: CollisionEventType;
-  aId: number;
-  bId: number;
+interface MutableCollisionEvent extends ContactIdentity {
   point: MutableVec2;
   normalImpulse: number;
+}
+
+/**
+ * The normalized identity of one contact, written by `normalizeContact`: the
+ * coarse type, the ball side, and the element side (D-12).
+ */
+export interface ContactIdentity {
+  type: CollisionEventType;
+  ballId: BallId;
+  elementKind: CollisionPartnerKind;
+  elementId: number;
 }
 
 /** Internal, mutable view of a flipper snapshot (returned read-only as FlipperState). */
@@ -182,6 +192,37 @@ function classifyContact(
   if (a === "ball") return b === "flipper" ? "ball-flipper" : "ball-wall";
   if (b === "ball") return a === "flipper" ? "ball-flipper" : "ball-wall";
   return null;
+}
+
+/**
+ * Normalize one contact pair into `out` (D-12), independent of which fixture the
+ * engine reported as A or B. The ball side is the tag whose kind is `"ball"`;
+ * for ball-ball the smaller id is `ballId` and the larger is `elementId`, with
+ * `elementKind` `"ball"`. Returns false, writing nothing, when neither side is
+ * a ball. Pure and allocation-free; exported for the order-independence tests.
+ */
+export function normalizeContact(
+  out: ContactIdentity,
+  a: { readonly kind: BodyTag["kind"]; readonly id: number },
+  b: { readonly kind: BodyTag["kind"]; readonly id: number },
+): boolean {
+  const type = classifyContact(a.kind, b.kind);
+  if (!type) return false;
+  out.type = type;
+  if (type === "ball-ball") {
+    out.ballId = a.id < b.id ? a.id : b.id;
+    out.elementKind = "ball";
+    out.elementId = a.id < b.id ? b.id : a.id;
+  } else if (a.kind === "ball") {
+    out.ballId = a.id;
+    out.elementKind = b.kind;
+    out.elementId = b.id;
+  } else {
+    out.ballId = b.id;
+    out.elementKind = a.kind;
+    out.elementId = a.id;
+  }
+  return true;
 }
 
 /** Fixture tag first (static table elements), body tag as the fallback. */
@@ -316,26 +357,47 @@ export class PlanckWorld implements PhysicsWorld {
     // malformed descriptor) and is the single origin of every collider below.
     this.elements = resolve(options?.table ?? TABLE_SPEC);
     this.segments = this.buildTable(this.elements);
+    // Solid contacts are reported once per solve with their summed normal
+    // impulse (a hit-strength proxy).
     this.world.on("post-solve", (contact, impulse) => {
-      const a = tagOf(contact.getFixtureA());
-      const b = tagOf(contact.getFixtureB());
-      if (!a || !b) return;
-      const type = classifyContact(a.kind, b.kind);
-      if (!type) return;
       let normalImpulse = 0;
-      for (const value of impulse.normalImpulses) normalImpulse += value;
-      const wm = contact.getWorldManifold(this.scratchWm);
-      const first = wm && wm.pointCount > 0 ? wm.points[0] : undefined;
-      // Reuse a pooled event record + its nested point vector (no per-contact
-      // object/point allocation on the step hot path).
-      const evt = this.nextEventSlot();
-      evt.type = type;
-      evt.aId = a.id;
-      evt.bId = b.id;
-      evt.point.x = first?.x ?? 0;
-      evt.point.y = first?.y ?? 0;
-      evt.normalImpulse = normalImpulse;
+      const impulses = impulse.normalImpulses;
+      for (let i = 0; i < impulses.length; i++) normalImpulse += impulses[i] ?? 0;
+      this.emitContact(contact, normalImpulse);
     });
+  }
+
+  /**
+   * Shared emit path for every reported contact: read both tags (fixture tag
+   * first, body tag as the fallback), and only when one side is a ball reserve
+   * a pooled slot and fill it through `normalizeContact`, so non-ball pairs
+   * consume nothing. The point is the first manifold point; a contact with no
+   * manifold points (a sensor overlap) uses the ball body's center instead.
+   * Zero allocation per contact: pooled slot, shared `scratchWm`, and the
+   * body's own position vector read in place.
+   */
+  private emitContact(contact: Contact, normalImpulse: number): void {
+    const fa = contact.getFixtureA();
+    const fb = contact.getFixtureB();
+    const a = tagOf(fa);
+    const b = tagOf(fb);
+    if (!a || !b) return;
+    if (!classifyContact(a.kind, b.kind)) return;
+    const evt = this.nextEventSlot();
+    normalizeContact(evt, a, b);
+    evt.normalImpulse = normalImpulse;
+    const wm = contact.getWorldManifold(this.scratchWm);
+    const first = wm && wm.pointCount > 0 ? wm.points[0] : undefined;
+    if (first) {
+      evt.point.x = first.x;
+      evt.point.y = first.y;
+    } else {
+      // The ball side's body: for ball-ball, the one whose id is `ballId`.
+      const ballFixture = a.kind === "ball" && a.id === evt.ballId ? fa : fb;
+      const center = ballFixture.getBody().getPosition();
+      evt.point.x = center.x;
+      evt.point.y = center.y;
+    }
   }
 
   /**
@@ -779,8 +841,9 @@ export class PlanckWorld implements PhysicsWorld {
     if (!slot) {
       slot = {
         type: "ball-wall",
-        aId: 0,
-        bId: 0,
+        ballId: 0,
+        elementKind: "wall",
+        elementId: 0,
         point: { x: 0, y: 0 },
         normalImpulse: 0,
       };

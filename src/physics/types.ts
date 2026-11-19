@@ -14,6 +14,7 @@
  */
 
 import type { ResolvedElement } from "../table/resolve";
+import type { ElementKind } from "../table/spec";
 
 /** A plain 2D value (meters). Not a Planck `Vec2`; deliberately engine-free. */
 export interface Vec2 {
@@ -80,20 +81,54 @@ export interface FlipperState {
   readonly tipRadius: number;
 }
 
-/** Kind of contact that produced a collision event. */
+/**
+ * Coarse kind of contact that produced a collision event (D-12). Deliberately
+ * coarse and never exploded into a per-pair enum:
+ * - `"ball-wall"`: a ball against any static table element, sensors included
+ *   (wall, chute, drain, bumper, slingshot, lane, rollover);
+ * - `"ball-flipper"`: a ball against a flipper bat;
+ * - `"ball-ball"`: two balls; `elementKind` is then `"ball"` and `elementId` is
+ *   the other ball's id.
+ * Consumers switch on `elementKind` + `elementId`, not on this field.
+ */
 export type CollisionEventType = "ball-wall" | "ball-ball" | "ball-flipper";
+
+/**
+ * What the non-ball side of a contact is: a spec `ElementKind`, or `"ball"`
+ * only when `type` is `"ball-ball"`.
+ */
+export type CollisionPartnerKind = ElementKind | "ball";
 
 /**
  * A one-way collision notification. Events are produced by `step()` and read out
  * via `drainEvents()` — they are drained, never pushed back into the engine.
+ *
+ * Normalized (D-12): `ballId` always names the ball side and
+ * `elementKind`/`elementId` the element side, whichever fixture the engine
+ * reported first. Element identity comes from the one table spec, so an event
+ * names exactly the element that was drawn. For a ball-ball contact `ballId` is
+ * the smaller id and `elementId` the larger.
+ *
+ * Records are POOLED and mutated in place on the next step: treat every field as
+ * read-only and copy out anything retained past the next `step()`.
  */
 export interface CollisionEvent {
   readonly type: CollisionEventType;
-  readonly aId: number;
-  readonly bId: number;
-  /** World contact point (meters). */
+  /** The ball side of the contact. */
+  readonly ballId: BallId;
+  /** The element side: a spec `ElementKind`, or `"ball"` for ball-ball. */
+  readonly elementKind: CollisionPartnerKind;
+  /** Spec element id (or the other ball's id for ball-ball). */
+  readonly elementId: number;
+  /**
+   * World contact point (meters). For a sensor (no manifold points) this is the
+   * ball's center at the moment the overlap began.
+   */
   readonly point: Vec2;
-  /** Solver normal impulse magnitude (kg·m/s) — proxy for hit strength. */
+  /**
+   * Solver normal impulse magnitude (kg·m/s), a proxy for hit strength. Always
+   * 0 for a sensor contact: sensors are never solved.
+   */
   readonly normalImpulse: number;
 }
 

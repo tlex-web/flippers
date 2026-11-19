@@ -60,8 +60,15 @@ export class FixedStepLoop {
    * engine-agnostic: the hook is a plain callback, not an engine handle. Pass a
    * long-lived function reference (built once) to keep the hot path allocation-
    * free (threat T-02-05).
+   *
+   * `onPostStep` (optional) is the twin hook AFTER each fixed step: it is invoked
+   * immediately after that step's `world.step()` and its snapshot, exactly
+   * `steps` times, and never when this call drains no whole step. It is the seam
+   * where the collision router drains the step's events, so consumers see exactly
+   * one batch per simulated step (D-11). Same rules as `onStep`: a plain,
+   * engine-agnostic callback; pass a long-lived reference to stay allocation-free.
    */
-  advance(realDeltaMs: number, onStep?: () => void): number {
+  advance(realDeltaMs: number, onStep?: () => void, onPostStep?: () => void): number {
     // Spiral-of-death clamp (T-01-02): bound the per-call catch-up work.
     const clamped = Math.min(realDeltaMs, MAX_FRAME_MS);
     this.accumulator += clamped;
@@ -75,6 +82,8 @@ export class FixedStepLoop {
       if (onStep) onStep();
       this.world.step(FIXED_DT);
       this.snapshotInto(this.currentStates);
+      // Bottom of the fixed step (D-11): this step's events are complete.
+      if (onPostStep) onPostStep();
       this.accumulator -= FIXED_DT_MS;
       steps++;
     }
