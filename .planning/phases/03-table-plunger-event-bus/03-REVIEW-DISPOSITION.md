@@ -13,15 +13,15 @@ findings:
     title: "Sensor events (lane/rollover/drain) report a stale point from an unrelated contact"
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "`addBall` steps the entire world outside the loop, which breaks the one-batch-per-step bus contract and determinism"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Render interpolation pairs balls by array index, so a respawn draws a one-frame streak from the drain to the plunger"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The flipper is drawn 0.07 m longer than its collider at both ends, so what is drawn is not what is hit"
   - id: WR-04
     severity: warning
@@ -51,9 +51,9 @@ findings:
     severity: info
     disposition: open
     title: "`drainEvents()` exposes the adapter's internal reused array as mutable"
-open: 8
+open: 5
 total: 12
-recorded: 2026-11-19T23:01:53.216Z
+recorded: 2026-11-19T23:02:20.531Z
 ---
 
 # Phase 03: Code Review Disposition
@@ -62,9 +62,9 @@ recorded: 2026-11-19T23:01:53.216Z
 |---------|----------|-------------|--------|
 | CR-01 | critical | fixed | 03-REVIEW-FIX.md |
 | CR-02 | critical | fixed | 03-REVIEW-FIX.md |
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
+| WR-01 | warning | fixed | 03-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 03-REVIEW-FIX.md |
+| WR-03 | warning | fixed | 03-REVIEW-FIX.md |
 | WR-04 | warning | fixed | 03-REVIEW-FIX.md |
 | WR-05 | warning | fixed | 03-REVIEW-FIX.md |
 | IN-01 | info | open | - |
