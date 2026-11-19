@@ -395,8 +395,14 @@ export class PlanckWorld implements PhysicsWorld {
     const evt = this.nextEventSlot();
     normalizeContact(evt, a, b);
     evt.normalImpulse = normalImpulse;
-    const wm = contact.getWorldManifold(this.scratchWm);
-    const first = wm && wm.pointCount > 0 ? wm.points[0] : undefined;
+    // Check the contact's OWN manifold first (03-REVIEW CR-02): for a 0-point
+    // manifold (every sensor overlap) Planck's `getWorldManifold` returns the
+    // shared `scratchWm` untouched, still holding the last solid contact's
+    // point, so its `pointCount` cannot be trusted here.
+    const first =
+      contact.getManifold().pointCount > 0
+        ? contact.getWorldManifold(this.scratchWm)?.points[0]
+        : undefined;
     if (first) {
       evt.point.x = first.x;
       evt.point.y = first.y;
@@ -766,6 +772,10 @@ export class PlanckWorld implements PhysicsWorld {
     let n = 0;
     for (let c = this.world.getContactList(); c; c = c.getNext()) {
       if (!c.isTouching()) continue;
+      // A sensor overlap is touching but has no manifold points, and Planck
+      // would hand back the stale shared `scratchWm` for it (03-REVIEW CR-02).
+      if (c.getFixtureA().isSensor() || c.getFixtureB().isSensor()) continue;
+      if (c.getManifold().pointCount === 0) continue;
       const wm = c.getWorldManifold(this.scratchWm);
       if (!wm) continue;
       for (let k = 0; k < wm.pointCount; k++) {
