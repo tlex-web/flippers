@@ -58,6 +58,8 @@ export class PlungerController {
   private readonly world: PlungerWorld;
   private readonly zone: PlungerZone;
   private phase: PlungerPhase = "idle";
+  /** Fixed steps spent charging since the press (an integer, never drifts). */
+  private heldSteps = 0;
   /** Raw charge in [0, PLUNGER_MAX_CHARGE]. */
   private charge = 0;
 
@@ -70,6 +72,7 @@ export class PlungerController {
   onPressEdge(): void {
     if (this.phase !== "idle") return;
     this.phase = "charging";
+    this.heldSteps = 0;
     this.charge = 0;
   }
 
@@ -93,10 +96,18 @@ export class PlungerController {
     this.reset();
   }
 
-  /** Advance one fixed step: while charging, raise the charge up to the cap. */
+  /**
+   * Advance one fixed step: while charging, raise the charge up to the cap. The
+   * charge is the integer step count times `PLUNGER_CHARGE_RATE * FIXED_DT`, not
+   * a running float sum: 80 additions of 0.0125 land at 0.9999999999999984, so a
+   * running sum would miss the cap at its nominal step and the meter would read
+   * just under full for one extra step.
+   */
   update(): void {
     if (this.phase !== "charging") return;
-    this.charge = Math.min(this.charge + PLUNGER_CHARGE_RATE * FIXED_DT, PLUNGER_MAX_CHARGE);
+    if (this.charge >= PLUNGER_MAX_CHARGE) return;
+    this.heldSteps++;
+    this.charge = Math.min(this.heldSteps * PLUNGER_CHARGE_RATE * FIXED_DT, PLUNGER_MAX_CHARGE);
   }
 
   /** Normalized charge in [0, 1]: the meter value AND the launch power. */
@@ -111,6 +122,7 @@ export class PlungerController {
 
   private reset(): void {
     this.phase = "idle";
+    this.heldSteps = 0;
     this.charge = 0;
   }
 
