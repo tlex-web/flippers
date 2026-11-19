@@ -203,7 +203,10 @@ function main(): void {
     const steps = loop.advance(deltaMs, onFixedStep, onPostStep);
 
     // Interpolate each ball between the loop's previous and current fixed states
-    // (smooth motion independent of the render rate).
+    // (smooth motion independent of the render rate). The two buffers are
+    // paired by index, which a respawn (or removeBall's swap-remove) breaks, so
+    // only lerp when both slots hold the SAME ball; otherwise draw the current
+    // state as-is rather than a ghost streak between two balls (03-REVIEW WR-02).
     const previous = loop.previous;
     const current = loop.current;
     const alpha = loop.alpha;
@@ -212,7 +215,8 @@ function main(): void {
     for (let i = 0; i < current.length; i++) {
       const c = current[i];
       if (!c) continue;
-      const p = previous[i] ?? c;
+      const prev = previous[i];
+      const p = prev && prev.id === c.id ? prev : c;
       const out = interpolated[i];
       if (!out) continue;
       out.id = c.id;
