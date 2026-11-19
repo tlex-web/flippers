@@ -9,6 +9,7 @@ import type {
   Segment,
   Vec2,
 } from "../physics/types";
+import type { ResolvedElement } from "../table/resolve";
 import { FlipperController } from "./flipper-controller";
 
 /**
@@ -85,6 +86,9 @@ class SpyWorld implements PhysicsWorld {
   }
   removeBall(): void {}
   getBalls(): readonly BallState[] {
+    return [];
+  }
+  getElements(): readonly ResolvedElement[] {
     return [];
   }
   getBoundarySegments(): readonly Segment[] {

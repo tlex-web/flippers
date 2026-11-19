@@ -721,6 +721,10 @@ export class PlanckWorld implements PhysicsWorld {
     entry.body.setAwake(true);
   }
 
+  getElements(): readonly ResolvedElement[] {
+    return this.elements;
+  }
+
   getBoundarySegments(): readonly Segment[] {
     return this.segments;
   }

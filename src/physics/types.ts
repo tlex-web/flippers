@@ -13,6 +13,8 @@
  * All quantities are SI: meters, meters/second, radians.
  */
 
+import type { ResolvedElement } from "../table/resolve";
+
 /** A plain 2D value (meters). Not a Planck `Vec2`; deliberately engine-free. */
 export interface Vec2 {
   readonly x: number;
@@ -129,7 +131,20 @@ export interface PhysicsWorld {
    * opposite motor signs). No-op for an unknown id.
    */
   setFlipperMotor(id: number, direction: number): void;
-  /** Static boundary/wall segments (built once; for debug-draw + containment). */
+  /**
+   * The id-keyed resolved table, built ONCE at construction from the table spec
+   * (D-01/D-02). Returns the SAME array on every call. It is the single source
+   * both the renderer and the containment harness derive from: the engine's
+   * colliders were built from it, the renderer draws it, and the containment
+   * boundary below is its solid subset, so what is hit and what is drawn
+   * cannot drift.
+   */
+  getElements(): readonly ResolvedElement[];
+  /**
+   * Back-compat shim over `getElements()`: the solid (non-sensor) segments of
+   * that same resolve, as the SAME object references (no second copy). This is
+   * what the swept-containment invariant and the soak gates read.
+   */
   getBoundarySegments(): readonly Segment[];
   /** Drain collision events accumulated since the last drain. */
   drainEvents(): CollisionEvent[];

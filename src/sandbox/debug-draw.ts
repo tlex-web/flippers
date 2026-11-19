@@ -1,8 +1,9 @@
 /**
  * THROWAWAY Canvas 2D debug renderer (D-06/D-07).
  *
- * Diagnosis-only: it draws the live physics world — boundary walls, the max-speed
- * test flipper, the ball at its INTERPOLATED position, the ball's velocity
+ * Diagnosis-only: it draws the live physics world — the table elements of the
+ * one resolved spec (`getElements()`: wall/chute polylines, dashed sensors,
+ * circles), the flipper bats, the ball at its INTERPOLATED position, the ball's velocity
  * vector, the current contact points, and a text HUD (FPS, physics-step Hz, total
  * kinetic energy). It reads world state ONLY through the engine-agnostic
  * `PhysicsWorld` interface — it NEVER imports Planck — so it is a pure consumer of
@@ -19,9 +20,10 @@ import type {
   BallState,
   FlipperState,
   PhysicsWorld,
-  Segment,
   Vec2,
 } from "../physics/types";
+import type { ResolvedElement } from "../table/resolve";
+import type { ElementKind } from "../table/spec";
 
 /** A ball snapshot at its drawn (interpolated) position — a mutable `BallState`. */
 export type InterpolatedBall = { -readonly [K in keyof BallState]: BallState[K] };
@@ -56,6 +58,29 @@ const COL_VEL = "#ef476f";
 const COL_CONTACT = "#06d6a0";
 const COL_HUD = "#e0e6f0";
 
+/**
+ * Per-kind element styling, built ONCE at module load (no per-frame object or
+ * string creation). Flipper mounts are never drawn from here (the live bats
+ * come from `getFlippers()`), but the record covers every kind so a new
+ * `ElementKind` is a compile error until it is styled.
+ */
+const KIND_STYLE: Readonly<
+  Record<ElementKind, { readonly stroke: string; readonly fill: string }>
+> = {
+  wall: { stroke: COL_WALL, fill: COL_WALL },
+  chute: { stroke: "#5c7fa8", fill: "#5c7fa8" },
+  drain: { stroke: "#ef476f", fill: "#ef476f" },
+  bumper: { stroke: "#f4a261", fill: "#7a4a24" },
+  slingshot: { stroke: "#e9c46a", fill: "#6b5a2a" },
+  lane: { stroke: "#2a9d8f", fill: "#2a9d8f" },
+  rollover: { stroke: "#8ac926", fill: "#3d5a12" },
+  flipper: { stroke: COL_FLIPPER, fill: COL_FLIPPER },
+};
+
+/** Dash pattern for sensors (CSS px), and the empty pattern restoring solid. */
+const SENSOR_DASH: number[] = [10, 8];
+const SOLID_DASH: number[] = [];
+
 interface Bounds {
   minX: number;
   minY: number;
@@ -63,20 +88,33 @@ interface Bounds {
   maxY: number;
 }
 
-function boundsOf(walls: readonly Segment[]): Bounds {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const w of walls) {
-    for (const p of [w.a, w.b]) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
+/** Extend `b` to include point (x, y). */
+function include(b: Bounds, x: number, y: number): void {
+  if (x < b.minX) b.minX = x;
+  if (x > b.maxX) b.maxX = x;
+  if (y < b.minY) b.minY = y;
+  if (y > b.maxY) b.maxY = y;
+}
+
+/** Bounds of every element's vertices, circle extents and mount pivots. */
+function boundsOf(elements: readonly ResolvedElement[]): Bounds {
+  const b: Bounds = {
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+  };
+  for (const el of elements) {
+    for (const v of el.vertices) include(b, v.x, v.y);
+    if (el.circle) {
+      const c = el.circle.center;
+      const r = el.circle.radius;
+      include(b, c.x - r, c.y - r);
+      include(b, c.x + r, c.y + r);
     }
+    if (el.mount) include(b, el.mount.pivot.x, el.mount.pivot.y);
   }
-  return { minX, minY, maxX, maxY };
+  return b;
 }
 
 export class DebugRenderer {
@@ -116,7 +154,7 @@ export class DebugRenderer {
    * into the viewport (preserving aspect ratio). Call on init and on resize.
    */
   resize(world: PhysicsWorld): void {
-    const b = boundsOf(world.getBoundarySegments());
+    const b = boundsOf(world.getElements());
     this.offX = PAD - b.minX * PIXELS_PER_METER;
     this.offY = PAD - b.minY * PIXELS_PER_METER;
     this.boxWpx = (b.maxX - b.minX) * PIXELS_PER_METER + PAD * 2;
@@ -158,7 +196,7 @@ export class DebugRenderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(this.offX, this.offY);
 
-    this.drawWalls(world.getBoundarySegments());
+    this.drawElements(world.getElements());
     this.drawFlippers(world.getFlippers());
     this.drawBalls(balls);
     this.drawVelocities(balls);
@@ -169,17 +207,51 @@ export class DebugRenderer {
     this.drawHud(hud);
   }
 
-  private drawWalls(walls: readonly Segment[]): void {
+  /**
+   * Draw the resolved table: one path per polyline (closed for loops), stroked
+   * in the color of its kind; sensors dashed; circles filled and stroked.
+   * Mounts are skipped (drawFlippers draws the live bats). No allocation: the
+   * styles and dash arrays are module-level and the geometry is read straight
+   * off the resolve.
+   */
+  private drawElements(elements: readonly ResolvedElement[]): void {
     const ctx = this.ctx;
-    ctx.strokeStyle = COL_WALL;
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
-    for (const w of walls) {
+    ctx.lineJoin = "round";
+    for (const el of elements) {
+      if (el.mount) continue;
+      const style = KIND_STYLE[el.kind];
+      ctx.strokeStyle = style.stroke;
+      ctx.setLineDash(el.sensor ? SENSOR_DASH : SOLID_DASH);
+      if (el.circle) {
+        const c = el.circle;
+        ctx.beginPath();
+        ctx.arc(
+          c.center.x * PIXELS_PER_METER,
+          c.center.y * PIXELS_PER_METER,
+          c.radius * PIXELS_PER_METER,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fillStyle = style.fill;
+        ctx.fill();
+        ctx.stroke();
+        continue;
+      }
+      const v = el.vertices;
+      const first = v[0];
+      if (!first) continue;
       ctx.beginPath();
-      ctx.moveTo(w.a.x * PIXELS_PER_METER, w.a.y * PIXELS_PER_METER);
-      ctx.lineTo(w.b.x * PIXELS_PER_METER, w.b.y * PIXELS_PER_METER);
+      ctx.moveTo(first.x * PIXELS_PER_METER, first.y * PIXELS_PER_METER);
+      for (let i = 1; i < v.length; i++) {
+        const p = v[i];
+        if (p) ctx.lineTo(p.x * PIXELS_PER_METER, p.y * PIXELS_PER_METER);
+      }
+      if (el.loop) ctx.closePath();
       ctx.stroke();
     }
+    ctx.setLineDash(SOLID_DASH);
   }
 
   private drawFlippers(flippers: readonly FlipperState[]): void {

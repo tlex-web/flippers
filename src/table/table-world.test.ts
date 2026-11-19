@@ -120,3 +120,44 @@ describe("TABLE_SPEC world", () => {
     expect(mounts()).toHaveLength(2);
   });
 });
+
+/**
+ * One-resolve identity proof (SC#4 structural, D-01/D-02): the containment
+ * boundary is not a second copy of the table geometry, it is the solid subset
+ * of the very element list the colliders were built from and the renderer
+ * draws, checked by object reference.
+ */
+describe("getElements() / getBoundarySegments() identity", () => {
+  it("every solid element segment appears by reference in the boundary, and nothing else", () => {
+    const world = makeTableWorld();
+    const elements = world.getElements();
+    const boundary = world.getBoundarySegments();
+    let solidCount = 0;
+    for (const el of elements) {
+      if (el.sensor || el.mount) continue;
+      for (const seg of el.segments) {
+        expect(boundary.some((b) => b === seg)).toBe(true);
+        solidCount++;
+      }
+    }
+    expect(solidCount).toBeGreaterThan(0);
+    expect(boundary.length).toBe(solidCount);
+  });
+
+  it("returns the identical element array on every call", () => {
+    const world = makeTableWorld();
+    expect(world.getElements()).toBe(world.getElements());
+  });
+
+  it("keeps every sensor segment out of the boundary", () => {
+    const world = makeTableWorld();
+    const boundary = world.getBoundarySegments();
+    const sensors = world.getElements().filter((el) => el.sensor);
+    expect(sensors.length).toBeGreaterThan(0);
+    for (const el of sensors) {
+      for (const seg of el.segments) {
+        expect(boundary.some((b) => b === seg)).toBe(false);
+      }
+    }
+  });
+});
