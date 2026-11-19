@@ -1,5 +1,5 @@
 /**
- * Engine-agnostic physics contract for Space Cadet Pinball.
+ * Engine-agnostic physics contract for Flippers.
  *
  * This is THE interface the whole phase and every downstream phase (2-6) build
  * on. The physics engine (Planck.js today — D-01) is reachable ONLY through this

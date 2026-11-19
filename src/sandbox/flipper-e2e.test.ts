@@ -107,7 +107,7 @@ function pressThenRelease(rig: ReturnType<typeof makeRig>, code: string): void {
   for (let i = 0; i < 30; i++) rig.step(); // return + settle at the rest/down limit
 }
 
-/** The two controllable sides, each with its original Space Cadet fidelity key. */
+/** The two controllable sides, each with its classic primary key. */
 const SIDES = [
   { name: "left", code: "KeyZ", idOf: (r: ReturnType<typeof makeRig>) => r.leftId },
   { name: "right", code: "Slash", idOf: (r: ReturnType<typeof makeRig>) => r.rightId },

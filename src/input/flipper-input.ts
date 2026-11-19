@@ -58,8 +58,8 @@ interface MutableEdges {
 
 /**
  * Static `event.code -> side` map from the D-09 multi-binding set. Built ONCE at
- * module load (never per instance/event). Original Space Cadet `Z` + `/` are kept
- * for fidelity; the far-edge Shift keys support the constant both-flipper cradle.
+ * module load (never per instance/event). The classic `Z` + `/` bindings are kept;
+ * the far-edge Shift keys support the constant both-flipper cradle.
  */
 const CODE_TO_SIDE: ReadonlyMap<string, FlipperSide> = new Map<string, FlipperSide>([
   ["KeyZ", "left"],

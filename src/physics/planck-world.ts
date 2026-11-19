@@ -61,8 +61,8 @@ const BALL_DENSITY = 1;
 // --- Wall material: low grip so the ball slides along walls like real steel. ---
 const WALL_FRICTION = 0.1;
 
-// --- Bounded play box (meters). Test scaffold only — the real Space Cadet
-//     table geometry is Phase 3. Sized so a 0.2 m ball is comfortably inside. ---
+// --- Bounded play box (meters). Test scaffold only — the real table
+//     geometry is Phase 3. Sized so a 0.2 m ball is comfortably inside. ---
 const WIDTH_M = 2;
 const HEIGHT_M = 3;
 
@@ -77,7 +77,7 @@ const WALL_ID = -1;
 
 // --- Two mirrored FEEL flippers on the throwaway 2×3 m test rig (D-11). Their
 //     placement is test-scaffold geometry (a replaceable local const like the
-//     Phase-1 single flipper), NOT real Space Cadet table layout — that is
+//     Phase-1 single flipper), NOT real table layout — that is
 //     Phase 3. Feel/torque/angle values live in constants.ts; only the pivots +
 //     capsule shape live here.
 //
