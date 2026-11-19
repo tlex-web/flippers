@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 03
 current_phase_name: Table, Plunger & Event Bus
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-11-19T21:23:21.105Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-11-19T21:38:02.575Z"
 last_activity: 2026-11-19
 last_activity_desc: Phase 03 execution started
-state_head: 2a1d1427a9616e72a8b01bf659989c2c8005070b
+state_head: c7b407e30879910ca17c61af04dc60d3dcb3f159
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 19
-  completed_plans: 14
+  completed_plans: 15
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-19)
 ## Current Position
 
 Phase: 03 (Table, Plunger & Event Bus) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-11-19 — Phase 03 execution started
 
@@ -73,6 +73,7 @@ Progress: [███░░░░░░░] 33%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 03 P01 | 13min | 3 tasks | 9 files |
+| Phase 03 P02 | 11min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-01: static table fixtures carry spec {kind,id} fixture userData on one static body; wall events now report element ids instead of -1
 - [Phase 03]: 03-01: arc step = min(2acos(1-ARC_CHORD_EPS/r), 2asin(BALL_RADIUS_M/2r)); ARC_CHORD_EPS=0.02 m, MIN_VERTEX_SPACING=0.01 m; self-intersecting chains rejected
 - [Phase 03]: 03-01: phase commits moved to branch gsd/phase-03-table-plunger-event-bus because the commit guard flags master as protected (allow_default_branch_commits unset)
+- [Phase 03]: 03-02: TABLE_SPEC flippers built at droop limit (left +PI/8, right 7PI/8) with construction motor 0 via MountSpec.restPose; referenceAngle/limits unchanged; PROOF_BOX_SPEC path untouched
+- [Phase 03]: 03-02: element id bands 0/1 mounts, 1xx walls, 2xx bumpers, 3xx slingshots, 4xx rollovers, 5xx lanes, 600 drain; right twins via mirrorPath (arc a -> PI - a)
+- [Phase 03]: 03-02: seeded flow proof draws 8 drops from one mulberry32(0x0302) stream over OPEN_FIELD_REGION; mutation-checked (trap pocket and sweep obstruction both go red)
 
 ### Pending Todos
 
@@ -134,6 +138,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-19T21:23:20.322Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-11-19T21:38:01.757Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
