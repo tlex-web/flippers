@@ -8,6 +8,7 @@ import {
   FLIPPER_UP_SPEED,
 } from "./constants";
 import { PlanckWorld } from "./planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 
 /**
  * Unit proof of the D-01 adaptive angular sub-stepping law in `PlanckWorld.step()`
@@ -65,7 +66,7 @@ describe("adaptive angular sub-stepping law (D-01) + cap (D-02) + off-switch", (
   });
 
   it("runs N = 1 sub-step when every flipper is at rest", () => {
-    const world = new PlanckWorld();
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
     settleAtRest(world);
     // One more step from the quiescent state: ω ≈ 0 → N = 1.
     world.step(FIXED_DT);
@@ -73,7 +74,7 @@ describe("adaptive angular sub-stepping law (D-01) + cap (D-02) + off-switch", (
   });
 
   it("runs N = 2 sub-steps when a flipper is driven to FLIPPER_UP_SPEED", () => {
-    const world = new PlanckWorld();
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
     settleAtRest(world);
 
     // Nudge off the rest limit into mid-arc (a bat jammed on a joint limit reads
@@ -97,7 +98,7 @@ describe("adaptive angular sub-stepping law (D-01) + cap (D-02) + off-switch", (
   });
 
   it("bounds N to the D-02 cap (≤ N_MAX) under a hard, sustained motor drive", () => {
-    const world = new PlanckWorld();
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
 
     // Drive BOTH flippers hard, alternating so they never jam on a limit (a bat
     // pinned against a limit reads ω ≈ 0 and would understate N). Assert the
@@ -118,7 +119,7 @@ describe("adaptive angular sub-stepping law (D-01) + cap (D-02) + off-switch", (
   });
 
   it("forces N = 1 with { subStepping: false } even at full flipper speed", () => {
-    const world = new PlanckWorld({ subStepping: false });
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC, subStepping: false });
 
     let peak = 0;
     for (let i = 0; i < 30; i++) {
@@ -134,7 +135,7 @@ describe("adaptive angular sub-stepping law (D-01) + cap (D-02) + off-switch", (
   });
 
   it("accumulates collision events across a sub-stepped (N ≥ 2) contacting step", () => {
-    const world = new PlanckWorld();
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
     world.setFlipperMotor(0, 0);
     world.setFlipperMotor(1, 0);
 

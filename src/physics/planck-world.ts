@@ -54,7 +54,7 @@ import type {
 } from "./types";
 import { resolve, type ResolvedElement } from "../table/resolve";
 import {
-  PROOF_BOX_SPEC,
+  TABLE_SPEC,
   type ElementKind,
   type TableSpec,
 } from "../table/spec";
@@ -227,8 +227,9 @@ export interface PlanckWorldOptions {
   /**
    * The table to build (D-01/D-05). Every static collider and both flipper
    * mounts come from this one spec via a single `resolve()`. Defaults to
-   * `PROOF_BOX_SPEC`, the harness fixture the Phase-1/2 proofs are calibrated
-   * against; the sandbox composition root passes `TABLE_SPEC`.
+   * `TABLE_SPEC`, our original playfield with its two spec-placed flippers.
+   * Harness proofs calibrated against the throwaway rig pass `PROOF_BOX_SPEC`
+   * by name, so this default never moves a calibrated proof.
    */
   readonly table?: TableSpec;
 }
@@ -313,7 +314,7 @@ export class PlanckWorld implements PhysicsWorld {
     });
     // ONE resolve (D-01): validates the spec (throws before any body exists on a
     // malformed descriptor) and is the single origin of every collider below.
-    this.elements = resolve(options?.table ?? PROOF_BOX_SPEC);
+    this.elements = resolve(options?.table ?? TABLE_SPEC);
     this.segments = this.buildTable(this.elements);
     this.world.on("post-solve", (contact, impulse) => {
       const a = tagOf(contact.getFixtureA());

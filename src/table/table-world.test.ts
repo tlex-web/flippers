@@ -133,6 +133,28 @@ describe("TABLE_SPEC world", () => {
 });
 
 /**
+ * Default world (03-04, D-05): a `PlanckWorld` built with no options is our
+ * original table, not the throwaway proof rig. Proofs that need the rig name
+ * `PROOF_BOX_SPEC` explicitly.
+ */
+describe("default world", () => {
+  it("a no-options PlanckWorld is TABLE_SPEC with its two spec-placed flippers", () => {
+    const world = new PlanckWorld();
+    expect(world.getElements().some((el) => el.kind === "chute")).toBe(true);
+    const flippers = world.getFlippers();
+    expect(flippers).toHaveLength(2);
+    const specMounts = mounts();
+    expect(specMounts).toHaveLength(2);
+    for (const m of specMounts) {
+      const f = flippers.find((x) => x.id === m.id);
+      expect(f).toBeDefined();
+      expect(f?.pivotX).toBe(m.pivot.x);
+      expect(f?.pivotY).toBe(m.pivot.y);
+    }
+  });
+});
+
+/**
  * One-resolve identity proof (SC#4 structural, D-01/D-02): the containment
  * boundary is not a second copy of the table geometry, it is the solid subset
  * of the very element list the colliders were built from and the renderer
