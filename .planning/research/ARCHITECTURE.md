@@ -1,5 +1,7 @@
 # Architecture Research
 
+> **Superseded framing (2026-11-19):** the project is now an original table. Space Cadet-specific layout, names, and mechanics below are background only, not targets.
+
 **Domain:** Browser real-time physics game (procedurally-rendered 2D pinball, Space Cadet clone)
 **Researched:** 2026-07-15
 **Confidence:** HIGH (loop/physics/rendering); MEDIUM (table-coordinate authoring, build-order sequencing)

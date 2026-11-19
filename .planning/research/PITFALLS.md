@@ -1,5 +1,7 @@
 # Pitfalls Research
 
+> **Superseded framing (2026-11-19):** the project is now an original table. Space Cadet-specific layout, names, and mechanics below are background only, not targets.
+
 **Domain:** Browser-based 2D pinball game — procedural rendering, custom real-time physics, Web Audio (Space Cadet clone)
 **Researched:** 2026-07-15
 **Confidence:** HIGH (physics + browser-loop pitfalls corroborated by Gaffer On Games, Box2D/Erin Catto CCD talk, Unity CCD docs, MDN; flipper-feel and Web Audio corroborated by domain sources)

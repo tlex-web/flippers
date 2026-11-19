@@ -1,5 +1,7 @@
 # Project Research Summary
 
+> **Superseded framing (2026-11-19):** the project is now an original table. Space Cadet-specific layout, names, and mechanics below are background only, not targets.
+
 **Project:** Space Cadet Pinball — Browser Edition
 **Domain:** Browser-based 2D pinball game (procedural rendering, synthesized audio, physics-critical)
 **Researched:** 2026-07-15

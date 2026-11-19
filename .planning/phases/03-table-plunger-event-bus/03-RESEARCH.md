@@ -2,11 +2,11 @@
 
 **Researched:** 2026-07-16
 **Domain:** 2D pinball table geometry (data-driven spec + curve resolver), Planck impulse-launch plunger, zero-alloc collision-event routing
-**Confidence:** HIGH (all decisive facts verified against the installed `planck@1.5.0` types, the in-repo code, and the SpaceCadetPinball source)
+**Confidence:** HIGH (all decisive facts verified against the installed `planck@1.5.0` types and the in-repo code)
 
 ## Summary
 
-Every hard decision for this phase is already locked (D-01..D-12 in `03-CONTEXT.md`), and the two most consequential ones — anchored-approximate clean-room geometry (D-03) and a scalar-impulse plunger (D-07) — are *confirmed correct* by primary sources: the original's colliders live in the copyrighted `CADET.DAT` binary (not the decompiled source), and `TPlunger` applies a scalar `Boost·(1 + RandFloat()·0.1)` velocity modifier on release (`MaxPullback = 100` in 3D-Pinball mode). This research therefore answers *how to implement them well*, not *whether they are right*.
+Every hard decision for this phase is already locked (D-01..D-12 in `03-CONTEXT.md`), and the two most consequential ones are an original clean-room layout (D-03) and a scalar-impulse plunger (D-07) — both lean on Planck built-ins and add no new tunneling surface. This research therefore answers *how to implement them well*, not *whether they are right*.
 
 The phase is a **pure client-side TypeScript refactor-plus-extension** with **zero new dependencies** — Planck 1.5.0 is already locked, Canvas 2D / Web Audio are browser-native, and the test stack (Vitest 4) is in place. The technical spine is a single engine-agnostic `src/table/spec.ts` descriptor module + a `resolve()` tessellator whose one output feeds three consumers (Planck fixtures, debug-draw, containment harness) — making SC#4's "what's hit == what's drawn" a *structural* guarantee and retiring the latent two-copies drift already sitting in `buildBoundary()`.
 
@@ -52,7 +52,7 @@ No new packages. This phase adds only in-repo TypeScript modules on top of the a
 |------------|-----------|----------|
 | Chain shapes for walls | Independent `Edge` fixtures | Edges cause ghost-collision snagging at joints unless you hand-wire `setPrevVertex`/`setNextVertex`; Chain does it for you (see Pitfall 1) |
 | Hand-authored polylines | `poly-decomp` concave decomposition | CLAUDE.md explicitly rejects poly-decomp; Chain/Edge/Circle sidestep decomposition entirely |
-| Scalar-impulse plunger | Prismatic-joint spring body | REJECTED (D-07): less faithful AND reintroduces the fast-thin-moving-body tunneling class |
+| Scalar-impulse plunger | Prismatic-joint spring body | REJECTED (D-07): reintroduces the fast-thin-moving-body tunneling class |
 | Hand-rolled router | RxJS / EventEmitter / mitt | Allocates per event + per subscription; breaks the zero-alloc + determinism contract |
 | Hand-rolled plunger FSM | XState | CLAUDE.md forbids state-machine libs for ~4-state FSMs |
 
@@ -188,13 +188,13 @@ function arcSegments(cx, cy, r, a0, a1): Vec2[] {
 Tie ε to `BALL_RADIUS_M` (0.2 m) so tessellation resolution scales if the table scale changes. ε = 0.02 keeps arc segment counts modest (a 90° arc of r=1 m → ~10 segments) while staying well under the ball radius.
 
 ### Pattern 3: Scalar hold-to-charge → proportional impulse (D-07/D-08/D-09)
-**What:** Faithful `TPlunger` model — accumulate a scalar while Space is held, apply a proportional impulse on release. `[CITED: k4zmu2a/SpaceCadetPinball TPlunger.cpp]` confirms: `Boost += PullbackIncrement` per tick, capped at `MaxPullback` (=100 in 3D mode), release applies `Boost·(1 + RandFloat()·0.1)` as a **velocity modifier**.
+**What:** Hold-to-charge scalar plunger (our design, D-07) — accumulate a scalar charge per fixed step while Space is held, cap it at a max, apply a proportional impulse on release.
 **Planck units:** `applyLinearImpulse(impulse, point, wake)` takes a world impulse in **kg·m/s = mass·Δv** `[VERIFIED: planck.d.ts:1786-1795]`. From rest, `Δv = impulse / mass`. Ball mass = `BALL_DENSITY · π · r² = 1 · π · 0.2² ≈ 0.1257 kg`. To launch at target speed `v`: `|impulse| = 0.1257 · v`. Apply at the ball's **center of mass** (`point = body.getWorldCenter()`) so it is pure linear — no spin.
 **Example:**
 ```typescript
 // constants.ts — HMR-tunable (D-08). Tune impulse magnitude directly in kg·m/s.
 export const PLUNGER_CHARGE_RATE = 2.5;          // charge units/sec while held (→ full in ~0.4s)
-export const PLUNGER_MAX_CHARGE = 1.0;           // normalized cap (mirrors MaxPullback)
+export const PLUNGER_MAX_CHARGE = 1.0;           // normalized cap
 export const PLUNGER_MIN_IMPULSE = 0.4;          // kg·m/s at zero charge (≈ 3.2 m/s launch)
 export const PLUNGER_MAX_IMPULSE = 1.4;          // kg·m/s at full charge (≈ 11 m/s launch)
 export const PLUNGER_AXIS = { x: 0, y: -1 } as const; // up the chute (−y = up-field); tune to chute tilt
@@ -207,7 +207,7 @@ onReleaseEdge(ballId: number): void {
   this.charge = 0; this.phase = "idle";
 }
 ```
-**Determinism note:** the original's `RandFloat()·0.1` (0–10% jitter) breaks replay if backed by `Math.random`. Default to **no jitter** (deterministic, and better for the Phase-6 skill-shot which wants readable charge→power); if flavor jitter is later wanted, back it with the existing seeded `mulberry32`, never the global RNG.
+**Determinism note:** optional launch jitter breaks replay if backed by `Math.random`. Default to **no jitter** (deterministic, and better for the Phase-6 skill-shot which wants readable charge→power); if flavor jitter is later wanted, back it with the existing seeded `mulberry32`, never the global RNG.
 **Adapter hook (D-09):**
 ```typescript
 // planck-world.ts — generic, NOT plunger-specific (Phase-4 nudge reuses it)
@@ -268,12 +268,12 @@ evt.elementId = elemTag.id;
 |---------|-------------|-------------|-----|
 | Smooth ball traversal across wall joints | Manual ghost-vertex bookkeeping on per-Edge fixtures | Planck `Chain(verts, loop)` | Chain stores prev/next ghost vertices internally → no ghost collisions `[VERIFIED: planck.d.ts:2608-2646]` |
 | Concave table outline | poly-decomp convex decomposition | Chain loop + Circle bumpers | CLAUDE.md rejects poly-decomp; Chain handles concave boundaries natively |
-| Launch impulse | Prismatic spring plunger body | `applyLinearImpulse` at center of mass | D-07: spring is less faithful AND re-adds a tunneling class |
+| Launch impulse | Prismatic spring plunger body | `applyLinearImpulse` at center of mass | D-07: spring re-adds a tunneling class |
 | Event pub-sub | RxJS / EventEmitter / mitt | Pooled `drainEvents()` + thin router | Libraries allocate per event/subscription; break zero-alloc + determinism |
 | Plunger state machine | XState | Hand-rolled ~4-state FSM (copy FlipperController) | CLAUDE.md forbids FSM libs for trivial FSMs |
 | Continuous collision for the launch | Any new anti-tunnel machinery | Existing `setBullet`+`continuousPhysics` | Soak already proved tunnel-proof to ~58 m/s; max launch ~11 m/s is far under (D-07) |
 
-**Key insight:** faithfulness points at *simplicity* here — the original's plunger and geometry are both simpler than the "physical" alternatives, so leaning on Planck's built-ins (Chain, applyLinearImpulse, existing CCD) is both less code and more faithful.
+**Key insight:** simplicity wins here — the scalar plunger and hand-built geometry are both simpler than the "physical" alternatives, so leaning on Planck's built-ins (Chain, applyLinearImpulse, existing CCD) is less code and fewer failure modes.
 
 ## Runtime State Inventory
 
@@ -314,7 +314,7 @@ This phase is an **in-repo code refactor** (getBoundarySegments→getElements, C
 
 ### Pitfall 4: Table rescale silently re-tunes Phase-2 feel
 **What goes wrong:** deriving table size from real pinball dimensions (instead of from the proven flipper/ball constants) would change flipper-to-width proportion and force feel re-tuning — the exact risk D-04 avoids.
-**How to avoid:** size `WIDTH_M` so `FLIPPER_LENGTH_M=0.5` stays ~1/6–1/7 of width (→ ~3–4 m wide × ~5–7 m tall). Move flipper *pivots* into the spec; leave every feel constant (length, half-width, tip radius, motor speeds, torque, angle limits, incline) **byte-identical**. Note: the ball will read proportionally chunkier than the original (~1/16 of width vs the original's ~1/40) — an accepted D-04 tradeoff, since re-tuning feel is the larger risk.
+**How to avoid:** size `WIDTH_M` so `FLIPPER_LENGTH_M=0.5` stays ~1/6–1/7 of width (→ ~3–4 m wide × ~5–7 m tall). Move flipper *pivots* into the spec; leave every feel constant (length, half-width, tip radius, motor speeds, torque, angle limits, incline) **byte-identical**. Note: the ball reads proportionally large relative to table width (~1/16) — an accepted D-04 tradeoff, since re-tuning feel is the larger risk.
 **Warning signs:** anyone edits `FLIPPER_*` or `INCLINE_DEG` "to fit the table" — that is the smell.
 
 ### Pitfall 5: Applying impulse to a removed/sleeping ball, or mid-step
@@ -387,19 +387,19 @@ this.world.on("begin-contact", (contact) => {
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | Table scale ~3–4 m × ~5–7 m keeps every feature in Planck's 0.1–10 m band | Pitfall 4 / D-04 | Low — derived from proven constants; wide margin. Confirm final W/H by eye against reference (Claude's discretion). |
+| A1 | Table scale ~3–4 m × ~5–7 m keeps every feature in Planck's 0.1–10 m band | Pitfall 4 / D-04 | Low — derived from proven constants; wide margin. Confirm final W/H by eye in the debug render (Claude's discretion). |
 | A2 | Chord-error ε ≈ 0.02 m gives smooth-enough colliders without segment explosion | Pattern 2 | Low — tunable; the soak will catch facet-catch/tunnel if too coarse. |
 | A3 | Starting impulse band 0.4–1.4 kg·m/s (≈3–11 m/s launch) clears the chute against 4.6 m/s² in-plane gravity | Pattern 3 | Low — tune by feel via HMR; well under the 58 m/s soak ceiling. |
-| A4 | Anchor fractions read off the public GameFAQs/StrategyWiki diagrams are sufficient for "original relative positions" (SC#1) | D-03 | Medium — approximate by design; positions are Claude's discretion, judged by eye. This is the intended anchored-approximate path, not exact transcription. |
+| A4 | An original layout designed in 03-01 for good ball flow satisfies SC#1 | D-03 | Low — positions are Claude's discretion, judged by eye in the debug render for flow and readability. |
 | A5 | Adding `onPostStep` to `FixedStepLoop` is the cleanest router seam | Pattern 4 | Low — fallback (pre-step drain of previous batch) needs zero loop change and is equally deterministic. |
 | A6 | Inert D-06 elements are modeled as sensors (needing begin-contact) vs solid circles is a per-element choice | Pitfall 1 | Low — both are valid per D-06; the dual emit path supports either. |
 
-**A4 is the one to surface for user confirmation** if fidelity of relative positions matters more than the phase assumes — but D-03 already locked "anchored-approximate, judged by eye" as the intended path.
+**A4 needs no separate confirmation** — D-03 locks an original layout judged by eye for flow.
 
 ## Open Questions (RESOLVED)
 
 1. **Where exactly does the chute meet the playfield, and what is the chute axis vector?**
-   - What we know: the plunger launches up-field (−y); the chute is a narrow lane on one side (right, per the original).
+   - What we know: the plunger launches up-field (−y); the chute is a narrow lane on one side (right side, per D-03).
    - What's unclear: the precise entry point and any lateral tilt of the chute axis.
    - Recommendation: author the chute as a spec element with an explicit `axis` (or derive it from the chute polyline direction); tune `PLUNGER_AXIS` by feel. Claude's discretion (D-03).
    - **RESOLVED:** Claude's discretion per D-03 - the chute element + up-field axis are authored in 03-01 Task 2 (`TABLE_SPEC`); `PLUNGER_AXIS` is tuned in 03-03 Task 2 and consumed by 03-03 Task 3's controller launch.
@@ -502,10 +502,8 @@ No network, no third-party runtime input, no data at rest → the classic web th
 - `node_modules/planck/dist/planck.d.ts` — `applyLinearImpulse(impulse, point, wake)` impulse in N·s = kg·m/s (1786-1795); `ChainShape(vertices, loop)` + ghost vertices (2608-2646); `EdgeShape.setPrevVertex/setNextVertex` (2449-2508); `isSensor`/`setSensor` (966,1033,1037); contact events `begin-contact`/`pre-solve`/`post-solve` (2152-2205). `[VERIFIED]`
 - In-repo code read directly: `types.ts`, `planck-world.ts`, `constants.ts`, `flipper-input.ts`, `flipper-controller.ts`, `main.ts`, `debug-draw.ts`, `containment.ts`, `soak.ts`, `loop.ts`, `package.json`, `vitest*.config.ts`, and the e2e/smoke tests. Grep-verified `.aId/.bId` write-only, `getBoundarySegments` 10 call sites. `[VERIFIED]`
 - `.planning/phases/03-table-plunger-event-bus/03-CONTEXT.md` — locked decisions D-01..D-12. `[CITED]`
-- k4zmu2a/SpaceCadetPinball `TPlunger.cpp` — `Boost += PullbackIncrement` (cap `MaxPullback`=100 in 3D mode), release impulse `Boost·(1 + RandFloat()·0.1)`. `[CITED: github.com/k4zmu2a/SpaceCadetPinball]`
 
 ### Secondary (MEDIUM confidence)
-- GameFAQs table-diagram + StrategyWiki Gameplay — anchor positions (chute, bumper cluster, flippers, drain) for the anchored-approximate transcription. Positions read by eye (Claude's discretion, D-03). `[CITED: gamefaqs.gamespot.com/pc/563047 · strategywiki.org/wiki/3D_Pinball_for_Windows:_Space_Cadet]`
 - gameprogrammingpatterns.com Event Queue — dispatch-at-a-fixed-seam rationale for the router. `[CITED]`
 
 ### Tertiary (LOW confidence)
@@ -516,9 +514,9 @@ No network, no third-party runtime input, no data at rest → the classic web th
 **Confidence breakdown:**
 - Standard stack: HIGH — no new packages; every API verified against installed `planck@1.5.0` types.
 - Architecture: HIGH — spec/resolve/router patterns verified against in-repo conventions and the exact call-site blast radius; the one non-obvious fact (sensors ≠ post-solve) is verified from the engine surface.
-- Plunger model: HIGH — TPlunger behavior confirmed from source; Planck impulse units confirmed from types.
-- Table transcription: MEDIUM — deliberately approximate (D-03); anchor precision is by-eye discretion, not a verifiable constant.
+- Plunger model: HIGH — scalar-charge → impulse is our design choice (D-07); Planck impulse units confirmed from types.
+- Table layout: MEDIUM — original design (D-03); positions are by-eye discretion, not a verifiable constant.
 - Pitfalls: HIGH — each is grounded in either the engine surface or the existing codebase.
 
 **Research date:** 2026-07-16
-**Valid until:** ~2026-08-15 (stack is locked/stable; only the table anchors are judgment-based and won't "expire").
+**Valid until:** ~2026-08-15 (stack is locked/stable; only the table layout positions are judgment-based and won't "expire").

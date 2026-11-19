@@ -1,5 +1,7 @@
 # Feature Research
 
+> **Superseded framing (2026-11-19):** the project is now an original table. Space Cadet-specific layout, names, and mechanics below are background only, not targets.
+
 **Domain:** Browser pinball game (faithful clone of *3D Pinball for Windows – Space Cadet*)
 **Researched:** 2026-07-15
 **Confidence:** HIGH (core pinball mechanics + Space Cadet features cross-verified across StrategyWiki, GameFAQs, Neoseeker rule sheets; MEDIUM on a few exact point values and multiball version nuances)

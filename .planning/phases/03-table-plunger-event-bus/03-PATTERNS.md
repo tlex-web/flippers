@@ -31,7 +31,7 @@
 **Analog A (const/doc discipline):** `src/physics/constants.ts`
 **Analog B (engine-agnostic value types):** `src/physics/types.ts`
 
-**Reference-anchored, HMR-tunable module docblock to mirror** (`constants.ts:1-22`) — the spec is "the geometric sibling of `constants.ts`" (D-01). Copy this exact framing: plain exported consts, "single source of truth," behavior-only anchoring, HMR "change a number, feel it."
+**Reference-anchored, HMR-tunable module docblock to mirror** (`constants.ts:1-22`) — the spec is "the geometric sibling of `constants.ts`" (D-01). Copy this exact framing: plain exported consts, "single source of truth," documented per-const rationale, HMR "change a number, feel it."
 
 **Derived-const pattern to copy** (`constants.ts:34-41`) — the spec must derive the right flipper cluster from the left and size drains/lanes from `BALL_RADIUS_M` the way `IN_PLANE_GRAVITY` derives from `INCLINE_DEG`:
 ```typescript

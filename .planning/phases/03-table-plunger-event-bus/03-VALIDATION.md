@@ -78,7 +78,7 @@ updated: 2026-07-16
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Layout reads as Space Cadet in original relative positions | TBL-01 / SC#1 | Anchored-approximate fidelity is a by-eye judgment (D-03) — no verifiable constant | 03-05 Task 3 checkpoint: `npm run dev`, confirm chute/bumper cluster/lanes/walls/drain funnel + inverted-V flippers by eye |
+| Layout reads clearly and plays with good flow | TBL-01 / SC#1 | Original-layout flow and readability is a by-eye judgment (D-03) — no verifiable constant | 03-05 Task 3 checkpoint: `npm run dev`, confirm chute/bumper cluster/lanes/walls/drain funnel + inverted-V flippers read clearly and the ball flows well by eye |
 | Charge meter is READABLE before release | LNCH-02 / SC#3 | Visual readability of the throwaway meter is a perception judgment | 03-05 Task 3 checkpoint: hold Space, confirm the meter fills smoothly and longer holds visibly read as more charge |
 
 *The DATA behind both (resolve identity, getCharge clamp/monotonic) is automated; only the visual read is manual.*
