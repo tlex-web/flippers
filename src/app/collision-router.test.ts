@@ -139,3 +139,28 @@ describe("CollisionRouter (D-11)", () => {
     expect(delivered).toBeGreaterThan(0);
   });
 });
+
+describe("CollisionRouter fault isolation (03-REVIEW WR-04)", () => {
+  it("a throwing listener is reported, and every other listener still gets the whole batch", () => {
+    const batch = [record(0), record(1), record(2)];
+    const errors: { error: unknown; event: CollisionEvent }[] = [];
+    const router = new CollisionRouter(spySource(batch).source, (error, event) => {
+      errors.push({ error, event });
+    });
+    const before: number[] = [];
+    const after: number[] = [];
+    const boom = new Error("consumer failed");
+    router.register((e) => before.push(e.elementId));
+    router.register((e) => {
+      if (e.elementId === 201) throw boom;
+    });
+    router.register((e) => after.push(e.elementId));
+
+    expect(() => router.dispatch()).not.toThrow();
+    expect(before).toEqual([200, 201, 202]);
+    expect(after).toEqual([200, 201, 202]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.error).toBe(boom);
+    expect(errors[0]?.event).toBe(batch[1]);
+  });
+});

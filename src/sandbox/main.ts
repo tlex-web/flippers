@@ -193,6 +193,9 @@ function main(): void {
   let hudElapsedMs = 0;
 
   function frame(nowMs: number): void {
+    // Re-arm first (03-REVIEW WR-04): a throw anywhere below must cost one
+    // frame, never stop the sandbox for good.
+    requestAnimationFrame(frame);
     const deltaMs = nowMs - lastTimeMs;
     lastTimeMs = nowMs;
 
@@ -267,7 +270,6 @@ function main(): void {
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
     renderer.draw(world, interpolated, hud, plunger.getCharge());
-    requestAnimationFrame(frame);
   }
 
   requestAnimationFrame(frame);

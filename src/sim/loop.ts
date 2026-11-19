@@ -82,13 +82,17 @@ export class FixedStepLoop {
       if (onStep) onStep();
       this.world.step(FIXED_DT);
       this.snapshotInto(this.currentStates);
-      // Bottom of the fixed step (D-11): this step's events are complete.
-      if (onPostStep) onPostStep();
+      // Account for the simulated step BEFORE the post-step hook (03-REVIEW
+      // WR-04): if a consumer throws, the step it already ran is still
+      // subtracted and counted, so the accumulator never re-runs it.
       this.accumulator -= FIXED_DT_MS;
       steps++;
+      this.totalStepsRun++;
+      this.alphaValue = this.accumulator / FIXED_DT_MS;
+      // Bottom of the fixed step (D-11): this step's events are complete.
+      if (onPostStep) onPostStep();
     }
 
-    this.totalStepsRun += steps;
     this.alphaValue = this.accumulator / FIXED_DT_MS;
     return steps;
   }

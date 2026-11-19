@@ -145,3 +145,22 @@ describe("FixedStepLoop tab-blur / large-dt clamp (threat T-01-02)", () => {
     }
   });
 });
+
+describe("a throwing post-step hook leaves the accumulator consistent (03-REVIEW WR-04)", () => {
+  it("the step that ran is subtracted and counted before onPostStep throws", () => {
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
+    world.addBall({ x: 1, y: 1 });
+    const loop = new FixedStepLoop(world);
+    const throwing = (): void => {
+      throw new Error("consumer failed");
+    };
+    expect(() => loop.advance(STEP_MS * 1.5, undefined, throwing)).toThrow("consumer failed");
+    expect(loop.totalSteps).toBe(1);
+    expect(loop.accumulatorMs).toBeCloseTo(STEP_MS * 0.5, 9);
+    // The next frame does not re-run the step: with half a step pending, one
+    // more frame's step runs exactly one (it would be two had the thrown step
+    // been left on the accumulator).
+    expect(loop.advance(STEP_MS)).toBe(1);
+    expect(loop.totalSteps).toBe(2);
+  });
+});

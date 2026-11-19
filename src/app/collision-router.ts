@@ -16,6 +16,11 @@
  * - records are pooled and mutated on the next step, so copy out anything kept
  *   past it, and never retain the record itself;
  * - never call back into the world: the bus is strictly one-way.
+ *
+ * Fault isolation (03-REVIEW WR-04): a listener that throws is reported through
+ * the router's error handler and skipped for that one event; every other
+ * listener still receives the whole batch, and the throw never escapes
+ * `dispatch()` into the fixed-step loop (which would freeze the game).
  */
 
 import type { CollisionEvent, PhysicsWorld } from "../physics/types";
@@ -23,14 +28,28 @@ import type { CollisionEvent, PhysicsWorld } from "../physics/types";
 /** One consumer of the collision stream. */
 export type CollisionListener = (e: CollisionEvent) => void;
 
+/** Receives anything a listener throws during `dispatch()`. */
+export type ListenerErrorHandler = (error: unknown, event: CollisionEvent) => void;
+
+/** Default: report and keep the loop running. */
+const reportListenerError: ListenerErrorHandler = (error) => {
+  console.error("[bus] collision listener threw", error);
+};
+
 export class CollisionRouter {
   private readonly source: Pick<PhysicsWorld, "drainEvents">;
 
   /** Registered once at startup; insertion order is dispatch order. */
   private readonly listeners: CollisionListener[] = [];
 
-  constructor(source: Pick<PhysicsWorld, "drainEvents">) {
+  private readonly onListenerError: ListenerErrorHandler;
+
+  constructor(
+    source: Pick<PhysicsWorld, "drainEvents">,
+    onListenerError: ListenerErrorHandler = reportListenerError,
+  ) {
     this.source = source;
+    this.onListenerError = onListenerError;
   }
 
   /** Append a listener. Dispatch order is registration order, fixed. */
@@ -51,7 +70,12 @@ export class CollisionRouter {
       if (!e) continue;
       for (let j = 0; j < listeners.length; j++) {
         const listener = listeners[j];
-        if (listener) listener(e);
+        if (!listener) continue;
+        try {
+          listener(e);
+        } catch (error) {
+          this.onListenerError(error, e);
+        }
       }
     }
     return batch.length;
