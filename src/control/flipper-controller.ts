@@ -22,9 +22,17 @@
  * stops advancing (|delta| < ANGLE_SETTLE_EPS) after it has actually moved. Under
  * motor +1 the absolute `getFlippers()` angle rises for BOTH flippers and under
  * -1 it falls, so "stopped moving while driven" == "pinned at the limit".
+ *
+ * Interface slice: the FSM depends only on `FlipperWorld` (`getFlippers` and
+ * `setFlipperMotor`), never the full `PhysicsWorld`. Growth elsewhere on the
+ * interface (03-05 adds `applyImpulse`) therefore never ripples into this
+ * module or its spy-world tests. `PlanckWorld` satisfies it structurally.
  */
 
 import type { PhysicsWorld } from "../physics/types";
+
+/** The slice of `PhysicsWorld` the flipper FSM actually reads and drives. */
+export type FlipperWorld = Pick<PhysicsWorld, "getFlippers" | "setFlipperMotor">;
 
 /** The four observable per-flipper states (criterion #3: explicit FSM). */
 export type FlipperPhase = "resting" | "flipping-up" | "held-up" | "returning";
@@ -49,10 +57,10 @@ interface FlipperFsm {
 }
 
 export class FlipperController {
-  private readonly world: PhysicsWorld;
+  private readonly world: FlipperWorld;
   private readonly fsms: FlipperFsm[] = [];
 
-  constructor(world: PhysicsWorld) {
+  constructor(world: FlipperWorld) {
     this.world = world;
     // Seed one FSM per live flipper (mirrors FixedStepLoop seeding snapshots in
     // its constructor). Built once — never re-created per update.

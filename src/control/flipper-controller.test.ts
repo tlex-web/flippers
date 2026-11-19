@@ -1,16 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import type {
-  BallId,
-  BallState,
-  CollisionEvent,
-  FlipperState,
-  PhysicsWorld,
-  Segment,
-  Vec2,
-} from "../physics/types";
-import type { ResolvedElement } from "../table/resolve";
-import { FlipperController } from "./flipper-controller";
+import type { FlipperState } from "../physics/types";
+import { FlipperController, type FlipperWorld } from "./flipper-controller";
 
 /**
  * Unit proof for the engine-agnostic flipper FSM (D-05). It drives the
@@ -26,8 +17,8 @@ interface MotorCall {
   readonly direction: number;
 }
 
-/** A spy world implementing the interface; only flippers/motor matter here. */
-class SpyWorld implements PhysicsWorld {
+/** A spy world implementing the FSM's interface slice (flippers + motor only). */
+class SpyWorld implements FlipperWorld {
   readonly motorCalls: MotorCall[] = [];
   private readonly flippers: {
     id: number;
@@ -77,28 +68,6 @@ class SpyWorld implements PhysicsWorld {
   }
   setFlipperMotor(id: number, direction: number): void {
     this.motorCalls.push({ id, direction });
-  }
-
-  // --- Unused stubs (the FSM never calls these; params omitted deliberately) ---
-  step(): void {}
-  addBall(): BallId {
-    return 0;
-  }
-  removeBall(): void {}
-  getBalls(): readonly BallState[] {
-    return [];
-  }
-  getElements(): readonly ResolvedElement[] {
-    return [];
-  }
-  getBoundarySegments(): readonly Segment[] {
-    return [];
-  }
-  drainEvents(): CollisionEvent[] {
-    return [];
-  }
-  getContactPoints(): readonly Vec2[] {
-    return [];
   }
 }
 
