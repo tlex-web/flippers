@@ -31,13 +31,30 @@ interface ElementBase {
 }
 
 /**
- * A polyline collider: straight vertices joined in order. `loop` closes the
+ * A circular arc inside a polyline path: center, radius, and start/end angles
+ * in radians in the y-down frame (point = center + radius·(cos a, sin a), so
+ * increasing angle turns clockwise on screen). `resolve()` tessellates it in
+ * place into chords no coarser than the ball-radius-tied bounds in
+ * `./resolve` (ARC_CHORD_EPS, BALL_RADIUS_M). Sweeps from `a0` to `a1`.
+ */
+export interface ArcNode {
+  readonly center: Vec2;
+  readonly radius: number;
+  readonly a0: number;
+  readonly a1: number;
+}
+
+/** One node of a polyline path: a straight vertex or an arc. */
+export type PathNode = Vec2 | ArcNode;
+
+/**
+ * A polyline collider: vertices and arcs joined in order. `loop` closes the
  * last vertex back to the first; `sensor` makes it a non-solid trigger (drain
  * line, lane, rollover) that reports contact but never deflects the ball.
  */
 export interface PolylineSpec extends ElementBase {
   readonly kind: Exclude<ElementKind, "flipper">;
-  readonly path: readonly Vec2[];
+  readonly path: readonly PathNode[];
   readonly loop?: boolean;
   readonly sensor?: boolean;
 }
@@ -178,7 +195,7 @@ const LEFT_TROUGH: readonly Vec2[] = [
 ];
 
 /**
- * Our original table (D-03). Outer cabinet with chamfered top corners, a
+ * Our original table (D-03). Outer cabinet with rounded top corners, a
  * right-side launch chute, a center-bottom drain funnel, and two lower flippers
  * in a classic inverted-V whose droop-limit tip gap (~0.46 m) is wider than the
  * 0.40 m ball. Right-hand elements are derived from their left twins with
@@ -190,10 +207,10 @@ export const TABLE_SPEC: TableSpec = [
     kind: "wall",
     path: [
       { x: 0, y: HEIGHT_M },
-      { x: 0, y: 1.0 },
-      { x: 1.0, y: 0 },
-      { x: 2.4, y: 0 },
-      { x: WIDTH_M, y: 1.0 },
+      // Rounded top-left corner: (0, 1.0) sweeping up to (1.0, 0).
+      { center: { x: 1.0, y: 1.0 }, radius: 1.0, a0: Math.PI, a1: 1.5 * Math.PI },
+      // Rounded top-right corner: (2.4, 0) sweeping down to (3.4, 1.0).
+      { center: { x: 2.4, y: 1.0 }, radius: 1.0, a0: -0.5 * Math.PI, a1: 0 },
       { x: WIDTH_M, y: HEIGHT_M },
     ],
     loop: true,

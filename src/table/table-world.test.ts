@@ -5,6 +5,7 @@ import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { Vec2 } from "../physics/types";
 import {
+  DRAIN_Y,
   HEIGHT_M,
   PLAYFIELD_CENTER_X,
   PLUNGER_REST,
@@ -97,16 +98,11 @@ describe("TABLE_SPEC world", () => {
     const world = makeTableWorld();
     const walls = world.getBoundarySegments();
     expect(walls.length).toBeGreaterThan(0);
-    const drain = TABLE_SPEC.find((el) => el.kind === "drain");
-    expect(drain && "path" in drain).toBe(true);
-    if (drain && "path" in drain) {
-      const [d0, d1] = drain.path;
-      for (const s of walls) {
-        const isDrain =
-          (s.a.x === d0?.x && s.a.y === d0?.y && s.b.x === d1?.x && s.b.y === d1?.y) ||
-          (s.a.x === d1?.x && s.a.y === d1?.y && s.b.x === d0?.x && s.b.y === d0?.y);
-        expect(isDrain).toBe(false);
-      }
+    // The drain sensor is the only horizontal line on DRAIN_Y; no solid
+    // boundary segment may lie along it.
+    expect(TABLE_SPEC.some((el) => el.kind === "drain")).toBe(true);
+    for (const s of walls) {
+      expect(s.a.y === DRAIN_Y && s.b.y === DRAIN_Y).toBe(false);
     }
     for (const s of walls) {
       for (const p of [s.a, s.b]) {
