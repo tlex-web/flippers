@@ -1,11 +1,12 @@
-# Phase 4 — UI Review
+# Phase 4 — UI Review (re-audit after 04-09 / 04-10)
 
 **Audited:** 2026-11-20
-**Baseline:** abstract 6-pillar standards (no UI-SPEC.md), calibrated to the Phase 3 review
-**Screenshots:** not captured (no dev server on 3000, 5173 or 8080; code-only audit)
+**Baseline:** abstract 6-pillar standards (no UI-SPEC.md)
+**Screenshots:** not captured. The dev-server probe was blocked by the sandbox and never ran, so this is a code-only audit.
 **Interaction captures:** off (workflow.ui_interaction_capture is false); interaction findings are code-derived
+**Previous review:** 16/24 (after 04-01..04-08)
 
-Scope: the throwaway sandbox plus the new DOM HUD. Files: `src/ui/hud.ts`, `index.html`, `src/sandbox/debug-draw.ts`, `src/sandbox/main.ts` (grep).
+Scope: `index.html`, `src/ui/hud.ts`, `src/sandbox/debug-draw.ts` (grep), `src/sandbox/main.ts` (grep). Plan 04-09 was physics only and has no UI surface.
 
 ---
 
@@ -13,100 +14,100 @@ Scope: the throwaway sandbox plus the new DOM HUD. Files: `src/ui/hud.ts`, `inde
 
 | Pillar | Score | Key Finding |
 |--------|-------|-------------|
-| 1. Copywriting | 3/4 | Status copy is terse and clear. The ball line is dropped in game-over, and the controls hint is dense and hard to scan. |
-| 2. Visuals | 3/4 | The HUD is a clear panel (32px score vs 16px lines). The panel is fixed top-left and can overlap the table. The lit rollover is distinct only by width and color. |
-| 3. Color | 2/4 | Hardcoded hex everywhere with no tokens. `#ef476f` still carries three meanings, and the new lit-rollover green sits next to the unlit rollover green. |
-| 4. Typography | 3/4 | The HUD is real DOM text in a mono stack with a clear scale. Two 11px muted lines are small; 3 CSS sizes (11/16/32px) plus the 14px canvas HUD. This fixes the 3.4px canvas HUD. |
-| 5. Spacing | 3/4 | HUD spacing is consistent px values. `min-height` stops the panel jumping. There are no breakpoints, and the 220px hint wraps across 4 or more lines. |
-| 6. Experience Design | 2/4 | Start, warning, tilt and game-over are covered. The HUD is keyboard-only with no touch, there is no pause or blur messaging, and the status colors are not differentiated. |
+| 1. Copywriting | 3/4 | The hint is now a labelled key/action list (slash ambiguity fixed). WARNING/TILT still give no cause or consequence. |
+| 2. Visuals | 3/4 | The canvas paints no text and the diagnostics are crisp DOM. The two fixed panels still float over the table with no layout awareness. |
+| 3. Color | 2/4 | Unchanged. Hardcoded hex, `#ef476f` still has three meanings, and every status shares one amber. |
+| 4. Typography | 3/4 | The 11px hint and 14px canvas text are gone (hint 12px, diag 12px). The 11px `.hud-label` remains, and there are four DOM sizes (11/12/16/32). |
+| 5. Spacing | 3/4 | The hint can no longer wrap mid-phrase (nowrap grid). There are still no media queries, and the 4/10/12/16 values are off-grid. |
+| 6. Experience Design | 2/4 | Unchanged. No touch path, no pause or blur message, no tilt emphasis. |
 
-**Overall: 16/24**
+**Overall: 16/24** (unchanged in total. Typography and copy improved internally but are capped by the remaining defects below.)
 
 ---
 
-## Top 3 Priority Fixes
+## Resolved since the last review
 
-1. **WARNING: TILT and WARNING share one amber style with start and game-over prompts** (`index.html:54-60`). A tilt is a punishing state and reads the same as "PRESS ENTER TO START". Fix: add modifier classes. Use a red or magenta `.is-tilt`, amber `.is-warning`, and a neutral or cyan prompt color. Toggle them from `HudView.update()`, still write-on-change.
-2. **WARNING: there is no touch or pointer path, and the HUD blocks nothing but tells touch users nothing** (`index.html:81-84`, `main.ts` keydown only). The game is unplayable on mobile and the hint lists keys only. Fix: add an on-screen Start/Launch/Flipper affordance in Phase 5, or state "keyboard required" in the hint.
-3. **WARNING: the fixed HUD panel overlaps the table at narrow or short viewports** (`index.html:25-36`). The panel is `position: fixed` top-left at roughly 250px by 200px. The canvas is centered and fitted to the viewport, so on a 768px-wide window the panel covers the playfield's upper-left (the rollover lanes). Fix: collapse the controls hint under a width/height media query, or place the HUD beside the canvas in the flex row.
+| Earlier finding | Status |
+|-----------------|--------|
+| #9 Canvas debug HUD at about 3.4px (`debug-draw.ts:494`) | Resolved. `debug-draw.ts` has no `fillText` or `font`. FPS/PHYS/KE are in `#hud-diag` (`index.html:95-109, 135`; `hud.ts:131-182`), 12px DOM text, `aria-hidden`, write-on-change. |
+| #6 Controls hint run-on, `/` ambiguous as key and separator | Resolved. `index.html:122-133` is a five-row `dl` with `kbd` key caps. `/` is rendered as a cap, not a separator. |
+| Pillar 4: 11px hint below the 12px floor | Resolved for the hint (`.hud-controls` 12px). |
+| Pillar 5: hint wraps to 5+ lines, making the panel about 200px tall | Substantially resolved. Rows are `white-space: nowrap`, and the panel is now a compact five-row grid. |
 
-Further issues (non-top-3, all WARNING):
+## Still open
 
-4. `#ef476f` is still the drain stroke, velocity arrow and full meter (`debug-draw.ts:59,65`). This is carried forward from Phase 3 fix #2 and is unresolved.
-5. The lit rollover `#d9ff66` at width 6 against the unlit rollover `#8ac926` at width 3 (`debug-draw.ts:75,115,274-278`) relies on a hue shift of about 20 degrees plus dash vs solid. Low-vision users get weak lit/unlit contrast. Fix: add a fill or an outline, or glow in Phase 6.
-6. The controls hint is one 11px run-on sentence with `·` separators, using `/` as both a key and a separator ("Z / ← / Left Shift left flipper · / / → / Right Shift"). The slash key is ambiguous, and this is a copy defect. Fix: a 3-row key/action list.
-7. The ball line is blank in game-over, so the final ball count is lost and the final score is the only readout. Acceptable, but "GAME OVER" gives no final-score emphasis.
-8. `aria-live="polite"` on status only. Tilt and warning are time-critical but polite is correct. Score is never announced, which is a deliberate and good choice. The `role="img"` canvas has no description of state.
-9. The canvas debug HUD (`debug-draw.ts:494`, 14px, about 3.4px at fit) is still present. It was a Phase 3 carry-forward and is now documented as the diagnosis readout, not fixed.
+| Finding | Status |
+|---------|--------|
+| #1 TILT, WARNING, start and game-over prompts share one amber (`index.html:54-60`) | Open. `statusText` has no modifier class. |
+| #2 No touch or pointer path, and the hint says keys only | Open. `main.ts` is keyboard-driven only (a grep for touch/pointer finds nothing). |
+| #3 Fixed top-left HUD overlaps the table at narrow or short viewports | Open, and slightly worse. `#hud-diag` is a second fixed panel at bottom-left (`index.html:96-99`), and there is still no `@media`. The hint panel is wider (grid of `kbd` caps). |
+| #4 `#ef476f` is the drain, the velocity arrow and the full meter (`debug-draw.ts:56, 61, 101`) | Open |
+| #5 Lit rollover `#d9ff66` w6 vs unlit `#8ac926` (`debug-draw.ts:64-66, 105, 256`) is weak for low vision | Open |
+| #7 Game-over drops the ball line and has no final-score emphasis | Open |
+| #8 Canvas `role="img"` has a static label with no state | Open |
+
+---
+
+## Top Priority Fixes
+
+1. **WARNING: status states are undifferentiated** (`index.html:59`, `hud.ts:70-79`). Tilt (flippers dead) looks the same as "PRESS ENTER TO START". Fix: add `.is-tilt`, `.is-warning` and `.is-prompt` classes, toggled in `HudView.update()` inside the existing write-on-change branch. Copy: "TILT · FLIPPERS OFF", "WARNING · EASE UP".
+2. **WARNING: no touch or pointer input** (`main.ts`). The page is unplayable on a phone and the hint doesn't say so. Fix: add on-screen controls in Phase 5, or add a "keyboard required" line to the hint now.
+3. **WARNING: fixed panels overlap the playfield on small viewports** (`index.html:25-36, 95-109`). Fix: a media query that hides `#hud-controls` below about 900px width or 700px height, and docks the HUD beside the canvas in the flex row. Hide `#hud-diag` outside dev builds.
+4. **WARNING: `#ef476f` carries three meanings** (`debug-draw.ts:56, 61, 101`). Give the drain, the velocity arrow and the meter-full state distinct hues.
+5. **WARNING: lit/unlit rollover contrast** (`debug-draw.ts:64-66`). Add a fill or glow for the lit state, not only stroke width and a roughly 20 degree hue shift.
+6. **WARNING: move colors into CSS custom properties.** `#05060d`, `#e8eefc`, `#8892b0`, `#c3cbe6`, `#ffd166` and `rgba(138,160,255,.25)` repeat across the sheet. `#ffd166` is also the ball core color.
+7. **WARNING: `.hud-label` is 11px** (`index.html:38`). Raise it to 12px so all DOM text meets the same floor.
 
 ---
 
 ## Detailed Findings
 
 ### Pillar 1: Copywriting (3/4)
-- `hud.ts:72-76` strings: "PRESS ENTER TO START", "GAME OVER · PRESS ENTER", "TILT", "WARNING". All are uppercase, action-first, concise and correct for the arcade genre.
-- "WARNING" and "TILT" give no cause or consequence ("WARNING: STOP NUDGING"). Players who don't know pinball will not know what triggered them.
-- The key hint `index.html:82-83` is the weakest copy. Slash-as-key ambiguity, wrapped mid-phrase, and the "nudge" keys (X . ↑) clash with the ↑ arrow being a nudge rather than a launch.
-- "BALL n / 3" uses spaced slash (`hud.ts:57`), whereas the summaries described "BALL n of 3". Minor inconsistency with the scope description only.
-- No generic "OK/Submit/Cancel" strings.
+- The prompts are unchanged and fine: "PRESS ENTER TO START", "GAME OVER · PRESS ENTER", "TILT", "WARNING" (`hud.ts:70-79`).
+- The new hint copy is clear. "Start / Launch / Left flipper / Right flipper / Nudge" with caps is scannable. "Space hold, release" (`index.html:126`) is slightly terse but unambiguous.
+- Defect: "WARNING" and "TILT" still state neither the cause nor the consequence.
+- Defect: the controls list includes `.` and `/` as key caps without naming them. They are visually distinct now, but a screen-reader user would hear "period" or "slash" with no context. That is acceptable, because the hint is a static aid.
+- There are no generic OK/Submit/Cancel strings.
 
 ### Pillar 2: Visuals (3/4)
-- Hierarchy is good: SCORE label 11px muted, score 32px/700 tabular-nums (no jitter), ball 16px, status 16px/700 in amber.
-- The panel (`rgba(5,6,13,.72)`, 1px border, 8px radius) is legible over the canvas but is not integrated with the table. Fixed positioning means it floats over the playfield rather than beside it.
-- The lit rollover is the only reactive-state cue drawn in the canvas. Solid and double width is a clear cue at desktop scale, but the stroke width shrinks with the fit scale so it may be about 1.5px on a small display.
-- The status line has a reserved `min-height: 1.2em`, so there is no layout jump. Good.
-- Canvas has `role="img"` plus `aria-label` (Phase 3 fix #3 partly resolved).
+- Hierarchy is intact: the score is 32px/700 tabular-nums, the ball and status lines are 16px, and the hint and diag are muted 12px.
+- The diag panel is visually subordinate to the HUD (6px/10px padding, muted color, 6px radius against the HUD's 8px). The two radii are a small inconsistency.
+- Both panels are `position: fixed` and ignore the canvas rect. On a viewport narrower than the fitted table the HUD covers the upper-left lanes and the diag panel covers the lower-left outlane region.
+- The canvas now paints no text, which removes the earlier tiny-text artifact.
+- The lit-rollover cue is unchanged and relies on width.
 
 ### Pillar 3: Color (2/4)
-- No CSS custom properties. Hex values are hardcoded across `index.html` (`#05060d`, `#e8eefc`, `#8892b0`, `#c3cbe6`, `#ffd166`) and as `COL_*` constants in `debug-draw.ts` (12 or more).
-- `#ffd166` (status) equals `COL_BALL_CORE` in the canvas, so the status color is also the ball color. This is cosmetic but ties UI prompts to a game object.
-- All four status states use a single color (`index.html:59`). See fix 1.
-- `#ef476f` triple meaning is unresolved from Phase 3.
-- Contrast: `#8892b0` on the panel over `#05060d` is about 6:1, which passes AA. `#ffd166` is far above AA.
-- Not a 60/30/10 problem: the sandbox is dark, and the amber accent is limited to the status line.
+- Nothing here changed in 04-10. There are no custom properties. The hex values are hardcoded across `index.html`, and the `COL_*` constants in `debug-draw.ts` are separate.
+- The status line has one color for four meanings (`index.html:59`).
+- `#ef476f` is at `debug-draw.ts:56, 61, 101` (three meanings).
+- The new `kbd` styling (`rgba(138,160,255,.35)` border and `.08` fill, `#c3cbe6` text) reuses the existing palette. It adds no new hues, which is good.
+- Contrast: `#8892b0` on the near-black panel is about 6:1 (passes AA at 12px). `#ffd166` far exceeds AA.
 
 ### Pillar 4: Typography (3/4)
-- Sizes in `index.html`: 11px (x2), 16px (x2), 32px. That is 3 CSS sizes, plus 14px in the canvas HUD. The weights are 700 only, plus normal. Both are within sensible limits.
-- A letter-spaced uppercase label and a status line at 0.12em are a consistent treatment.
-- 11px on the label and hint is below the typical 12px floor, and the hint is the longest text on screen. Raise it to 12px.
-- The font stack `ui-monospace, Menlo, Consolas, monospace` is fine and falls back correctly on Windows.
-- Phase 3 fix #1 (3.4px HUD) is resolved for the game HUD by moving to DOM text. The canvas HUD is unchanged.
+- DOM sizes: 11px (`.hud-label`), 12px (hint, diag), 16px (ball, status), 32px (score). That is four sizes, with one under the 12px floor.
+- Weights: 700 and normal only.
+- The mono stack `ui-monospace, Menlo, Consolas, monospace` is used consistently, including in `kbd` via `font: inherit`.
+- `font-variant-numeric: tabular-nums` is applied on the score and diag, so the numbers don't jitter.
+- The canvas now has no text at all, so the prior 14px canvas size is gone.
 
 ### Pillar 5: Spacing (3/4)
-- Panel padding 12/16, offsets 16/16, margin-top 4 and 10. Values are not on a single scale (4, 10, 12, 16), so 10 and 12 are off a 4/8 grid. Minor.
-- `max-width: 220px` on the hint, but the panel width is set by the content (the 32px score), so the hint wraps to 5 lines or more at 11px and makes the panel tall (about 200px).
-- No `@media` rules (grep). No safe-area or small viewport handling.
-- Canvas `LIT_ROLLOVER_WIDTH = 6` vs 3 are named constants. Good.
+- The hint grid uses a 12px column gap and a 4px row gap, and the `kbd` padding is `0 4px`. The 4px values are on-grid. The HUD's 12px and 10px, and the diag's 6px, are not.
+- The nowrap rows make the hint panel's width equal its longest row ("Right flipper" plus three caps), which is about 260px or more. That is wider than the previous 220px cap, so the horizontal footprint over the playfield grew while the height shrank.
+- No `@media`, no safe-area insets. The fixed offsets of 16px are consistent between the two panels.
 
 ### Pillar 6: Experience Design (2/4)
-State coverage (code-derived, not run):
-- Covered: attract, playing, tilted, game-over (`hud.ts:53-78`). Warning window. Enter-to-start gated to game-over. Focus-loss handling from Phase 3 remains.
-- Efficient: write-on-change per line, text-only `textContent`, `pointer-events: none`, `aria-live` on the status only.
-- Missing or weak:
-  - No touch/pointer input (Phase 3 carry-forward, unresolved).
-  - No pause, no message when the tab loses focus.
-  - No emphasis on tilt consequence (flippers dead). The HUD says only "TILT".
-  - The HUD cannot be hidden, and the hint stays on screen during play.
-  - No high-score or final-score emphasis in game-over.
-  - No visual flash for score events, deferred to Phase 6.
+- Covered (code-derived): attract, playing, tilt, game-over, the warning window, focus-loss and visibility handling (`main.ts` registers keydown, keyup, blur and visibilitychange listeners), and write-on-change on both HUD and diag (`hud.ts:103-128, 167-181`).
+- The diag panel is correctly `aria-hidden`, and the status line is the only live region.
+- Missing: touch or pointer input, a pause or blur message, tilt consequence emphasis, a way to hide the HUD or hint during play, and a final-score emphasis in game-over.
+- No loading or error states exist (a sandbox, so this is not expected). No destructive actions exist.
 - Registry audit: skipped, no `components.json`.
-
----
-
-## Phase 3 Carry-forward Status
-
-| Phase 3 finding | Phase 4 status |
-|-----------------|----------------|
-| HUD font unreadable at fit scale | Resolved for the game HUD (DOM overlay). The canvas diagnosis HUD is unchanged. |
-| `#ef476f` used for three meanings | Unresolved |
-| No controls hint / canvas semantics / touch | Hint and `aria-label` resolved. Touch unresolved. |
-| No drain / ball-count feedback | Ball count resolved. Drain feedback not added. |
-| Flipper contrast, drain visibility, resize reallocation | Not addressed (deferred to Phase 5 or 6) |
 
 ---
 
 ## Files Audited
 - `C:/Users/aster/projects-source/flippers/index.html`
 - `C:/Users/aster/projects-source/flippers/src/ui/hud.ts`
-- `C:/Users/aster/projects-source/flippers/src/sandbox/debug-draw.ts` (grep, lines 55-80, 265-290, 494)
-- `C:/Users/aster/projects-source/flippers/src/sandbox/main.ts` (grep)
+- `C:/Users/aster/projects-source/flippers/src/sandbox/debug-draw.ts` (grep: text calls, color constants)
+- `C:/Users/aster/projects-source/flippers/src/sandbox/main.ts` (grep: input listeners, DiagView wiring)
+
+Not read: the 04-01..04-10 PLAN and SUMMARY files, and 04-UAT.md. Findings come from the previous review plus the current code.
