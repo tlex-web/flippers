@@ -20,6 +20,8 @@ import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuni
  * - nudge and tilt (plan 04-06 Task 2, GAME-03, R9-R11): the direction table,
  *   the warning window, the tilted state, and the tilt costing only the current
  *   ball, against the same spy world (which also records every impulse).
+ * - flipper relay (plan 04-08 Task 2, GAME-03, R11): every `setEnabled` call
+ *   the session makes on its `FlipperGate`, recorded by the rig.
  */
 
 /** A flipper gate that ignores every call (the score and FSM cases do not read it). */
@@ -96,6 +98,8 @@ interface Rig {
   readonly calls: Call[];
   /** Every applyImpulse call, in order. */
   readonly impulses: Impulse[];
+  /** Every FlipperGate.setEnabled value, in order. */
+  readonly gate: boolean[];
   /** Advance the session clock `n` fixed steps. */
   tick(n: number): void;
   /** Balls currently in the spy world (added and not yet removed). */
@@ -130,6 +134,7 @@ function spyBall(id: BallId): BallState {
 function makeRig(extraBallIds: readonly BallId[] = []): Rig {
   const calls: Call[] = [];
   const impulses: Impulse[] = [];
+  const gate: boolean[] = [];
   const live = new Set<BallId>();
   let nextId: BallId = FIRST_ID;
   const world: GameSessionWorld = {
@@ -149,7 +154,11 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
   };
   let batch: CollisionEvent[] = [];
   const router = new CollisionRouter({ drainEvents: () => batch });
-  const session = new GameSession(world, router, SPAWN, NO_GATE);
+  const session = new GameSession(world, router, SPAWN, {
+    setEnabled: (enabled) => {
+      gate.push(enabled);
+    },
+  });
   const dispatchOnly = (...events: CollisionEvent[]): void => {
     batch = events;
     router.dispatch();
@@ -159,6 +168,7 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
     session,
     calls,
     impulses,
+    gate,
     tick: (n) => {
       for (let i = 0; i < n; i++) session.tick();
     },
@@ -450,5 +460,105 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     expect(r.session.getState()).toBe("playing");
     expect(r.session.isWarning()).toBe(false);
     expect(r.session.getTiltLevel()).toBe(1);
+  });
+});
+
+/** The last value the session gave its flipper gate. */
+function lastGate(r: Rig): boolean | undefined {
+  return r.gate[r.gate.length - 1];
+}
+
+/** The relay invariant: on while playing, off when tilted or game over. */
+function expectRelayMatchesState(r: Rig): void {
+  expect(lastGate(r)).toBe(r.session.getState() === "playing");
+}
+
+describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
+  it("the constructor switches the flippers off (attract)", () => {
+    const r = makeRig();
+    expect(r.gate).toEqual([false]);
+    expectRelayMatchesState(r);
+  });
+
+  it("onStart switches them on, after serving", () => {
+    const r = makeRig();
+    r.session.onStart();
+    expect(r.gate).toEqual([false, true]);
+    expectRelayMatchesState(r);
+  });
+
+  it("a refused onStart (already playing) records nothing", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.onStart();
+    expect(r.gate).toEqual([false, true]);
+  });
+
+  it("the tilting nudge switches them off; the warning and earlier nudges do not", () => {
+    const r = makeRig();
+    r.session.onStart();
+    nudgeTimes(r, 3);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.gate).toEqual([false, true]);
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("left");
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.gate).toEqual([false, true, false]);
+    expectRelayMatchesState(r);
+  });
+
+  it("the serve after a drain switches them on, after a tilt or not", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.step(drainOf(r.session.activeBallId)); // plain drain: ball 2
+    expect(r.gate).toEqual([false, true, true]);
+    nudgeTimes(r, 4); // tilt ball 2
+    expect(r.session.getState()).toBe("tilted");
+    r.step(drainOf(r.session.activeBallId)); // tilted drain: ball 3
+    expect(r.session.getBall()).toBe(3);
+    expect(r.gate).toEqual([false, true, true, false, true]);
+    expectRelayMatchesState(r);
+  });
+
+  it("the final drain switches them off", () => {
+    const r = makeRig();
+    startAndDrain(r, BALLS_PER_GAME);
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.gate).toEqual([false, true, true, true, false]);
+    expectRelayMatchesState(r);
+  });
+
+  it("a step with no drain records nothing", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.step();
+    r.tick(10);
+    expect(r.gate).toEqual([false, true]);
+  });
+
+  it("across two full games with tilts, the last value is on exactly while playing", () => {
+    const r = makeRig();
+    const check = (): void => expectRelayMatchesState(r);
+    check();
+    for (let game = 0; game < 2; game++) {
+      r.session.onStart();
+      check();
+      for (let ball = 1; ball <= BALLS_PER_GAME; ball++) {
+        if (ball !== 2) {
+          r.tick(NUDGE_COOLDOWN_STEPS); // clear the last ball's nudge cooldown
+          nudgeTimes(r, 4);
+          expect(r.session.getState()).toBe("tilted");
+          check();
+          r.session.onNudge("up"); // ignored while tilted
+          check();
+        }
+        r.step(drainOf(r.session.activeBallId));
+        check();
+      }
+      expect(r.session.getState()).toBe("game-over");
+      r.session.onNudge("left"); // ignored in game over
+      r.step();
+      check();
+    }
   });
 });

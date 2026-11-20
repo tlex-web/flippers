@@ -160,3 +160,64 @@ describe("FlipperInput — held set + per-side latched edges (D-09/D-10)", () =>
     expect(a).toBe(b); // the drain view is a reused object, not freshly allocated
   });
 });
+
+describe("FlipperInput.isHeld (Pitfall 5: the held-key re-press on serve)", () => {
+  it("left is held while any of KeyZ, ShiftLeft or ArrowLeft is down, and not once all three are up", () => {
+    const input = new FlipperInput();
+    expect(input.isHeld("left")).toBe(false);
+
+    input.handleKeyDown(ev("KeyZ"));
+    expect(input.isHeld("left")).toBe(true);
+    input.handleKeyDown(ev("ShiftLeft"));
+    input.handleKeyDown(ev("ArrowLeft"));
+    expect(input.isHeld("left")).toBe(true);
+
+    input.handleKeyUp(ev("KeyZ"));
+    expect(input.isHeld("left")).toBe(true);
+    input.handleKeyUp(ev("ShiftLeft"));
+    expect(input.isHeld("left")).toBe(true);
+    input.handleKeyUp(ev("ArrowLeft"));
+    expect(input.isHeld("left")).toBe(false);
+  });
+
+  it("each left code alone makes the left side held", () => {
+    for (const code of ["KeyZ", "ShiftLeft", "ArrowLeft"]) {
+      const input = new FlipperInput();
+      input.handleKeyDown(ev(code));
+      expect(input.isHeld("left")).toBe(true);
+      input.handleKeyUp(ev(code));
+      expect(input.isHeld("left")).toBe(false);
+    }
+  });
+
+  it("is false after handleBlur()", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(ev("KeyZ"));
+    input.handleKeyDown(ev("Slash"));
+    input.handleBlur();
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  });
+
+  it("the right side is independent of the left", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(ev("KeyZ"));
+    expect(input.isHeld("left")).toBe(true);
+    expect(input.isHeld("right")).toBe(false);
+
+    input.handleKeyDown(ev("Slash"));
+    input.handleKeyUp(ev("KeyZ"));
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("does not drain or latch anything", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(ev("KeyZ"));
+    input.drainEdges();
+    expect(input.isHeld("left")).toBe(true);
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(false);
+    expect(edges.leftRelease).toBe(false);
+  });
+});

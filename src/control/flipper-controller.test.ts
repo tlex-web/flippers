@@ -223,3 +223,121 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.motorCalls.length).toBe(0);
   });
 });
+
+/** Press, sweep up and settle: the bat ends in held-up. */
+function raise(world: SpyWorld, ctrl: FlipperController, id: number): void {
+  ctrl.onPressEdge(id);
+  sweep(world, ctrl, id, L_REST, L_UP, 4);
+  hold(world, ctrl, id, L_UP, 2);
+}
+
+describe("FlipperController enable gate (GAME-03, R11, Pitfall 5)", () => {
+  it("a fresh controller is enabled and issued exactly one motor-0 command per flipper", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    expect(ctrl.isEnabled()).toBe(true);
+    expect(world.motorCalls).toEqual([
+      { id: 0, direction: 0 },
+      { id: 1, direction: 0 },
+    ]);
+  });
+
+  it("setEnabled(false) from held-up drops the bat: returning with motor -1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.isEnabled()).toBe(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls).toEqual([{ id: 0, direction: -1 }]);
+  });
+
+  it("setEnabled(false) from flipping-up drops the bat too", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    sweep(world, ctrl, 0, L_REST, 0, 2); // part-way up
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+  });
+
+  it("setEnabled(false) from resting issues no motor command and stays resting", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("setEnabled(false) on a bat already returning issues no new motor command", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getPhase(0)).toBe("returning");
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("while disabled, onPressEdge issues no +1 and leaves the phase unchanged (resting and returning)", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 1);
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(ctrl.getPhase(1)).toBe("returning");
+
+    world.clearMotorCalls();
+    ctrl.onPressEdge(0);
+    ctrl.onPressEdge(1);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(ctrl.getPhase(1)).toBe("returning");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("while disabled and returning, update() still settles the bat to resting with motor 0", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.setEnabled(false);
+
+    sweep(world, ctrl, 0, L_UP, L_REST, 4); // the dropped bat falls
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+    hold(world, ctrl, 0, L_REST, 2); // pinned at the lower limit
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("setEnabled(true) issues no motor command; the next press gives flipping-up with +1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.setEnabled(false);
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(true);
+    expect(ctrl.isEnabled()).toBe(true);
+    expect(world.motorCalls).toEqual([]);
+    expect(ctrl.getPhase(0)).toBe("resting");
+
+    ctrl.onPressEdge(0);
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+    expect(world.motorCalls).toEqual([{ id: 0, direction: 1 }]);
+  });
+});
