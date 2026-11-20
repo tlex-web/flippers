@@ -1,157 +1,111 @@
 ---
 phase: 04-reactive-elements-game-rules
-reviewed: 2026-11-20T20:18:18Z
+reviewed: 2026-11-20T23:45:00Z
 depth: standard
-files_reviewed: 12
+scope: incremental (04-11 delta, f3ab8be..HEAD)
+files_reviewed: 5
 files_reviewed_list:
-  - index.html
-  - src/control/flipper-controller.test.ts
-  - src/control/flipper-controller.ts
-  - src/harness/flipper-feel.test.ts
-  - src/physics/flipper-response.test.ts
-  - src/physics/planck-world.ts
-  - src/physics/types.ts
-  - src/sandbox/debug-draw.ts
+  - src/input/flipper-input.test.ts
+  - src/input/flipper-input.ts
   - src/sandbox/flipper-e2e.test.ts
+  - src/sandbox/game-e2e.test.ts
   - src/sandbox/main.ts
-  - src/ui/hud.test.ts
-  - src/ui/hud.ts
 findings:
   critical: 0
   warning: 2
-  info: 4
-  total: 6
+  info: 3
+  total: 5
   necessity: 0
 status: issues_found
 ---
 
-# Phase 04: Code Review Report (gap closure 04-09 / 04-10)
+# Phase 4: Code Review Report (04-11 delta)
 
-**Reviewed:** 2026-11-20T20:18:18Z
+**Reviewed:** 2026-11-20T23:45:00Z
 **Depth:** standard
-**Files Reviewed:** 12
+**Files Reviewed:** 5
 **Status:** issues_found
 
 ## Summary
 
-This is an incremental re-review of the two gap-closure plans, scoped to `git diff 6590dce..HEAD`:
+This is an incremental review of gap-closure plan 04-11 (G-04-11: a lost Shift keyup pins a flipper bat). It covers only the diff `f3ab8be..HEAD` for the five files listed, and reads each file whole for context. It replaces the earlier 04-09/04-10 report.
 
-- **04-09 (G-04-10):** limit-impulse reset in `PlanckWorld.setFlipperMotor`, `FlipperState.restLimitAngle`, and the FSM rest guard.
-- **04-10 (G-04-6):** `DiagView` DOM readout, canvas text removed, and the controls hint rewritten as a `<dl>`.
+The delta adds two things to `FlipperInput`. First, `handleFocus()` with a window `focus` listener, which force-clears the held set. Second, `dropStaleShift()`, which drops ShiftLeft/ShiftRight on any non-Shift key event that reports `shiftKey === false`. Edges are now emitted from each event's net per-side transition. `main.ts` changes only in comments. The in-scope tests pass (3 files, 82 tests) and `tsc --noEmit` is clean.
 
-Earlier findings WR-01, WR-02 and IN-01..IN-05 stay tracked in `04-REVIEW-DISPOSITION.md`, so the numbering here continues after them.
+The per-event logic is correct for every order I traced: repeat, unbound, untracked keyup, cross-side, the cradle, and an absent `shiftKey`. `preventDefault` still fires only on bound, non-repeat keydowns, and nothing is allocated per event. Two problems remain:
+- The net-transition rule fixes the "bat drops under the finger" problem for a single event only. If the heal's release and a new press land in the same drain window, `main.ts` still drops the bat while the key is held. I confirmed this with a scratch test.
+- Excluding Shift-key events from reconciliation leaves the Windows both-Shift lost keyup unhealed.
 
-**Verified correct:**
-
-- **The limit-impulse reset works on planck 1.5.0.** In `node_modules/planck/dist/planck.mjs:8128-8135`, `RevoluteJoint.enableLimit(flag)` zeroes `m_impulse.z` when the flag changes. The 2.3-style limit row (`:8262-8292`) only clamps the accumulated sign, so a stale positive reserve does hold a reversing bat until it is used up. The comment block's root-cause analysis is accurate. Resets fire only when the commanded sign changes, so a held cradle keeps its impulse.
-- **The FSM guard holds.** In a scratch sweep of taps (holds 1-12 steps, both bats, three pre-rests), the worst angle at `resting` was 0.0350 rad from `restLimitAngle`, inside `REST_ANGLE_TOL`.
-- **`restLimitAngle` matches the geometry.** It is computed from the same `droop` that poses the bat, so left is π/8 and right is π − π/8.
-- **The 04-10 changes are clean.** `debug-draw.ts` no longer references `HudData` anywhere, `main.ts` calls the new `draw(...)` signature, and the `DiagView` write-on-change logic is correct. `tsc --noEmit` and ESLint are clean on the changed files.
-- **The `<dl>` lists the right keys.** They match `flipper-input.ts:65-70` and `game-input.ts:55-59`.
-
-**Concerns:**
-
-- **Pinch ejection (WR-03).** The faster response exposed a ball-pinch over-speed. The fix took the wall out of the FLIP-02 rig and relaxed the assertion, but the same pinch geometry exists on `TABLE_SPEC` and nothing covers it.
-- **Flaky new test (WR-04).** The new 192-rig quick-tap sweep runs in one `it` under the default 5 s timeout, and it timed out in both full-suite runs on this machine.
-
-## Narrative Findings (AI reviewer)
+No necessity findings: the delta adds no guard against a state that provably cannot occur.
 
 ## Warnings
 
-### WR-03: 04-09 hid a bat-to-wall pinch ejection by changing the test rig; the same pinch exists on TABLE_SPEC and got worse
+### WR-01: A stale-Shift heal and a same-side press in one drain window drop the bat while the key is held
 
-**File:** `src/harness/flipper-feel.test.ts:16-27, 238-243` (behavior from `src/physics/planck-world.ts:878-895`)
+**File:** `src/sandbox/main.ts:167-171` (consumer); `src/input/flipper-input.ts:286-300` (the `commitTransitions` rationale)
+**Issue:** `commitTransitions` nets edges within ONE event only. Its doc says this keeps the bat from dropping under the player's finger, because `main.ts` applies press before release. The latch, however, collects edges from every event between two fixed-step drains. Key events are only dispatched between rAF callbacks, so in practice that window is a whole render frame (~16.7 ms, more on a hitch). Take a stale ShiftLeft with the bat held up. The player presses X (a nudge, `shiftKey` false) and Z in the same frame, which is normal pinball play (nudge and flip together):
+1. KeyX keydown: the heal drops ShiftLeft and latches `leftRelease`.
+2. KeyZ keydown: Z is added and latches `leftPress`.
+3. Drain: `onPressEdge` is a no-op on a `held-up` bat (`flipper-controller.ts:171`), then `onReleaseEdge` -> `drop()` -> `returning` (`flipper-controller.ts:241-246`).
 
-**Issue:**
-
-The 04-09 summary and the new comment at `flipper-feel.test.ts:16-27` both say what happened. Once the dead time was gone, a rising bat squeezed the ball against the proof box's interior wall and ejected it at about 16 m/s, a 256% v = ω·r mismatch. The response was to filter that wall out (`OPEN_PROOF_BOX`) and lower the FLIP-02 floor from 1.5x to 1.3x. The comment calls this a "rig artifact, not flipper physics". The real table has the same geometry:
-
-- **The gap is smaller than the ball.** The left sling's lower edge, `LEFT_SLING` (0.86, 4.95) to (1.16, 5.1) at `src/table/spec.ts:268-272`, sits about 0.29 m above the raised bat's top face near x ≈ 0.94. The bat pivot is `LEFT_PIVOT` (0.69, 5.45). The ball is 0.40 m across, so this breaks the spec's own clearance rule: a gap the ball must pass needs to be at least 2·r + 0.05.
-- **Measured on `TABLE_SPEC` with no reactive layer.** The rig matches `launchAtRadius`: the bat is drooped with −1 for 30 steps, the ball starts 0.01 m off the bat face, and the bat is raised with +1. Base-position (rFrac 0.3) flips gave these speeds:
-  - **HEAD, left bat:** peaked at 19.4 m/s, then held 16.4 m/s for 9 steps.
-  - **HEAD, right bat:** 16.8 m/s.
-  - **6590dce (before 04-09):** 15.0 / 12.6 m/s on the left and 15.4 m/s on the right.
-  - **Control:** the same placement under −1 never exceeded 0.34 m/s. The ball was not resting on a collider; the speed comes from the raise.
-- **What that means for feel:**
-  - A base hit now launches faster than a tip hit on the real table (rFrac 0.7 held about 8.7 m/s after its transient). That reverses the FLIP-02 Core Value property.
-  - The soak's 15 m/s ceiling only exercises dead flippers, so it would not catch this.
-
-The underlying geometry predates this phase. The defect in this change set is the response: 04-09 made the pinch harder and then took it out of the only test that would have seen it, rather than adding coverage on the table the player actually plays.
-
-**Fix:** Add a `TABLE_SPEC` launch case for both bats at rFrac 0.3 / 0.5 / 0.7, with a sustained-speed ceiling (for example ≤ 1.35 × ω_peak·r_contact) and the tip > base ordering. Then fix whichever side fails: either move or reshape the sling's lower edge so the raised-bat-to-sling gap is at least 2·`BALL_RADIUS_M` + 0.05, or accept the tolerance and record it in the disposition ledger. Do not just keep the rig filtered.
-
+The bat falls while Z is physically held and `input.isHeld("left")` is true. It stays down until Z is pressed again. I confirmed the drain contents with a scratch test: after the sequence above, one `drainEdges()` returns `leftPress: true, leftRelease: true` with `isHeld("left") === true`. Before 04-11, this sequence left the bat up. The heal therefore adds a new way to drop a bat under the player's finger, which the plan's must-have says cannot happen. The same ordering defect already existed for a finger roll between two same-side bindings (ShiftLeft up then Z down inside one frame). `PlungerInput` already solves this through `applyEdges`, which orders edges by the held state at drain time (IN-02, `main.ts:174-178`). The flipper drain does not.
+**Fix:** In `onFixedStep`, order a side's two edges by its held state at drain time, the same way the plunger does:
 ```ts
-for (const id of [0, 1]) for (const rFrac of [0.3, 0.5, 0.7]) {
-  it(`TABLE_SPEC flipper ${id} rFrac ${rFrac}: no pinch over-speed`, () => {
-    const r = launchOnTable(id, rFrac); // launchAtRadius twin on new PlanckWorld()
-    expect(r.launch).toBeLessThanOrEqual(r.peakOmega * r.contactRadius * 1.35);
-  });
+function applySide(press: boolean, release: boolean, held: boolean, id: number): void {
+  if (press && release) {
+    if (held) { controller.onReleaseEdge(id); controller.onPressEdge(id); } // release then re-press: ends up
+    else { controller.onPressEdge(id); controller.onReleaseEdge(id); }      // tap inside one window: flip then drop
+    return;
+  }
+  if (press) controller.onPressEdge(id);
+  if (release) controller.onReleaseEdge(id);
+}
+const edges = input.drainEdges();
+applySide(edges.leftPress, edges.leftRelease, input.isHeld("left"), leftFlipperId);
+applySide(edges.rightPress, edges.rightRelease, input.isHeld("right"), rightFlipperId);
+```
+Add an e2e case: stale ShiftLeft, then KeyX and KeyZ keydowns (`shiftKey` false) with no step between them. Over the next 10 steps the left phase must stay `flipping-up`/`held-up`. Also fix the `commitTransitions` doc, which currently claims more than the code guarantees.
+
+### WR-02: The Windows both-Shift lost keyup is never reconciled, because Shift-key events are excluded
+
+**File:** `src/input/flipper-input.ts:280-284` (also the header at lines 28-38 and the B6 test at `src/input/flipper-input.test.ts`, "B6: Shift-key events never reconcile")
+**Issue:** `dropStaleShift` returns early for any event whose code is ShiftLeft or ShiftRight. On Windows, when both Shift keys are held, releasing the first one sends no keyup at all. GLFW works around this in `win32_window.c` ("HACK: Release both Shift keys on Shift up event, as when both are pressed the first release does not emit any event"). That is the D-09 both-Shift cradle on Windows, which is this user's platform:
+1. Hold both Shifts. Release ShiftLeft: no event, so the left bat stays up. No browser check can see this.
+2. Release ShiftRight: a ShiftRight keyup arrives with `shiftKey: false`, which proves no Shift is down. Because the event is a Shift key's own, the reconciliation skips it. ShiftLeft stays in `held`, and the left bat stays raised after both Shifts are up.
+
+The bat recovers only on the next non-Shift key or a focus regain. If neither happens before a drain, the flipper gate re-presses it on the next serve (`main.ts:146`). This is exactly the "lost keyup leaves a bat hanging raised" class G-04-11 was meant to close. The header records only the Sticky Keys residual, not this one. This rests on external platform behavior, so confirm it on a Windows keyboard before acting. The plan's own reason for the exclusion (some platforms may report `false` on one Shift's keyup while the other is still held) is likewise unverified.
+**Fix:** On a Shift keyup whose `shiftKey === false`, also drop the opposite Shift. On Windows, the final Shift release reliably reports `false` (state after the event). Verify on Linux/Firefox that releasing one Shift while the other is held reports `shiftKey: true`. If that holds, the cradle risk the exclusion guards against does not exist:
+```ts
+private dropStaleShift(e: KeyEventLike): void {
+  if (e.shiftKey !== false) return;
+  if (e.code !== SHIFT_LEFT) this.held.delete(SHIFT_LEFT);
+  if (e.code !== SHIFT_RIGHT) this.held.delete(SHIFT_RIGHT);
 }
 ```
-
-### WR-04: The new quick-tap sweep exceeds Vitest's default 5 s timeout under full-suite load
-
-**File:** `src/sandbox/flipper-e2e.test.ts:299`
-
-**Issue:** The test builds 192 rigs (6 bindings × 8 holds × 4 pre-rests), each a full `PlanckWorld` stepped about 115-230 times, inside a single `it` with no timeout. `vitest.config.ts` sets no `testTimeout`, so the default of 5000 ms applies.
-
-- **Alone:** about 0.8 s.
-- **In `npx vitest run`:** 6427 ms and 6666 ms in two consecutive runs, failing with "Test timed out in 5000ms".
-
-The pre-existing soak tests (`soak.test.ts`, `table-soak.test.ts`, `reactive-soak.test.ts`, `game.determinism.test.ts`) timed out in the same runs, so the machine was contended. Even so, this plan added one more heavy single-`it` test without a budget. As written, `npm test` passing depends on host load. The 04-09 summary's "385 tests" pass was observed in a quieter environment.
-
-**Fix:** Give the test an explicit budget, or split it so each case stays small. Separately, consider a suite-wide `testTimeout` in `vitest.config.ts` for the soak-class tests.
-
-```ts
-it("no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised", () => {
-  ...
-}, 30_000);
-// or: it.each(ALL_BINDINGS)("no quick tap on %s leaves a bat raised", ...)
-```
+(The event's own code is still removed by `handleKeyUp`.) If the Linux risk is real, at least record this Windows residual in the header and in the human-check expectations next to the Sticky Keys note, so it is not taken for a regression.
 
 ## Info
 
-### IN-06: `resting` has no position guard, and the entry tolerance allows about 3x the measured slop
+### IN-01: PlungerInput and GameInput lack the focus-regain clear, so the same late-keydown race strands a plunger charge
 
-**File:** `src/control/flipper-controller.ts:75, 217-229`
+**File:** `src/input/plunger-input.ts:61-87,113-127`
+**Issue:** T-04-27's mitigation (clear on window `focus`) is applied only to `FlipperInput`. Suppose a Space keydown is handled after an OS dialog's blur and its keyup goes to the dialog. `PlungerInput.held` then stays true and the charge keeps building. The next Space keydown is de-duped (`if (this.held) return`), so its keyup fires a full-charge launch the player did not wind up. The impact is lower than a pinned bat, and it heals on the next tap, but the race is the same one.
+**Fix:** Add `handleFocus()` -> `cancelHeld()` and a window `focus` listener in `PlungerInput.attach()/detach()`, plus the same for `GameInput` (forget held codes), to keep the three inputs consistent.
 
-**Issue:**
+### IN-02: `handleFocus` doc says "window focus only follows a blur", which is not always true
 
-- **Entry tolerance is loose.** `REST_ANGLE_TOL = 0.1` rad, while the measured worst resting offset is about 0.035 rad (confirmed: 0.0350 in a scratch tap sweep). A bat that stalls inside the 0.035-0.1 band can therefore enter `resting`. That takes two consecutive sub-1e-3 deltas, for example a ball wedged under the bat. The bat then gets motor 0 up to about 5 cm off its rest pose at the tip (0.1 rad × 0.5 m).
-- **Nothing corrects it once resting.** The `resting` case issues no command, and a motor 0 with `FLIPPER_MAX_MOTOR_TORQUE = 500` brake-locks the bat at whatever angle it is at. Nothing drives it home until the next press.
-- **The original reason for motor 0 at rest is gone.** The constructor comment explains it: the Phase-2 limit jam on startup. The 04-09 limit-impulse reset removes that jam.
+**File:** `src/input/flipper-input.ts:193-195`
+**Issue:** A window also gets `focus` without a prior `blur`, for example when a tab first loaded in the background is activated, or when the browser window first gains focus after load. The clear is still harmless in those cases, because a page without focus received no keydowns. The safety argument in the doc is stated more strongly than it needs to be.
+**Fix:** Reword it: "focus either follows a blur (which already cleared every key held before it) or is the page's first focus (nothing can be held), so the clear can only drop keydowns handled while blurred."
 
-**Fix:** Tighten `REST_ANGLE_TOL` to about 0.05. In `case "resting"`, drop back to `returning` with −1 if `|angle - restLimitAngle| > REST_ANGLE_TOL`.
+### IN-03: The game-e2e comment says Space reaches every input, but `g.gameInput` is not fed
 
-### IN-07: Dead `moved` writes on the returning path
-
-**File:** `src/control/flipper-controller.ts:219, 243`
-
-**Issue:** Since G-04-10, `returning` never reads `fsm.moved`; only `flipping-up` does, at line 203. `onPressEdge` (line 173) already resets `moved = false` on entry to `flipping-up`. The writes in `drop()` (line 243) and in the returning-to-resting transition (line 219) are dead stores that suggest a dependency that no longer exists. The field doc at line 90 already says "held-up detector".
-
-**Fix:** Remove both writes.
-
-### IN-08: Stale "upper/lower limit" wording contradicts the mirrored-limit model
-
-**File:** `src/control/flipper-controller.ts:5, 227-228`
-
-**Issue:** The header says "+1 = toward the upper limit, -1 = toward the lower", and the `resting` comment says "the lower limit holds the bat". For the left bat (`raiseSign = -1`), the rest limit is the joint's UPPER limit (`droop = FLIPPER_UPPER_ANGLE`, `planck-world.ts:608`). The rewritten paragraph at lines 19-31 is correct, so the file now contradicts itself.
-
-**Fix:** Say "raise / up limit" and "return / rest limit" throughout, matching `planck-world.ts`.
-
-### IN-09: The controls list does not say which nudge key goes which way, and key alternatives have no separator
-
-**File:** `index.html:122-133`
-
-**Issue:**
-
-- **Nudge directions are missing.** The "Nudge" row lists `X . ↑`, but `game-input.ts:57-59` binds them to left, right and up respectively. A player cannot tell which is which.
-- **Alternatives run together for assistive tech.** Adjacent `<kbd>` elements have no separator text, so a screen reader reads "Z leftwards arrow Left Shift" with no "or". The panel is not `aria-hidden`.
-
-**Fix:** Label the nudge keys, for example `<kbd>X</kbd> left <kbd>.</kbd> right <kbd>↑</kbd> up`. Put a visually hidden " or " between alternatives, or give each `<dd>` an `aria-label`.
+**File:** `src/sandbox/game-e2e.test.ts` (G-04-11 block, the `spaceDown` / `spaceUp` delivery)
+**Issue:** The comment says main.ts delivers every key event to each input, but the test feeds only `g.input` and `g.plungerInput`. Space is not a GameInput code, so this does not change the result, but the comment is wrong as written.
+**Fix:** Either also call `g.gameInput.handleKeyDown/handleKeyUp(spaceDown/spaceUp)`, or reword the comment to "reaches the flipper and plunger inputs".
 
 ---
 
-_Reviewed: 2026-11-20T20:18:18Z_
+_Reviewed: 2026-11-20T23:45:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
