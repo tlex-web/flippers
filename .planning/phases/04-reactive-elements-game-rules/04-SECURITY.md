@@ -12,7 +12,7 @@ created: "2026-11-20"
 
 > Per-phase security contract: threat register, accepted risks, and audit trail.
 
-This phase has no network, storage, auth or user-data surface. The threat model is about game integrity and availability: rules injecting energy into the ball (kicks, nudges), untrusted key input becoming impulses or new bodies, scoring that a rolling contact or a repeated event could inflate, replay determinism, and the HUD writing text into the page. The register was written at plan time in each 04-0N-PLAN.md `<threat_model>` and verified at ASVS L1 by grep against the implementation. The cited test files were re-run at HEAD (15 files, 227 tests green) and `tsc --noEmit` exits 0. The gap-closure plans 04-09 (G-04-10, flipper latency) and 04-10 (G-04-6, HUD legibility) added T-04-21..T-04-26; their cited test files were re-run at 45bb2a1 (5 files, 105 tests green).
+This phase has no network, storage, auth or user-data surface. The threat model is about game integrity and availability: rules injecting energy into the ball (kicks, nudges), untrusted key input becoming impulses or new bodies, scoring that a rolling contact or a repeated event could inflate, replay determinism, and the HUD writing text into the page. The register was written at plan time in each 04-0N-PLAN.md `<threat_model>` and verified at ASVS L1 by grep against the implementation. The cited test files were re-run at HEAD (15 files, 227 tests green) and `tsc --noEmit` exits 0. The gap-closure plans 04-09 (G-04-10, flipper latency) and 04-10 (G-04-6, HUD legibility) added T-04-21..T-04-26; their cited test files were re-run at 45bb2a1 (5 files, 105 tests green). The gap-closure plan 04-11 (G-04-11, a lost Shift keyup pinning a bat) added T-04-27..T-04-30; its cited test files were re-run at 8ac8792 (4 files, 83 tests green), with `tsc --noEmit`, `eslint src` and the 4-file soak gate clean.
 
 ---
 
@@ -34,6 +34,7 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | application code -> planck@1.5.0 RevoluteJoint (04-09) | Third-party solver behavior the limit-impulse reset depends on | joint limit flag, motor speed |
 | simulation numbers -> DOM text sink `#hud-diag` (04-10) | Formatted numbers written into the page on the HUD throttle | FPS, physics Hz, kinetic energy |
 | static markup (index.html) -> assistive tech (04-10) | The controls hint and the readout are exposed to screen readers | static text |
+| OS keyboard layer (Sticky Keys prompt, modifier latching) -> browser key events -> FlipperInput held set (04-11) | The OS can take or withhold a keyup, so the page's view of which keys are down can go stale | KeyboardEvent code, repeat, shiftKey; window focus |
 
 ---
 
@@ -67,7 +68,11 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | T-04-24 | Tampering (markup injection) | DiagView writing `#hud-diag` (04-10) | low | mitigate | `hud.ts:176` assigns `TextSink.textContent` only; `diagText` (`hud.ts:142-143`) builds the line from `toFixed` numbers and constant text; `grep -rn innerHTML src index.html` = 0, and no `outerHTML` / `insertAdjacentHTML` / `document.write` | closed |
 | T-04-25 | Denial of Service (frame budget) | Per-frame DOM writes and string building from the readout (04-10) | low | mitigate | `DiagView.update` (`hud.ts:167-181`) returns before building a string when the three cached numbers are unchanged; fed on the `HUD_UPDATE_MS` 200 ms throttle (`main.ts:81`, `:304`, `:317`); write-count cases `hud.test.ts:235` (first update writes once) and `:241` (same numbers write nothing) | closed |
 | T-04-26 | Information disclosure (a11y noise) | Developer readout announced to screen readers (04-10) | low | mitigate | `index.html:135` `#hud-diag` carries `aria-hidden="true"`; the only `aria-live` region is `#hud-status` (`index.html:121`) | closed |
-| T-04-SC | Tampering | npm/pip/cargo installs | low | accept | No packages installed this phase: `package.json` / lockfile unchanged across 8871026..HEAD, including the 04-09/04-10 gap closure (`git diff 2cd8dbf..45bb2a1 -- package.json package-lock.json` empty) | closed |
+| T-04-27 | Denial of Service (game integrity) | FlipperInput held set: a keyup lost to an OS dialog pins a side raised, masks its other bindings and survives every serve (04-11) | high | mitigate | `flipper-input.ts:197` `handleFocus()` force-clears the held set; window `focus` listener added in `attach()` (`:240`) and removed in `detach()` (`:249`); `dropStaleShift` (`:280`) runs on every keydown/keyup (`:153`, `:178`). Unit `flipper-input.test.ts:225` "focus regain (G-04-11)" and `:298` stale-Shift B1-B4; keyboard-to-Planck `flipper-e2e.test.ts:368` (focus regain releases on every binding) and `:416` (stale Shift released by the side's other keys); full game `game-e2e.test.ts:811` (left bat stays down on ball 2) | closed |
+| T-04-28 | Denial of Service (false release) | dropStaleShift wrongly dropping a genuinely held Shift (D-09 both-Shift cradle) (04-11) | medium | mitigate | `flipper-input.ts:281` returns unless `e.shiftKey === false` strictly and the event is not ShiftLeft/ShiftRight; guards `flipper-input.test.ts:364` (B5 held Shift kept), `:380` (B6 Shift-key events never reconcile), `:393` (B7 absent field never reconciles); cradle `flipper-e2e.test.ts:447` | closed |
+| T-04-29 | Denial of Service (environment residual) | Windows Sticky Keys ON keeps Shift logically down and withholds its keyup until the next non-modifier key (04-11) | medium | accept | No browser-visible signal exists (`shiftKey` reads true); the bat releases with the next non-modifier key; documented as AR-04-02 | closed |
+| T-04-30 | Tampering (page behavior) | preventDefault scope while the handlers are restructured (04-11) | low | mitigate | `flipper-input.ts:154-164`: repeat and unbound codes return through `commitTransitions` before `preventDefault()`, which stays on bound non-repeat keydowns only; `flipper-input.test.ts:336` (B2 unbound heal key not prevented), `:354` (B4 repeat heals but never prevents), `:91` reserved-key case unchanged | closed |
+| T-04-SC | Tampering | npm/pip/cargo installs | low | accept | No packages installed this phase: `package.json` / lockfile unchanged across 8871026..HEAD, including the 04-09/04-10 gap closure (`git diff 2cd8dbf..45bb2a1 -- package.json package-lock.json` empty) and 04-11 (`git diff 0bc2ee1..8ac8792 -- package.json package-lock.json` empty) | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -79,7 +84,8 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
-| AR-04-01 | T-04-SC | Supply-chain install surface: the phase adds no dependency (RESEARCH Package Legitimacy Audit: none), so there is nothing to vet. Disposition `accept` was set at plan time in all eight plans and is confirmed by an unchanged `package.json` / lockfile. | plan-time threat model (04-01..04-10) | 2026-11-20 |
+| AR-04-01 | T-04-SC | Supply-chain install surface: the phase adds no dependency (RESEARCH Package Legitimacy Audit: none), so there is nothing to vet. Disposition `accept` was set at plan time in all eight plans and is confirmed by an unchanged `package.json` / lockfile. | plan-time threat model (04-01..04-11) | 2026-11-20 |
+| AR-04-02 | T-04-29 | With Windows Sticky Keys turned ON, the OS keeps Shift logically down, reports `shiftKey` true and withholds the Shift keyup until the next non-modifier key, so no browser check can detect the stale Shift. Impact is bounded: the bat releases on the next non-modifier key event. Keeping Shift as a default flipper binding is a user decision (Phase 2 D-09), recorded as a non-blocking note. | plan-time threat model (04-11) | 2026-11-20 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -91,6 +97,7 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 |------------|---------------|--------|------|--------|
 | 2026-11-20 | 21 | 21 | 0 | gsd-secure-phase orchestrator (ASVS L1 grep-depth plus re-run of the cited tests; auditor skipped per short-circuit: threats_open 0, register authored at plan time) |
 | 2026-11-20 | 27 | 27 | 0 | gsd-secure-phase orchestrator, gap-closure re-audit for 04-09/04-10 (T-04-21..T-04-26 added; ASVS L1 grep-depth plus re-run of the cited tests; auditor skipped per the same short-circuit) |
+| 2026-11-20 | 31 | 31 | 0 | gsd-secure-phase orchestrator, gap-closure re-audit for 04-11 (T-04-27..T-04-30 added, T-04-29 accepted as AR-04-02; ASVS L1 grep-depth plus re-run of the cited tests; auditor skipped per the same short-circuit) |
 
 ---
 
@@ -109,4 +116,12 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 |---|---|
 | Threats found | 27 |
 | Closed | 27 |
+| Open | 0 |
+
+## Security Audit 2026-11-20
+
+| Metric | Count |
+|---|---|
+| Threats found | 31 |
+| Closed | 31 |
 | Open | 0 |
