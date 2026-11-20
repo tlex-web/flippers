@@ -44,7 +44,9 @@ describe("TiltMeter (GAME-03, R10)", () => {
     const m = new TiltMeter();
     for (let i = 0; i < 10; i++) {
       expect(m.addNudge()).toBe("ok");
-      expect(m.getLevel()).toBeLessThanOrEqual(1.0);
+      // 240 steps is exactly a full decay of one nudge, so float residue of the
+      // 240 subtractions (about 2e-15) may remain; that is not accumulation.
+      expect(m.getLevel()).toBeLessThanOrEqual(1.0 + 1e-12);
       decay(m, 240);
     }
   });

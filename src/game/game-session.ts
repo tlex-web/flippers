@@ -8,6 +8,12 @@
  *   table, `activeBallId` is -1, nothing scores, and the final score is kept
  *   until the next start.
  * - `"playing"`: a ball is in play and the rules are live.
+ * - `"tilted"`: the ball in play was tilted (R11). It goes dead: `isLive()` is
+ *   false, so no kicks, no points and no rollover lights, and nudges are
+ *   ignored. The plunger stays live (it is mechanical). The tilt costs only this
+ *   ball: when it drains, the next ball is served `"playing"` with the meter
+ *   and the warning cleared, the score is kept, and a tilt on the last ball ends
+ *   the game. (The flipper drop on tilt arrives in 04-08.)
  *
  * Wiring (fixed-step seam, never the render frame), carried over from the
  * retired sandbox ball feed:
@@ -23,8 +29,10 @@
  * `NUDGE_DIRS[dir]` to every ball through `applyImpulse`, so it changes velocity
  * only and never writes a position (no teleport, no tunneling). It is accepted
  * only while playing and at least `NUDGE_COOLDOWN_STEPS` fixed steps after the
- * last accepted one. Time is the step count advanced by `tick()`, never a wall
- * clock.
+ * last accepted one. Each accepted nudge also feeds the `TiltMeter`: a warning
+ * opens a `WARNING_FLASH_STEPS` window read through `isWarning()`, and a tilt
+ * enters `"tilted"`. `tick()` decays the meter. Time is the step count
+ * advanced by `tick()`, never a wall clock or a random source.
  *
  * The drain is read from the collision bus only (the drain sensor, spec id 600),
  * never from a positional `y > DRAIN_Y` test: the plunger rest position lies
@@ -45,12 +53,19 @@
 import type { CollisionRouter } from "../app/collision-router";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
 import type { RulesGate } from "./reactive-elements";
-import { NUDGE_COOLDOWN_STEPS, NUDGE_DIRS, NUDGE_IMPULSE, type NudgeDir } from "./tuning";
+import { TiltMeter } from "./tilt-meter";
+import {
+  NUDGE_COOLDOWN_STEPS,
+  NUDGE_DIRS,
+  NUDGE_IMPULSE,
+  WARNING_FLASH_STEPS,
+  type NudgeDir,
+} from "./tuning";
 
 /** Balls per game (GAME-02). */
 export const BALLS_PER_GAME = 3;
 
-/** Game states. 04-06 adds `"tilted"`. */
+/** Game states. */
 export type GameState = "game-over" | "playing" | "tilted";
 
 /** The world slice the session needs. */
@@ -81,6 +96,12 @@ export class GameSession implements RulesGate {
   /** First step at which a nudge is accepted again (the cooldown). */
   private nudgeReadyAtStep = 0;
 
+  /** The tilt bob: fed by accepted nudges, decayed by `tick()`. */
+  private readonly tilt = new TiltMeter();
+
+  /** First step at which the WARNING window is over. */
+  private warningUntilStep = 0;
+
   constructor(world: GameSessionWorld, router: CollisionRouter, spawn: BallSpec) {
     this.world = world;
     this.spawn = spawn;
@@ -88,9 +109,9 @@ export class GameSession implements RulesGate {
   }
 
   /**
-   * Start a game, only from game-over: score 0, ball 1, and one ball served to
-   * the spawn. Returns whether a game started; in any other state it returns
-   * false and changes nothing.
+   * Start a game, only from game-over: score 0, ball 1, the tilt meter and the
+   * warning cleared, and one ball served to the spawn. Returns whether a game
+   * started; in any other state it returns false and changes nothing.
    */
   onStart(): boolean {
     switch (this.state) {
@@ -99,6 +120,7 @@ export class GameSession implements RulesGate {
         this.ball = 1;
         this.played = true;
         this.drained = NO_BALL;
+        this.clearTilt();
         this.state = "playing";
         this.active = this.world.addBall(this.spawn);
         return true;
@@ -109,9 +131,10 @@ export class GameSession implements RulesGate {
   }
 
   /**
-   * Handle a drain recorded in this step's batch: remove the ball, then serve
-   * the next one, or end the game after the last. Call once per fixed step,
-   * right after `router.dispatch()`. No-op when nothing drained.
+   * Handle a drain recorded in this step's batch (while playing or tilted):
+   * remove the ball, then serve the next one with the tilt cleared, or end the
+   * game after the last. Call once per fixed step, right after
+   * `router.dispatch()`. No-op when nothing drained.
    */
   service(): void {
     if (this.drained === NO_BALL) return;
@@ -119,6 +142,8 @@ export class GameSession implements RulesGate {
     this.drained = NO_BALL;
     if (this.ball < BALLS_PER_GAME) {
       this.ball++;
+      this.clearTilt();
+      this.state = "playing";
       this.active = this.world.addBall(this.spawn);
     } else {
       this.state = "game-over";
@@ -128,9 +153,11 @@ export class GameSession implements RulesGate {
 
   /**
    * Nudge the table: while playing and outside the cooldown, apply
-   * `NUDGE_IMPULSE` along `NUDGE_DIRS[dir]` to every ball. Velocity only, never
-   * a position write. Call it at the top of a fixed step (between steps, as the
-   * `applyImpulse` contract requires). Ignored in any other state.
+   * `NUDGE_IMPULSE` along `NUDGE_DIRS[dir]` to every ball, then feed the tilt
+   * meter (a warning opens the WARNING window, a tilt enters `"tilted"`).
+   * Velocity only, never a position write. Call it at the top of a fixed step
+   * (between steps, as the `applyImpulse` contract requires). Ignored in any
+   * other state, so a tilted or game-over table neither moves nor fills the meter.
    */
   onNudge(dir: NudgeDir): void {
     if (this.state !== "playing") return;
@@ -144,21 +171,31 @@ export class GameSession implements RulesGate {
       const b = balls[i];
       if (b) this.world.applyImpulse(b.id, ix, iy);
     }
+    const outcome = this.tilt.addNudge();
+    if (outcome === "warning") this.warningUntilStep = this.step + WARNING_FLASH_STEPS;
+    else if (outcome === "tilt") this.state = "tilted";
   }
 
-  /** Advance the session clock by one fixed step. Call once per fixed step. */
+  /**
+   * Advance the session clock by one fixed step and decay the tilt meter. Call
+   * once per fixed step, after the game edges.
+   */
   tick(): void {
     this.step++;
+    this.tilt.update();
   }
 
-  /** RED stub (04-06 Task 2). */
+  /**
+   * Whether the HUD shows WARNING: for `WARNING_FLASH_STEPS` steps after a
+   * warning edge, and only while playing (a tilt or a serve ends it).
+   */
   isWarning(): boolean {
-    return false;
+    return this.state === "playing" && this.step < this.warningUntilStep;
   }
 
-  /** RED stub (04-06 Task 2). */
+  /** The tilt meter level (read-only; for tests and diagnosis). */
   getTiltLevel(): number {
-    return 0;
+    return this.tilt.getLevel();
   }
 
   /** The ball in play (the one the plunger launches), or -1. */
@@ -181,7 +218,10 @@ export class GameSession implements RulesGate {
     return this.played;
   }
 
-  /** Whether contacts score right now: only while a ball is in play. */
+  /**
+   * Whether contacts score right now: only while a ball is in play and not
+   * tilted, so a tilt kills every rule (kicks, points, lights) at once.
+   */
   isLive(): boolean {
     return this.state === "playing";
   }
@@ -197,6 +237,12 @@ export class GameSession implements RulesGate {
   /** The running score (kept after game over until the next start). */
   getScore(): number {
     return this.score;
+  }
+
+  /** Clear the tilt meter and the WARNING window (a new ball or a new game). */
+  private clearTilt(): void {
+    this.tilt.reset();
+    this.warningUntilStep = 0;
   }
 
   /** Bus listener, bound once: record the drain, never touch the world here. */
