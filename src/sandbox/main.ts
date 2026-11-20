@@ -59,6 +59,7 @@ import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
+import { initKeyLabels } from "../ui/key-labels";
 import { DebugRenderer, type InterpolatedBall } from "./debug-draw";
 
 /**
@@ -222,6 +223,13 @@ function main(): void {
   // Diagnosis readout: DOM text in its own panel (G-04-6), written only when a
   // throttled number changes.
   const diagView = new DiagView(requireTextSink("hud-diag"));
+  // The key caps show the player's layout (G-04-17, UAT 18 decision A); the
+  // markup labels stay where the Keyboard Map API is missing.
+  void initKeyLabels(
+    document.querySelectorAll<HTMLElement>("kbd[data-code]"),
+    document.querySelectorAll<HTMLElement>("[data-layout-only]"),
+    navigator,
+  );
   renderer.resize(world);
   window.addEventListener("resize", () => renderer.resize(world));
 
