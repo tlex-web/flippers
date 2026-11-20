@@ -11,6 +11,7 @@ import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
   KICKER_REARM_STEPS,
+  ROLLOVER_POINTS,
   SLING_KICK_SPEED,
   SLING_MIN_IMPULSE,
   SLING_POINTS,
@@ -46,6 +47,7 @@ class SumGate implements RulesGate {
 interface Rig {
   readonly world: PlanckWorld;
   readonly gate: SumGate;
+  readonly reactive: ReactiveElements | null;
   readonly seen: Seen[];
   run(n: number): void;
   steps(): number;
@@ -77,7 +79,7 @@ function makeRig(withRules: boolean): Rig {
   const run = (n: number): void => {
     for (let i = 0; i < n; i++) loop.advance(FIXED_DT * 1000, undefined, onPostStep);
   };
-  return { world, gate, seen, run, steps: () => step };
+  return { world, gate, reactive, seen, run, steps: () => step };
 }
 
 const TWO_SECONDS = Math.round(2 / FIXED_DT);
@@ -252,5 +254,23 @@ describe("slingshot rule on the real table (ELEM-02 tracer)", () => {
     expect(out.vn).toBeGreaterThanOrEqual(SLING_KICK_SPEED - 0.25);
     expect(out.vx).toBeLessThan(0);
     expect(out.vy).toBeLessThan(0);
+  });
+});
+
+describe("rollover rule on the real table (ELEM-03)", () => {
+  it("a ball falling through rollover 401 scores ROLLOVER_POINTS on the delivering step and lights it", () => {
+    const rig = makeRig(true);
+    rig.world.addBall({ x: 1.45, y: 0.55 });
+    const isPass = (e: Seen): boolean => e.elementKind === "rollover" && e.elementId === 401;
+    let before = 0;
+    let found = false;
+    for (let i = 0; i < TWO_SECONDS && !found; i++) {
+      before = rig.gate.score;
+      rig.run(1);
+      found = rig.seen.some(isPass);
+    }
+    expect(found).toBe(true);
+    expect(rig.gate.score - before).toBe(ROLLOVER_POINTS);
+    expect(rig.reactive?.isLit(401)).toBe(true);
   });
 });
