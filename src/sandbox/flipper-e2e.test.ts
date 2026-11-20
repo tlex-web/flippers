@@ -200,3 +200,118 @@ describe("flipper end-to-end: keyboard -> FSM -> setFlipperMotor -> Planck (FLIP
     expect(minTip).toBeLessThan(downTip - 0.15); // raised (tip up) again
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * G-04-10: response latency after ANY hold or rest, and no stuck quick tap.
+ * ------------------------------------------------------------------------- */
+
+/** A bat has "started moving" once its angle leaves the start by more than this (rad). */
+const MOVE_EPS_RAD = 0.01;
+
+/**
+ * Step the rig until `id`'s angle has left its current value by more than
+ * MOVE_EPS_RAD. Returns the number of fixed steps that took (1 = it moved on
+ * the very first step), or -1 if it never moved within `maxSteps`.
+ */
+function stepsUntilMoved(
+  rig: ReturnType<typeof makeRig>,
+  id: number,
+  maxSteps: number,
+): number {
+  const start = rig.angleOf(id);
+  for (let i = 1; i <= maxSteps; i++) {
+    rig.step();
+    if (Math.abs(rig.angleOf(id) - start) > MOVE_EPS_RAD) return i;
+  }
+  return -1;
+}
+
+/** One primary and one arrow binding per side (the latency cases). */
+const LATENCY_BINDINGS = [
+  { code: "KeyZ", side: "left" },
+  { code: "Slash", side: "right" },
+  { code: "ArrowLeft", side: "left" },
+  { code: "ArrowRight", side: "right" },
+] as const;
+
+/** All six flipper bindings (src/input/flipper-input.ts), for the quick-tap sweep. */
+const ALL_BINDINGS = [
+  { code: "KeyZ", side: "left" },
+  { code: "ShiftLeft", side: "left" },
+  { code: "ArrowLeft", side: "left" },
+  { code: "Slash", side: "right" },
+  { code: "ShiftRight", side: "right" },
+  { code: "ArrowRight", side: "right" },
+] as const;
+
+function sideId(rig: ReturnType<typeof makeRig>, side: "left" | "right"): number {
+  return side === "left" ? rig.leftId : rig.rightId;
+}
+
+describe("flipper response after any hold or rest (G-04-10)", () => {
+  for (const b of LATENCY_BINDINGS) {
+    for (const hold of [10, 60, 200]) {
+      it(`${b.code}: a release after a ${hold}-step hold starts the ${b.side} bat falling within 2 steps`, () => {
+        const rig = makeRig();
+        const id = sideId(rig, b.side);
+        rig.input.handleKeyDown(key(b.code));
+        for (let i = 0; i < hold; i++) rig.step();
+        rig.input.handleKeyUp(key(b.code));
+        const n = stepsUntilMoved(rig, id, 40);
+        expect(n).toBeGreaterThanOrEqual(1);
+        expect(n).toBeLessThanOrEqual(2);
+      });
+    }
+
+    for (const rest of [30, 240]) {
+      it(`${b.code}: a press after a ${rest}-step rest starts the ${b.side} bat rising within 2 steps`, () => {
+        const rig = makeRig();
+        const id = sideId(rig, b.side);
+        pressThenRelease(rig, b.code);
+        for (let i = 0; i < rest; i++) rig.step();
+        rig.input.handleKeyDown(key(b.code));
+        const n = stepsUntilMoved(rig, id, 40);
+        expect(n).toBeGreaterThanOrEqual(1);
+        expect(n).toBeLessThanOrEqual(2);
+      });
+    }
+  }
+
+  for (const b of [
+    { code: "KeyZ", side: "left" },
+    { code: "Slash", side: "right" },
+  ] as const) {
+    it(`TILT (setEnabled(false)) starts a held-up ${b.side} bat falling within 2 steps`, () => {
+      const rig = makeRig();
+      const id = sideId(rig, b.side);
+      rig.input.handleKeyDown(key(b.code));
+      for (let i = 0; i < 60; i++) rig.step();
+      rig.controller.setEnabled(false);
+      const n = stepsUntilMoved(rig, id, 40);
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(2);
+    });
+  }
+
+  it("no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised", () => {
+    const stuck: string[] = [];
+    for (const b of ALL_BINDINGS) {
+      for (let hold = 3; hold <= 10; hold++) {
+        for (const pre of [20, 57, 94, 131]) {
+          const rig = makeRig();
+          const id = sideId(rig, b.side);
+          for (let i = 0; i < pre; i++) rig.step();
+          const restTip = rig.tipY(id);
+          rig.input.handleKeyDown(key(b.code));
+          for (let i = 0; i < hold; i++) rig.step();
+          rig.input.handleKeyUp(key(b.code));
+          for (let i = 0; i < 90; i++) rig.step();
+          const resting = rig.controller.getPhase(id) === "resting";
+          const atRest = Math.abs(rig.tipY(id) - restTip) < 0.02;
+          if (!resting || !atRest) stuck.push(`${b.code} hold=${hold} pre=${pre}`);
+        }
+      }
+    }
+    expect(stuck).toEqual([]);
+  });
+});
