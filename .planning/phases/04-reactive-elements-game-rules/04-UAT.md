@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T23:58:00Z
+updated: 2026-11-20T23:02:20.004Z
 ---
 
 ## Current Test
@@ -98,22 +98,25 @@ result: pass
 
 ### 16. UAT test 11 re-test on a real Windows keyboard. Confirm Sticky Keys is OFF, run `npm run dev`, press Enter. On each of Z, Left Shift, Left Arrow, /, Right Shift, Right Arrow make quick taps of varied length, hold a long cradle then release, and hold both Shifts together for a cradle. Then tap Left Shift five times to open the Sticky Keys prompt, close it with the mouse (No), return to the game and tap Z, Left Arrow, then Left Shift. Also over-nudge to TILT once while holding a bat up.
 expected: Each bat snaps up on its key and falls on release on all six bindings. The both-Shift cradle holds both bats up. After the prompt closes, no bat stays raised once the window has focus; a tap of Z, Left Arrow or Space releases a raised bat; every binding works afterwards. On TILT the held bat drops at once. Cradle and catch still feel heavy. Known residual, not a failure: if Sticky Keys was turned ON by the prompt, Windows itself holds Shift down after a Shift tap until the next non-Shift key.
-result: [pending]
+result: pass
 
 ### 17. Windows both-Shift release (code-review WR-02). Hold ShiftLeft and ShiftRight together (both bats up), release ShiftLeft first, then ShiftRight, then watch both bats.
 expected: Both bats drop. If the left bat stays raised after both Shifts are up (Windows emits no keyup for the first Shift released while both are held), it is the unhealed WR-02 residual and clears on the next non-Shift key press or a focus regain.
-result: [pending]
+result: issue
+reported: "the shift keys are still a bit more buggy than the arrow keys - sometimes they get stuck but can be quickly released"
+severity: minor
 
 ### 18. Shift as a default binding (plan 04-11 flagged design note, T-04-29 accepted). Decide whether Left/Right Shift stay default flipper bindings (Phase 2 D-09) given the OS Sticky Keys shortcut, and whether the controls list should hint at it.
 expected: A recorded user decision. Bindings are unchanged in the code today.
-result: [pending]
+result: pass
+note: "Presented: recommendation A (keep Shift as a default binding, add a controls-list hint that Z, / and the arrow keys are the most reliable on Windows) vs B (drop Shift). User answered 'pass': recorded as A. The hint can ride along with the G-04-17 fix."
 
 ## Summary
 
 total: 18
-passed: 12
-issues: 3
-pending: 3
+passed: 14
+issues: 4
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -164,7 +167,9 @@ blocked: 0
 
 - gap_id: G-04-11
   truth: "Each bat snaps up the instant its key goes down and starts falling the instant it comes up, on all six bindings. No tap leaves a bat hanging raised."
-  status: failed
+  status: resolved
+  resolved_by: 04-11-PLAN.md
+  resolved_at: 2026-11-20
   reason: "User reported: i was only able to test the flippers with the arrow keys. i noticed that the shift key is not working properly since the left shift is activating sticky keys after many clicks and the flipper gets stuck."
   severity: major
   test: 11
@@ -182,3 +187,12 @@ blocked: 0
     - "Regression tests: keydown with no keyup followed by focus regain ends released; a stale ShiftLeft does not stop Z or ArrowLeft releasing the left bat (same for right)"
     - "Design note (user call, not required): a Sticky-Keys-held Shift still reads as down to the browser, so no JS check can release it; consider whether Shift stays a default binding or gets a hint"
   debug_session: ".planning/debug/left-shift-sticky-keys-flipper-stuck.md"
+
+- gap_id: G-04-17
+  truth: "Hold ShiftLeft and ShiftRight together, release ShiftLeft first, then ShiftRight: both bats drop (Shift bindings behave as reliably as the arrow keys)."
+  status: failed
+  reason: "User reported: the shift keys are still a bit more buggy than the arrow keys - sometimes they get stuck but can be quickly released"
+  severity: minor
+  test: 17
+  artifacts: []  # Filled by diagnosis
+  missing: []    # Filled by diagnosis
