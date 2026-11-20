@@ -44,6 +44,20 @@
         font-weight: 700;
         font-variant-numeric: tabular-nums;
       }
+      .hud-ball {
+        margin-top: 4px;
+        font-size: 16px;
+        color: #c3cbe6;
+      }
+      /* Game status (GAME-02/03): the one announced line; min-height keeps the
+         panel from jumping when it empties. */
+      .hud-status {
+        min-height: 1.2em;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: #ffd166;
+      }
     </style>
   </head>
   <body>
@@ -54,6 +68,8 @@
       <div id="hud" class="hud">
         <div class="hud-label">SCORE</div>
         <div id="hud-score" class="hud-score">0</div>
+        <div id="hud-ball" class="hud-ball"></div>
+        <div id="hud-status" class="hud-status" role="status" aria-live="polite"></div>
       </div>
     </main>
     <script type="module" src="/src/sandbox/main.ts"></script>

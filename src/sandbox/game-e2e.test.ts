@@ -20,6 +20,7 @@ import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
+import { formatScore, HudView, type TextSink } from "../ui/hud";
 
 /**
  * Headless no-mock proof of the whole game (plan 04-05, GAME-02): the same
@@ -83,6 +84,11 @@ interface Game {
   readonly drainedIds: BallId[];
   /** Every ball id that appeared in any bus event. */
   readonly touchedIds: Set<BallId>;
+  /**
+   * Called after every render frame, as `main.ts` calls `hudView.update()`
+   * right after drawing; null when nothing listens.
+   */
+  onFrame: (() => void) | null;
   /** One render frame of `deltaMs`; returns the fixed steps it ran. */
   frame(deltaMs: number): number;
   /** The ball in play; throws if it is not on the table. */
@@ -150,7 +156,7 @@ function makeGame(): Game {
   if (!chute) throw new Error("table has no chute");
   const chuteTopY = Math.min(...chute.vertices.map((v) => v.y));
 
-  return {
+  const game: Game = {
     world,
     session,
     reactive,
@@ -160,7 +166,12 @@ function makeGame(): Game {
     chuteTopY,
     drainedIds,
     touchedIds,
-    frame: (deltaMs) => loop.advance(deltaMs, onFixedStep, onPostStep),
+    onFrame: null,
+    frame: (deltaMs) => {
+      const steps = loop.advance(deltaMs, onFixedStep, onPostStep);
+      game.onFrame?.();
+      return steps;
+    },
     ball: () => {
       const id = session.activeBallId;
       const b = world.getBalls().find((x) => x.id === id);
@@ -168,6 +179,7 @@ function makeGame(): Game {
       return b;
     },
   };
+  return game;
 }
 
 /** Run render frames of `deltaMs` until `steps` fixed steps have elapsed. */
@@ -510,5 +522,100 @@ describe("nudge (GAME-03, R9): a velocity impulse, never a teleport", () => {
     expect(pa.y).toBe(pb.y);
     expect(pa.vx).toBe(pb.vx);
     expect(pa.vy).toBe(pb.vy);
+  });
+});
+
+/** Fake text node whose setter stores the value and counts every write. */
+class CountingSink implements TextSink {
+  writes = 0;
+  private text: string | null = null;
+  get textContent(): string | null {
+    return this.text;
+  }
+  set textContent(value: string | null) {
+    this.writes++;
+    this.text = value;
+  }
+}
+
+/** Steps after a nudge keydown before its keyup. */
+const NUDGE_KEY_HOLD_STEPS = 2;
+
+/** Spacing between nudge edges: just past the cooldown, so every one is accepted. */
+const NUDGE_SPACING_STEPS = NUDGE_COOLDOWN_STEPS + 2;
+
+/** Steps the launched ball runs before the first nudge, so it is in the field. */
+const IN_FIELD_STEPS = 120;
+
+describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot to game over", () => {
+  it("shows the start prompt, the ball number, WARNING, TILT, the next ball and GAME OVER", () => {
+    const g = makeGame();
+    const score = new CountingSink();
+    const ball = new CountingSink();
+    const status = new CountingSink();
+    const hud = new HudView(score, ball, status);
+    g.onFrame = () => hud.update(g.session);
+
+    // Boot: attract.
+    runSteps(g, FRAME_120_HZ, 1);
+    expect(score.textContent).toBe("0");
+    expect(ball.textContent).toBe("");
+    expect(status.textContent).toBe("PRESS ENTER TO START");
+
+    // Enter, one step: ball 1, plain play.
+    pressEnter(g);
+    expect(ball.textContent).toBe("BALL 1 / 3");
+    expect(status.textContent).toBe("");
+
+    // Settle, full-charge launch, and let the ball reach the field.
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, FULL_HOLD_STEPS);
+    g.plungerInput.handleKeyUp(SPACE);
+    runSteps(g, FRAME_120_HZ, IN_FIELD_STEPS);
+    const tiltedId = g.session.activeBallId;
+    expect(g.drainedIds).not.toContain(tiltedId);
+
+    // Four rapid nudges, each just past the cooldown: the third warns, the
+    // fourth tilts, and the ball line stays on ball 1.
+    for (let n = 1; n <= 4; n++) {
+      g.gameInput.handleKeyDown(KEY_X);
+      runSteps(g, FRAME_120_HZ, NUDGE_KEY_HOLD_STEPS);
+      g.gameInput.handleKeyUp(KEY_X);
+      expect(g.session.activeBallId).toBe(tiltedId);
+      if (n === 3) expect(status.textContent).toBe("WARNING");
+      if (n === 4) {
+        expect(status.textContent).toBe("TILT");
+        expect(ball.textContent).toBe("BALL 1 / 3");
+      } else {
+        runSteps(g, FRAME_120_HZ, NUDGE_SPACING_STEPS - NUDGE_KEY_HOLD_STEPS);
+      }
+    }
+
+    // The tilted ball drains: ball 2 is served clean.
+    let steps = 0;
+    while (!g.drainedIds.includes(tiltedId)) {
+      if (steps >= DRAIN_CAP_STEPS) throw new Error(`tilted ball ${tiltedId} did not drain`);
+      steps += g.frame(FRAME_120_HZ);
+    }
+    expect(ball.textContent).toBe("BALL 2 / 3");
+    expect(status.textContent).toBe("");
+
+    // Balls 2 and 3 play out as in the 3-ball scenario.
+    launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(ball.textContent).toBe("BALL 3 / 3");
+    expect(status.textContent).toBe("");
+    launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(g.session.getState()).toBe("game-over");
+    expect(ball.textContent).toBe("");
+    expect(status.textContent).toBe("GAME OVER · PRESS ENTER");
+    expect(score.textContent).toBe(formatScore(g.session.getScore()));
+
+    // Write-on-change on the real table: each line was written once per change
+    // of its own inputs. Ball (state or ball): "", BALL 1, BALL 1 again on the
+    // tilt (a state change), BALL 2, BALL 3, "". Status: attract, "", WARNING,
+    // TILT, "", GAME OVER.
+    expect(ball.writes).toBe(6);
+    expect(status.writes).toBe(6);
   });
 });

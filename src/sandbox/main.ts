@@ -22,8 +22,10 @@
  * `ReactiveElements` records kicks and awards points through the session's
  * rules gate, which is live only while a ball is in play. Both only record or
  * award in their listeners; the world is mutated only in their `service()`
- * calls, in a fixed order, after dispatch. The running score shows in a DOM HUD
- * overlay (`#hud-score`, written only when it changes).
+ * calls, in a fixed order, after dispatch. The score, the ball number and the
+ * game status (start and game-over prompts, WARNING, TILT) show in a DOM HUD
+ * overlay (`#hud-score`, `#hud-ball`, `#hud-status`, each written only when it
+ * changes).
  *
  * Fixed-step order:
  * - `onFixedStep` (top of each step): flipper edges then the flipper FSM; the
@@ -185,8 +187,13 @@ function main(): void {
   }
 
   const renderer = new DebugRenderer(canvas);
-  // Score HUD: the DOM overlay, written only when the score changes.
-  const hudView = new HudView(requireTextSink("hud-score"));
+  // Game HUD: the DOM overlay (score, ball, status), each line written only
+  // when its own inputs change.
+  const hudView = new HudView(
+    requireTextSink("hud-score"),
+    requireTextSink("hud-ball"),
+    requireTextSink("hud-status"),
+  );
   renderer.resize(world);
   window.addEventListener("resize", () => renderer.resize(world));
 
@@ -281,7 +288,8 @@ function main(): void {
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
     renderer.draw(world, interpolated, hud, plunger.getCharge(), reactive);
-    // The score lands in the frame the hit lands (write only on change).
+    // The score, ball and status land in the frame the session changes them
+    // (each line written only on change).
     hudView.update(session);
   }
 
