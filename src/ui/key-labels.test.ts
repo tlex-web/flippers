@@ -125,6 +125,25 @@ describe("applyKeyLabels", () => {
     expect(plain.textContent).toBe("Left Shift");
     expect(reveal.hidden).toBe(false);
   });
+
+  it("reveals the note over all six caps only when every code resolved", () => {
+    const six = (): FakeCap[] => [
+      ...rowCaps(),
+      new FakeCap("KeyZ", "Z"),
+      new FakeCap("Slash", "/"),
+    ];
+    const caps = six();
+    const reveal = new FakeReveal();
+    expect(applyKeyLabels(caps, [reveal], GERMAN)).toBe(true);
+    expect(texts(caps)).toEqual(["Y", "-", "X", ".", "Y", "-"]);
+    expect(reveal.hidden).toBe(false);
+
+    const noPeriod = new Map(GERMAN);
+    noPeriod.delete("Period");
+    const hiddenReveal = new FakeReveal();
+    expect(applyKeyLabels(six(), [hiddenReveal], noPeriod)).toBe(false);
+    expect(hiddenReveal.hidden).toBe(true);
+  });
 });
 
 describe("readLayoutMap", () => {
@@ -211,5 +230,46 @@ describe("index.html markup", () => {
 
   it("keeps exactly five controls rows", () => {
     expect(indexHtml.match(/<dt>/g)?.length).toBe(5);
+  });
+
+  /** The note paragraph's inner markup. */
+  function noteBody(): string {
+    const m = /<p class="hud-controls-note">([\s\S]*?)<\/p>/.exec(indexHtml);
+    expect(m).not.toBeNull();
+    return m?.[1] ?? "";
+  }
+
+  const SPAN = /<span data-layout-only hidden>([\s\S]*?)<\/span\s*>/;
+
+  it("has exactly one Windows reliability note", () => {
+    expect(indexHtml.match(/class="hud-controls-note"/g)?.length).toBe(1);
+  });
+
+  it("names the arrow keys outside the layout-only span", () => {
+    const outside = noteBody().replace(SPAN, "");
+    expect(outside).toMatch(/<kbd>←<\/kbd\s*>/);
+    expect(outside).toMatch(/<kbd>→<\/kbd\s*>/);
+  });
+
+  it("holds the KeyZ and Slash caps in one hidden layout-only span", () => {
+    expect(indexHtml.match(/data-layout-only/g)?.length).toBe(1);
+    const span = SPAN.exec(noteBody());
+    expect(span).not.toBeNull();
+    expect(span?.[1]).toContain('<kbd data-code="KeyZ">Z</kbd>');
+    expect(span?.[1]).toContain('<kbd data-code="Slash">/</kbd>');
+  });
+
+  it("reads as the arrow-only fallback with the span hidden", () => {
+    const text = noteBody()
+      .replace(SPAN, "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(text).toBe("On Windows, ← → are the most reliable flipper keys. Shift can stick.");
+  });
+
+  it("styles the note with contain: inline-size", () => {
+    const style = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)?.[1] ?? "";
+    expect(style).toMatch(/\.hud-controls-note\s*\{[^}]*contain:\s*inline-size/);
   });
 });

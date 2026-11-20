@@ -80,7 +80,8 @@
         gap: 4px;
         white-space: nowrap;
       }
-      .hud-controls kbd {
+      .hud-controls kbd,
+      .hud-controls-note kbd {
         font: inherit;
         min-width: 1.2em;
         padding: 0 4px;
@@ -89,6 +90,16 @@
         border-radius: 3px;
         background: rgba(138, 160, 255, 0.08);
         color: #c3cbe6;
+      }
+      /* Windows reliability note (G-04-17, UAT 18 decision A). contain:
+         inline-size drops it from the panel's intrinsic width, so it wraps at
+         the width the five rows set and never widens the panel over the table. */
+      .hud-controls-note {
+        contain: inline-size;
+        margin: 8px 0 0;
+        font-size: 11px;
+        line-height: 1.6;
+        color: #8892b0;
       }
       /* Diagnosis readout (G-04-6): DOM text, legible at any canvas fit. A
          developer readout, so it is hidden from assistive tech. */
@@ -131,6 +142,13 @@
           <dt>Nudge</dt>
           <dd><kbd data-code="KeyX">X</kbd><kbd data-code="Period">.</kbd><kbd>↑</kbd></dd>
         </dl>
+        <p class="hud-controls-note">
+          On Windows, <kbd>←</kbd> <kbd>→</kbd
+          ><span data-layout-only hidden>
+            <kbd data-code="KeyZ">Z</kbd> <kbd data-code="Slash">/</kbd></span
+          >
+          are the most reliable flipper keys. Shift can stick.
+        </p>
       </div>
       <div id="hud-diag" class="hud-diag" aria-hidden="true"></div>
     </main>
