@@ -28,9 +28,13 @@ class SpyWorld implements FlipperWorld {
     length: number;
     halfWidth: number;
     tipRadius: number;
+    restLimitAngle: number;
   }[] = [];
 
-  constructor(ids: readonly { id: number; angle: number }[]) {
+  /** `restLimitAngle` defaults to the entry's initial angle (it starts at rest). */
+  constructor(
+    ids: readonly { id: number; angle: number; restLimitAngle?: number }[],
+  ) {
     for (const f of ids) {
       this.flippers.push({
         id: f.id,
@@ -40,6 +44,7 @@ class SpyWorld implements FlipperWorld {
         length: 0.5,
         halfWidth: 0.07,
         tipRadius: 0.07,
+        restLimitAngle: f.restLimitAngle ?? f.angle,
       });
     }
   }
@@ -339,5 +344,81 @@ describe("FlipperController enable gate (GAME-03, R11, Pitfall 5)", () => {
     ctrl.onPressEdge(0);
     expect(ctrl.getPhase(0)).toBe("flipping-up");
     expect(world.motorCalls).toEqual([{ id: 0, direction: 1 }]);
+  });
+});
+
+describe("FlipperController enters resting only at the rest limit (G-04-10)", () => {
+  it("a bat that drifts and stops short of rest keeps being driven down (-1, never 0)", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.onReleaseEdge(0);
+    hold(world, ctrl, 0, L_UP - 0.04, 1); // limit position-correction drift
+    hold(world, ctrl, 0, L_UP - 0.045, 4); // then "settled", but nowhere near rest
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls.length).toBeGreaterThan(0);
+    for (const c of world.motorCalls) expect(c.direction).toBe(-1);
+
+    sweep(world, ctrl, 0, L_UP - 0.045, L_REST, 4);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("the drift guard is mirror-safe (right bat around +pi)", () => {
+    const R_REST = Math.PI - 0.4;
+    const R_UP = Math.PI + 0.4;
+    const world = new SpyWorld([{ id: 1, angle: R_REST, restLimitAngle: R_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(1);
+    sweep(world, ctrl, 1, R_REST, R_UP, 4);
+    hold(world, ctrl, 1, R_UP, 2);
+    expect(ctrl.getPhase(1)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.onReleaseEdge(1);
+    hold(world, ctrl, 1, R_UP - 0.04, 1);
+    hold(world, ctrl, 1, R_UP - 0.045, 4);
+    expect(ctrl.getPhase(1)).toBe("returning");
+    for (const c of world.motorCalls) expect(c.direction).toBe(-1);
+
+    sweep(world, ctrl, 1, R_UP - 0.045, R_REST, 4);
+    hold(world, ctrl, 1, R_REST, 2);
+    expect(ctrl.getPhase(1)).toBe("resting");
+    expect(world.lastMotor(1)).toBe(0);
+  });
+
+  it("the first observation after a release is not enough to enter resting", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    hold(world, ctrl, 0, L_REST + 0.05, 1); // a hair off rest
+    ctrl.onReleaseEdge(0);
+
+    hold(world, ctrl, 0, L_REST + 0.05, 1); // post-release refresh reads delta 0
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+
+    hold(world, ctrl, 0, L_REST + 0.08, 1); // still moving
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+
+    sweep(world, ctrl, 0, L_REST + 0.08, L_REST, 4);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("a tap released before the bat moved settles to resting (motor 0) at the rest limit", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onReleaseEdge(0);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
   });
 });
