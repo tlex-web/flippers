@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T23:02:20.004Z
+updated: "2026-11-20T23:16:56Z"
 ---
 
 ## Current Test
@@ -194,5 +194,21 @@ blocked: 0
   reason: "User reported: the shift keys are still a bit more buggy than the arrow keys - sometimes they get stuck but can be quickly released"
   severity: minor
   test: 17
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "Windows folds both Shift keys into one virtual key (VK_SHIFT), and FlipperInput discards both event-level traces of that. (1) Press: the second Shift pressed while the other is held arrives as keydown repeat:true (OS-flagged, even 2.6 s later); handleKeyDown drops every repeat, so the second-pressed bat never rises in a both-Shift hold (new, not in WR-02). (2) Release (WR-02): the first Shift released while both are held emits NO keyup; only the last release fires, with shiftKey:false, and dropStaleShift early-returns for Shift-key events (04-11 design, pinned by test B6), so the first-pressed Shift stays in held. It sticks only when first-pressed is also first-released (hence 'sometimes'); a lone re-tap of that Shift, any non-Shift key, or a focus change clears it, else flipperGate re-presses it on the next serve. Verified live (Chrome 157 / Win11, SendInput-injected Shift events, GetAsyncKeyState correct throughout) and by replaying the captured sequences through the real flipper-input.ts. Matches ThinLinc bug 7416 and noVNC's Windows-only both-Shift heal."
+  artifacts:
+    - path: "src/input/flipper-input.ts"
+      issue: "handleKeyDown ignores every repeat keydown, including the OS-flagged second Shift press; dropStaleShift early-returns for ShiftLeft/ShiftRight events so the final shiftKey:false Shift keyup cannot clear the other Shift"
+    - path: "src/input/flipper-input.test.ts"
+      issue: "B6 pins the current keep-the-other-Shift behaviour; must change for a Windows-gated heal (repeat-ignore test uses KeyZ, unaffected)"
+    - path: "src/sandbox/main.ts"
+      issue: "Gate re-press (~143-150) keeps a stale Shift alive across serves; drain applies press before release (~170-174, WR-01), which the release heal can trigger"
+    - path: "index.html"
+      issue: "Controls list needs the UAT 18 hint; user's layout is German QWERTZ (00000407), so KeyZ/Slash are labelled Y and - and a literal 'Z, /' hint would be wrong"
+  missing:
+    - "Accept a repeat keydown for ShiftLeft/ShiftRight when that code is not held and the other Shift is held (a held Shift's own auto-repeat stays de-duped)"
+    - "On a ShiftLeft/ShiftRight keyup with shiftKey === false, drop both Shift codes; gate to Windows (platform check injected as an option so tests cover both), as noVNC does — Linux shiftKey semantics are unverified"
+    - "Fix WR-01 in the same plan: apply release before press in the drain so a heal-release and same-side press in one batch cannot drop a held bat"
+    - "Regression tests from the captured sequences: all four both-Shift orders end with both bats having risen and both released; single taps and a held Shift's auto-repeat unchanged; non-Windows path keeps B6 behaviour"
+    - "Document the browser-impossible residual: a bat whose Shift is released while the other Shift is still held stays up until the other Shift is released"
+    - "UAT 18 decision A: controls-list hint naming the reliable keys layout-correctly (name the arrow keys, or label from navigator.keyboard.getLayoutMap()) — not a literal 'Z, /'"
+  debug_session: ".planning/debug/shift-flipper-residual-stick.md"
