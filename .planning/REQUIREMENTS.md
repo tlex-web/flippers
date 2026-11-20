@@ -33,7 +33,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 - [ ] **ELEM-01**: Bumpers pop the ball back with added energy and award points on contact
 - [ ] **ELEM-02**: Slingshots/kickers near the flippers kick the ball on contact to keep it lively
-- [ ] **ELEM-03**: Lanes and rollovers trigger lights and award points as the ball passes over them
+- [x] **ELEM-03**: Lanes and rollovers trigger lights and award points as the ball passes over them
 
 ### Game Rules (GAME)
 
@@ -109,7 +109,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | TBL-01 | Phase 3 | Complete |
 | ELEM-01 | Phase 4 | Pending |
 | ELEM-02 | Phase 4 | Pending |
-| ELEM-03 | Phase 4 | Pending |
+| ELEM-03 | Phase 4 | Complete |
 | GAME-01 | Phase 4 | Pending |
 | GAME-02 | Phase 4 | Pending |
 | GAME-03 | Phase 4 | Pending |

@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-11-20T15:32:38.733Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-11-20T15:50:31.185Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: ecba38dcef4cbc2ec4eb6c449acc083b8a78f36c
+state_head: f229086edb7bf07efdb9fd261e80b9e2bc1e214f
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 21
+  completed_plans: 22
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -81,6 +81,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P06 | 10min | 3 tasks | 9 files |
 | Phase 04 P01 | 10min | 3 tasks | 11 files |
 | Phase 04 P02 | 5min | 2 tasks | 5 files |
+| Phase 04 P03 | 14min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Score HUD is a DOM overlay (#hud-score) written only on change via textContent; canvas HUD stays diagnosis-only
 - [Phase 04]: Plunger release requires speed < PLUNGER_REST_SPEED_EPS 0.05 m/s (strict) beside the zone test; a refused release resets to idle (IN-01)
 - [Phase 04]: applyEdges orders same-window plunger edges by held state at drain time (held: release, cancel, press; not held: press, release, cancel), not the review's fixed order which strands a sub-window tap (IN-02)
+- [Phase 04]: Slingshot kick face = longest loop segment, normal away from the vertex centroid; fires on normalImpulse >= 0.02 within 0.05 m of the clamped face segment; raises vn to 4.5 m/s (R2)
+- [Phase 04]: Rollovers/inlanes re-arm after 30 steps; rollover 1,000 and lights, all three lit pays 10,000 and clears; inlane 2,000, never lit; lights cleared only by resetLights() (new game)
+- [Phase 04]: Energy bound proven: 12 seeded dead-flipper drops (0x0403) all drain within 60 s, peak 6.74 m/s, kicks fire; 20 m/s kicks turn it red
 
 ### Pending Todos
 
@@ -167,6 +171,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T15:32:37.548Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-11-20T15:50:29.753Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
