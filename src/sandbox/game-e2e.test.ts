@@ -796,3 +796,62 @@ describe("flipper relay (GAME-03, R11): dead outside a game, dropped by TILT, ba
     expectDeadPress(g, SLASH, DEAD_WATCH_STEPS);
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * G-04-11: a stale Shift (keyup lost to the OS) is dropped by the next key
+ * event that reports Shift up, so the flipper gate does not re-raise it.
+ * ------------------------------------------------------------------------- */
+
+/** A synthetic key event carrying an explicit Shift modifier state. */
+function shiftKeyEvent(code: string, shiftKey: boolean): KeyEventLike {
+  return { code, shiftKey, repeat: false, preventDefault: () => {} };
+}
+
+describe("G-04-11: a stale Shift is not re-raised on the next serve", () => {
+  it("a stale ShiftLeft is dropped by the launch key and the left bat stays down on ball 2", () => {
+    const g = makeGame();
+    pressEnter(g);
+
+    // ShiftLeft goes down; its keyup is lost (taken by the OS).
+    g.input.handleKeyDown(shiftKeyEvent("ShiftLeft", true));
+    stepsUntilLeft(g, "held-up", RAISE_CAP_STEPS);
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+
+    // Space with Shift up reaches every input, as main.ts's window listeners
+    // deliver every key event to each of them.
+    const spaceDown = shiftKeyEvent("Space", false);
+    g.input.handleKeyDown(spaceDown);
+    g.plungerInput.handleKeyDown(spaceDown);
+    let dropped = false;
+    for (let i = 0; i < 2 && !dropped; i++) {
+      runSteps(g, FRAME_120_HZ, 1);
+      const phase = g.controller.getPhase(g.leftFlipperId);
+      dropped = phase === "returning" || phase === "resting";
+    }
+    expect(dropped).toBe(true);
+
+    runSteps(g, FRAME_120_HZ, FULL_HOLD_STEPS);
+    const spaceUp = shiftKeyEvent("Space", false);
+    g.input.handleKeyUp(spaceUp);
+    g.plungerInput.handleKeyUp(spaceUp);
+
+    // Ball 1 runs to the drain (inline, modelled on launchAndDrain).
+    const id = g.session.activeBallId;
+    let steps = 0;
+    while (!g.drainedIds.includes(id)) {
+      if (steps >= DRAIN_CAP_STEPS) {
+        throw new Error(`ball ${id} did not drain within ${DRAIN_CAP_STEPS} steps`);
+      }
+      steps += g.frame(FRAME_120_HZ);
+    }
+
+    // Ball 2: the flipper gate must not re-raise the dropped stale Shift.
+    expect(g.session.getBall()).toBe(2);
+    expect(g.session.getState()).toBe("playing");
+    expect(g.input.isHeld("left")).toBe(false);
+    for (let i = 0; i < DEAD_WATCH_STEPS; i++) {
+      runSteps(g, FRAME_120_HZ, 1);
+      expect(isRaised(g.controller.getPhase(g.leftFlipperId))).toBe(false);
+    }
+  });
+});

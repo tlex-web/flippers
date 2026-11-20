@@ -294,3 +294,112 @@ describe("focus regain (G-04-11)", () => {
     expect(doc.removeEventListener).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
   });
 });
+
+describe("stale Shift reconciliation (G-04-11)", () => {
+  /** A synthetic key event with an explicit modifier state. */
+  function sev(code: string, shiftKey: boolean, repeat = false) {
+    return { code, shiftKey, repeat, preventDefault: vi.fn() };
+  }
+
+  /** ShiftLeft/ShiftRight keydown with Shift reported down, drained, never released. */
+  function staleShift(code: "ShiftLeft" | "ShiftRight"): FlipperInput {
+    const input = new FlipperInput();
+    input.handleKeyDown(sev(code, true));
+    input.drainEdges();
+    return input;
+  }
+
+  for (const c of [
+    { shift: "ShiftLeft", side: "left", other: ["KeyZ", "ArrowLeft"] },
+    { shift: "ShiftRight", side: "right", other: ["Slash", "ArrowRight"] },
+  ] as const) {
+    for (const code of c.other) {
+      it(`B1: over a stale ${c.shift}, a ${code} tap latches no edge on keydown and releases the ${c.side} side on keyup`, () => {
+        const input = staleShift(c.shift);
+        const press = c.side === "left" ? "leftPress" : "rightPress";
+        const release = c.side === "left" ? "leftRelease" : "rightRelease";
+
+        input.handleKeyDown(sev(code, false));
+        const down = input.drainEdges();
+        expect(down[press]).toBe(false);
+        expect(down[release]).toBe(false);
+        expect(input.isHeld(c.side)).toBe(true);
+
+        input.handleKeyUp(sev(code, false));
+        expect(input.drainEdges()[release]).toBe(true);
+        expect(input.isHeld(c.side)).toBe(false);
+      });
+    }
+  }
+
+  for (const code of ["Space", "Enter"]) {
+    it(`B2: an unbound ${code} keydown with Shift up drops a stale ShiftLeft without preventDefault`, () => {
+      const input = staleShift("ShiftLeft");
+      const e = sev(code, false);
+      input.handleKeyDown(e);
+      expect(input.drainEdges().leftRelease).toBe(true);
+      expect(input.isHeld("left")).toBe(false);
+      expect(e.preventDefault).not.toHaveBeenCalled();
+    });
+  }
+
+  it("B3: cross-side, an ArrowRight keydown with Shift up releases a stale ShiftLeft and presses right in one drain", () => {
+    const input = staleShift("ShiftLeft");
+    input.handleKeyDown(sev("ArrowRight", false));
+    const edges = input.drainEdges();
+    expect(edges.leftRelease).toBe(true);
+    expect(edges.rightPress).toBe(true);
+  });
+
+  it("B4: an auto-repeat keydown carries valid modifier state: it heals a stale Shift but never presses or preventDefaults", () => {
+    const input = staleShift("ShiftLeft");
+    const e = sev("ArrowLeft", false, true);
+    input.handleKeyDown(e);
+    const edges = input.drainEdges();
+    expect(edges.leftRelease).toBe(true);
+    expect(edges.leftPress).toBe(false);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("B5: a held Shift is kept: KeyX down/up with Shift reported down latches nothing", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(sev("ShiftLeft", true));
+    input.handleKeyDown(sev("ShiftRight", true));
+    input.drainEdges();
+
+    input.handleKeyDown(sev("KeyX", true));
+    input.handleKeyUp(sev("KeyX", true));
+    const edges = input.drainEdges();
+    expect(edges.leftPress || edges.leftRelease || edges.rightPress || edges.rightRelease).toBe(
+      false,
+    );
+    expect(input.isHeld("left")).toBe(true);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("B6: Shift-key events never reconcile: a ShiftLeft keyup reporting shiftKey false keeps a held ShiftRight", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(sev("ShiftLeft", true));
+    input.handleKeyDown(sev("ShiftRight", true));
+    input.drainEdges();
+
+    input.handleKeyUp(sev("ShiftLeft", false));
+    const edges = input.drainEdges();
+    expect(edges.leftRelease).toBe(true);
+    expect(edges.rightRelease).toBe(false);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("B7: an event without a shiftKey field (unknown modifier state) never reconciles", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(ev("ShiftLeft"));
+    input.drainEdges();
+
+    input.handleKeyDown(ev("KeyX"));
+    const edges = input.drainEdges();
+    expect(edges.leftPress || edges.leftRelease || edges.rightPress || edges.rightRelease).toBe(
+      false,
+    );
+    expect(input.isHeld("left")).toBe(true);
+  });
+});

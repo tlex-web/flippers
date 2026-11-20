@@ -399,4 +399,73 @@ describe("a lost keyup never strands a bat (G-04-11)", () => {
       expect(stepsUntilPhase(rig, id, "resting", 90)).toBeGreaterThan(0);
     });
   }
+
+  /** A synthetic key event carrying an explicit Shift modifier state. */
+  const skey = (code: string, shiftKey: boolean): KeyEventLike => ({
+    code,
+    shiftKey,
+    repeat: false,
+    preventDefault: () => {},
+  });
+
+  for (const c of [
+    { shift: "ShiftLeft", side: "left", other: ["KeyZ", "ArrowLeft"] },
+    { shift: "ShiftRight", side: "right", other: ["Slash", "ArrowRight"] },
+  ] as const) {
+    for (const code of c.other) {
+      it(`${code} releases a ${c.side} bat pinned by a stale ${c.shift}, with no drop while it is down`, () => {
+        const rig = makeRig();
+        const id = sideId(rig, c.side);
+        for (let i = 0; i < 20; i++) rig.step();
+        const restTip = rig.tipY(id);
+
+        // Stale Shift: its keydown arrived (Shift down), its keyup was lost.
+        rig.input.handleKeyDown(skey(c.shift, true));
+        for (let i = 0; i < 20; i++) rig.step();
+        expect(rig.controller.getPhase(id)).toBe("held-up");
+
+        // The other binding goes down with Shift physically up: no drop.
+        rig.input.handleKeyDown(skey(code, false));
+        for (let i = 0; i < 10; i++) {
+          rig.step();
+          expect(["flipping-up", "held-up"]).toContain(rig.controller.getPhase(id));
+        }
+
+        // Its keyup releases the bat.
+        rig.input.handleKeyUp(skey(code, false));
+        const fall = stepsUntilMoved(rig, id, 40);
+        expect(fall).toBeGreaterThanOrEqual(1);
+        expect(fall).toBeLessThanOrEqual(2);
+        for (let i = 0; i < 90; i++) rig.step();
+        expect(rig.controller.getPhase(id)).toBe("resting");
+        expect(Math.abs(rig.tipY(id) - restTip)).toBeLessThan(0.02);
+        expect(rig.input.isHeld(c.side)).toBe(false);
+      });
+    }
+  }
+
+  it("the both-Shift cradle survives a nudge key, and releasing one Shift leaves the other bat up", () => {
+    const rig = makeRig();
+    rig.input.handleKeyDown(skey("ShiftLeft", true));
+    rig.input.handleKeyDown(skey("ShiftRight", true));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    rig.input.handleKeyDown(skey("KeyX", true));
+    rig.input.handleKeyUp(skey("KeyX", true));
+    for (let i = 0; i < 30; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    rig.input.handleKeyUp(skey("ShiftLeft", true));
+    const fall = stepsUntilMoved(rig, rig.leftId, 40);
+    expect(fall).toBeGreaterThanOrEqual(1);
+    expect(fall).toBeLessThanOrEqual(2);
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+    for (let i = 0; i < 30; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+    }
+  });
 });
