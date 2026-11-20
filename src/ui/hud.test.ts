@@ -1,7 +1,17 @@
 import { describe, it, expect } from "vitest";
 
 import type { GameState } from "../game/game-session";
-import { ballText, formatScore, HudView, statusText, type HudSource, type TextSink } from "./hud";
+import {
+  ballText,
+  DiagView,
+  diagText,
+  formatScore,
+  HudView,
+  statusText,
+  type DiagData,
+  type HudSource,
+  type TextSink,
+} from "./hud";
 
 /**
  * HUD contract. Score (plan 04-01 Task 3, GAME-01): boundary formatting and
@@ -196,5 +206,54 @@ describe("HudView per-line write-on-change (R5, T-04-19)", () => {
     view.update(src);
     expect([score.writes, ball.writes, status.writes]).toEqual([2, 1, 1]);
     expect(score.textContent).toBe("1,500");
+  });
+});
+
+describe("diagText (G-04-6)", () => {
+  it("rounds FPS and PHYS to integers and KE to three decimals", () => {
+    expect(diagText({ fps: 59.6, physicsHz: 119.7, kineticEnergy: 0.01234 })).toBe(
+      "FPS 60 | PHYS 120 Hz | KE 0.012 J",
+    );
+  });
+  it("formats all-zero inputs", () => {
+    expect(diagText({ fps: 0, physicsHz: 0, kineticEnergy: 0 })).toBe(
+      "FPS 0 | PHYS 0 Hz | KE 0.000 J",
+    );
+  });
+});
+
+describe("DiagView write-on-change (G-04-6, T-04-25)", () => {
+  /** A view over one counting sink, after its first update. */
+  function started() {
+    const sink = new CountingSink();
+    const view = new DiagView(sink);
+    const d: DiagData = { fps: 60, physicsHz: 120, kineticEnergy: 0.5 };
+    view.update(d);
+    return { sink, view, d };
+  }
+
+  it("the first update writes exactly once", () => {
+    const { sink } = started();
+    expect(sink.writes).toBe(1);
+    expect(sink.textContent).toBe("FPS 60 | PHYS 120 Hz | KE 0.500 J");
+  });
+
+  it("further updates with the same three numbers write nothing", () => {
+    const { sink, view, d } = started();
+    for (let i = 0; i < 100; i++) view.update(d);
+    expect(sink.writes).toBe(1);
+  });
+
+  it.each([
+    ["fps", { fps: 58 }, "FPS 58 | PHYS 120 Hz | KE 0.500 J"],
+    ["physicsHz", { physicsHz: 119 }, "FPS 60 | PHYS 119 Hz | KE 0.500 J"],
+    ["kineticEnergy", { kineticEnergy: 1.25 }, "FPS 60 | PHYS 120 Hz | KE 1.250 J"],
+  ] as const)("changing only %s writes exactly once more", (_name, change, text) => {
+    const { sink, view, d } = started();
+    Object.assign(d, change);
+    view.update(d);
+    view.update(d);
+    expect(sink.writes).toBe(2);
+    expect(sink.textContent).toBe(text);
   });
 });
