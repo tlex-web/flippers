@@ -3,6 +3,30 @@ phase: 04
 review: 04-REVIEW.md
 titles: json
 findings:
+  - id: WR-03
+    severity: warning
+    disposition: open
+    title: "04-09 hid a bat-to-wall pinch ejection by changing the test rig; the same pinch exists on TABLE_SPEC and got worse"
+  - id: WR-04
+    severity: warning
+    disposition: open
+    title: "The new quick-tap sweep exceeds Vitest's default 5 s timeout under full-suite load"
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "`resting` has no position guard, and the entry tolerance allows about 3x the measured slop"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "Dead `moved` writes on the returning path"
+  - id: IN-08
+    severity: info
+    disposition: open
+    title: "Stale \"upper/lower limit\" wording contradicts the mirrored-limit model"
+  - id: IN-09
+    severity: info
+    disposition: open
+    title: "The controls list does not say which nudge key goes which way, and key alternatives have no separator"
   - id: WR-01
     severity: warning
     disposition: open
@@ -31,22 +55,28 @@ findings:
     severity: info
     disposition: open
     title: "The controls hint uses \"/\" both as a separator and as the Slash key"
-open: 7
-total: 7
-recorded: 2026-11-20T18:32:20.047Z
+open: 13
+total: 13
+recorded: 2026-11-20T20:19:40.993Z
 ---
 
 # Phase 04: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
+| WR-03 | warning | open | - |
+| WR-04 | warning | open | - |
+| IN-06 | info | open | - |
+| IN-07 | info | open | - |
+| IN-08 | info | open | - |
+| IN-09 | info | open | - |
+| WR-01 | warning | open | - (not in the current review) |
+| WR-02 | warning | open | - (not in the current review) |
+| IN-01 | info | open | - (not in the current review) |
+| IN-02 | info | open | - (not in the current review) |
+| IN-03 | info | open | - (not in the current review) |
+| IN-04 | info | open | - (not in the current review) |
+| IN-05 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
