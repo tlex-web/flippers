@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 4
+current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Phase 3 complete, ready to plan Phase 4
-last_updated: "2026-11-20T15:09:04.579Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-11-20T15:25:28.151Z"
 last_activity: 2026-11-20
-last_activity_desc: Phase 2 complete, transitioned to Phase 4
-state_head: 011c0608885ef036bab1df930a302ea558dc4142
+last_activity_desc: Phase 04 execution started
+state_head: 74e4592edbf3544b2ac3a1b9e7ca349cdae5a3b3
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 19
+  completed_plans: 20
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-20)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 4 — Reactive Elements & Game Rules
+**Current focus:** Phase 04 — Reactive Elements & Game Rules
 
 ## Current Position
 
-Phase: 4 (Reactive Elements & Game Rules) — READY TO EXECUTE
-Plan: Not started
+Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-11-20 — Phase 2 complete, transitioned to Phase 4
+Last activity: 2026-11-20 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -79,6 +79,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P04 | 4min | 2 tasks | 5 files |
 | Phase 03 P05 | 14min | 3 tasks | 10 files |
 | Phase 03 P06 | 10min | 3 tasks | 9 files |
+| Phase 04 P01 | 10min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-06: sensors emit on begin-contact only (impulse 0, point = ball center); solids stay on post-solve; shared zero-alloc emitContact reserves a slot only for ball pairs
 - [Phase 03]: 03-06: CollisionRouter (src/app) drains once per fixed step at the new FixedStepLoop onPostStep seam, fans out in registration order, zero-copy, one-way; sandbox has one throttled logging listener
 - [Phase 03]: UAT 6/6 passed on 2026-11-20. Tests 2–6 were driven in Chrome with recorded evidence; test 1 (layout readability) was passed by eye. Phase 2's roadmap entry was closed in the same session; it had been stuck at "5/6 In Progress" despite passing verification.
+- [Phase 04]: Bumper kick raises outward normal speed to BUMPER_KICK_SPEED 5.5 m/s via applyImpulse in ReactiveElements.service(); listeners only record and award (R1, Pattern 1)
+- [Phase 04]: KICKER_REARM_STEPS = 6 fixed steps per bumper collapses post-solve bursts and the next-step TOI duplicate; a not-live contact arms nothing
+- [Phase 04]: GameSession implements RulesGate with an exact saturating integer score; isLive() always true until the 04-05 FSM
+- [Phase 04]: Score HUD is a DOM overlay (#hud-score) written only on change via textContent; canvas HUD stays diagnosis-only
 
 ### Pending Todos
 
@@ -159,6 +164,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T13:45:00.000Z
-Stopped at: Phase 3 complete, ready to plan Phase 4
+Last session: 2026-11-20T15:25:26.664Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
