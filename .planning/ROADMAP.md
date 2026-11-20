@@ -140,7 +140,7 @@ Plans:
   4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
   5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
 
-**Plans**: 8/8 plans executed (6 waves)
+**Plans**: 8/8 plans executed (6 waves) + 2 gap-closure plans from UAT (G-04-10, G-04-6)
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: bumpers kick and score through the bus (record-then-service), GameSession score, DOM score HUD, BALL_DENSITY/ballMass [wave 1]
@@ -161,6 +161,10 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [x] 04-08-PLAN.md — Tilt and game-over drop the flippers (setEnabled, held-key re-press), replay determinism at 60/120/144 Hz, Phase-3 disposition, by-feel UAT [wave 6]
+
+**Gap closure** *(UAT 04 diagnosis; both plans run in parallel)*
+- [ ] 04-09-PLAN.md — Flipper dead time and stuck-up taps (G-04-10): limit-impulse reset on every motor direction change (public enableLimit), FSM rests only at the rest limit, latency + six-binding quick-tap regression tests [wave 1]
+- [ ] 04-10-PLAN.md — HUD legibility (G-04-6): diagnostics readout moved from canvas to DOM, controls hint as a key-cap action list [wave 1]
 
 ### Phase 5: Rendering & Audio
 
