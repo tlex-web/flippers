@@ -13,11 +13,19 @@
  *   ignored. The plunger stays live (it is mechanical). The tilt costs only this
  *   ball: when it drains, the next ball is served `"playing"` with the meter
  *   and the warning cleared, the score is kept, and a tilt on the last ball ends
- *   the game. (The flipper drop on tilt arrives in 04-08.)
+ *   the game.
+ *
+ * Flipper relay (R11, GAME-03, Open Question 1): the session switches the
+ * flippers through a `FlipperGate`. They are off at boot (attract), off on a
+ * tilt (both bats drop and presses are ignored), off after the final drain,
+ * and on again with every serve (game start and each next ball, tilted or
+ * not). The gate owner re-presses a bat whose key is still held when the
+ * flippers come back on (Pitfall 5).
  *
  * Wiring (fixed-step seam, never the render frame), carried over from the
  * retired sandbox ball feed:
- * - construct it once, after the controllers, with the router;
+ * - construct it once, after the controllers, with the router and the
+ *   flipper gate;
  * - `onStart()` from the top of a fixed step when the start key latched;
  * - `onNudge(dir)` from the top of a fixed step for each latched nudge key,
  *   then `tick()` once per fixed step (after the game edges);
@@ -74,12 +82,22 @@ export type GameSessionWorld = Pick<
   "addBall" | "removeBall" | "getBalls" | "applyImpulse"
 >;
 
+/**
+ * The flipper relay the session switches: off outside a game and on a tilt,
+ * on with every serve. `main.ts` adapts `FlipperController.setEnabled` and
+ * re-presses held keys on enable.
+ */
+export interface FlipperGate {
+  setEnabled(enabled: boolean): void;
+}
+
 /** `activeBallId` when no ball is in play. */
 const NO_BALL: BallId = -1;
 
 export class GameSession implements RulesGate {
   private readonly world: GameSessionWorld;
   private readonly spawn: BallSpec;
+  private readonly flippers: FlipperGate;
 
   private state: GameState = "game-over";
   private score = 0;
@@ -102,15 +120,23 @@ export class GameSession implements RulesGate {
   /** First step at which the WARNING window is over. */
   private warningUntilStep = 0;
 
-  constructor(world: GameSessionWorld, router: CollisionRouter, spawn: BallSpec) {
+  constructor(
+    world: GameSessionWorld,
+    router: CollisionRouter,
+    spawn: BallSpec,
+    flippers: FlipperGate,
+  ) {
     this.world = world;
     this.spawn = spawn;
+    this.flippers = flippers;
     router.register(this.onEvent);
+    this.flippers.setEnabled(false); // boot into attract: the flippers are dead
   }
 
   /**
    * Start a game, only from game-over: score 0, ball 1, the tilt meter and the
-   * warning cleared, and one ball served to the spawn. Returns whether a game
+   * warning cleared, one ball served to the spawn and the flippers switched
+   * on. Returns whether a game
    * started; in any other state it returns false and changes nothing.
    */
   onStart(): boolean {
@@ -123,6 +149,7 @@ export class GameSession implements RulesGate {
         this.clearTilt();
         this.state = "playing";
         this.active = this.world.addBall(this.spawn);
+        this.flippers.setEnabled(true);
         return true;
       case "playing":
       case "tilted":
@@ -132,8 +159,9 @@ export class GameSession implements RulesGate {
 
   /**
    * Handle a drain recorded in this step's batch (while playing or tilted):
-   * remove the ball, then serve the next one with the tilt cleared, or end the
-   * game after the last. Call once per fixed step, right after
+   * remove the ball, then serve the next one with the tilt cleared and the
+   * flippers on, or end the game after the last with the flippers off. Call
+   * once per fixed step, right after
    * `router.dispatch()`. No-op when nothing drained.
    */
   service(): void {
@@ -145,16 +173,19 @@ export class GameSession implements RulesGate {
       this.clearTilt();
       this.state = "playing";
       this.active = this.world.addBall(this.spawn);
+      this.flippers.setEnabled(true);
     } else {
       this.state = "game-over";
       this.active = NO_BALL;
+      this.flippers.setEnabled(false);
     }
   }
 
   /**
    * Nudge the table: while playing and outside the cooldown, apply
    * `NUDGE_IMPULSE` along `NUDGE_DIRS[dir]` to every ball, then feed the tilt
-   * meter (a warning opens the WARNING window, a tilt enters `"tilted"`).
+   * meter (a warning opens the WARNING window, a tilt enters `"tilted"` and
+   * drops the flippers).
    * Velocity only, never a position write. Call it at the top of a fixed step
    * (between steps, as the `applyImpulse` contract requires). Ignored in any
    * other state, so a tilted or game-over table neither moves nor fills the meter.
@@ -173,7 +204,10 @@ export class GameSession implements RulesGate {
     }
     const outcome = this.tilt.addNudge();
     if (outcome === "warning") this.warningUntilStep = this.step + WARNING_FLASH_STEPS;
-    else if (outcome === "tilt") this.state = "tilted";
+    else if (outcome === "tilt") {
+      this.state = "tilted";
+      this.flippers.setEnabled(false);
+    }
   }
 
   /**

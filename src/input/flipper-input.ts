@@ -165,6 +165,15 @@ export class FlipperInput {
     return this.view;
   }
 
+  /**
+   * Whether a side is held right now (any of its bound codes is down). Read on
+   * a serve to re-press a bat whose key was held through the flipper drop
+   * (Pitfall 5); false after a blur or a hidden tab, which clear the held set.
+   */
+  isHeld(side: FlipperSide): boolean {
+    return this.isSideHeld(side);
+  }
+
   /** Wire the handlers to the real browser globals (browser only; not in tests). */
   attach(): void {
     window.addEventListener("keydown", this.onWindowKeyDown);

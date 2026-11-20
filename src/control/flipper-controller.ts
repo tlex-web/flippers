@@ -23,6 +23,17 @@
  * motor +1 the absolute `getFlippers()` angle rises for BOTH flippers and under
  * -1 it falls, so "stopped moving while driven" == "pinned at the limit".
  *
+ * Enable gate (R11, GAME-03): `setEnabled(false)` drops both bats, the way a
+ * real machine's flipper relay cuts out on TILT and outside a game. Every bat
+ * that is flipping up or held up is driven back down through the same
+ * `returning` transition a key release uses (motor -1), and `onPressEdge` is
+ * ignored until `setEnabled(true)`. Releases and `update()` keep running, so a
+ * dropping bat still settles to `resting` with motor 0. Tilt and attract drop
+ * the bats through the FSM's motor drive only, never by changing the body type
+ * or the joints: the flippers stay dynamic bodies on motorized revolute joints
+ * (CLAUDE.md flipper lock). Enabled is the construction default, and enabling
+ * issues no motor command, so every Phase-2/3 proof runs unchanged.
+ *
  * Interface slice: the FSM depends only on `FlipperWorld` (`getFlippers` and
  * `setFlipperMotor`), never the full `PhysicsWorld`. Growth elsewhere on the
  * interface (03-05 adds `applyImpulse`) therefore never ripples into this
@@ -59,6 +70,8 @@ interface FlipperFsm {
 export class FlipperController {
   private readonly world: FlipperWorld;
   private readonly fsms: FlipperFsm[] = [];
+  /** Whether presses are honored (the flipper relay); true from construction. */
+  private enabled = true;
 
   constructor(world: FlipperWorld) {
     this.world = world;
@@ -87,12 +100,37 @@ export class FlipperController {
     return fsm ? fsm.phase : "resting";
   }
 
+  /** Whether presses are honored right now (see {@link setEnabled}). */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Open or cut the flipper relay. Disabling drives every bat that is
+   * flipping up or held up into `returning` (motor -1), exactly as a key
+   * release does, and makes `onPressEdge` a no-op; a resting or already
+   * returning bat gets no motor command. Enabling only stores the flag and
+   * issues no motor command: the caller re-presses any side whose key is still
+   * held (Pitfall 5). Never changes a body type or a joint.
+   */
+  setEnabled(enabled: boolean): void {
+    if (!enabled) {
+      for (let i = 0; i < this.fsms.length; i++) {
+        const fsm = this.fsms[i];
+        if (fsm) this.drop(fsm);
+      }
+    }
+    this.enabled = enabled;
+  }
+
   /**
    * A side went not-held -> held. From resting or returning, snap into
    * flipping-up and drive +1 (a press during returning re-flips immediately).
-   * A press while already flipping-up/held-up is ignored (already up).
+   * A press while already flipping-up/held-up is ignored (already up), and so
+   * is every press while disabled.
    */
   onPressEdge(id: number): void {
+    if (!this.enabled) return; // relay cut: tilt or no game in progress
     const fsm = this.find(id);
     if (!fsm) return; // unknown id: safe no-op
     if (fsm.phase === "resting" || fsm.phase === "returning") {
@@ -109,13 +147,7 @@ export class FlipperController {
    */
   onReleaseEdge(id: number): void {
     const fsm = this.find(id);
-    if (!fsm) return;
-    if (fsm.phase === "flipping-up" || fsm.phase === "held-up") {
-      fsm.phase = "returning";
-      fsm.moved = false;
-      fsm.prevAngle = this.angleOf(id, fsm.prevAngle);
-      this.world.setFlipperMotor(id, -1);
-    }
+    if (fsm) this.drop(fsm);
   }
 
   /**
@@ -157,6 +189,20 @@ export class FlipperController {
           break;
       }
       fsm.prevAngle = angle;
+    }
+  }
+
+  /**
+   * From flipping-up or held-up, enter returning and drive -1 back down (the
+   * release transition, shared by `onReleaseEdge` and `setEnabled(false)`).
+   * Resting or returning: no-op, no motor command.
+   */
+  private drop(fsm: FlipperFsm): void {
+    if (fsm.phase === "flipping-up" || fsm.phase === "held-up") {
+      fsm.phase = "returning";
+      fsm.moved = false;
+      fsm.prevAngle = this.angleOf(fsm.id, fsm.prevAngle);
+      this.world.setFlipperMotor(fsm.id, -1);
     }
   }
 

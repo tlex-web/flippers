@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import type { BallId, BallSpec, BallState, CollisionEvent } from "../physics/types";
-import { BALLS_PER_GAME, GameSession, type GameSessionWorld } from "./game-session";
+import {
+  BALLS_PER_GAME,
+  GameSession,
+  type FlipperGate,
+  type GameSessionWorld,
+} from "./game-session";
 import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuning";
 
 /**
@@ -16,6 +21,9 @@ import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuni
  *   the warning window, the tilted state, and the tilt costing only the current
  *   ball, against the same spy world (which also records every impulse).
  */
+
+/** A flipper gate that ignores every call (the score and FSM cases do not read it). */
+const NO_GATE: FlipperGate = { setEnabled: () => {} };
 
 /**
  * The ONE place a score-contract session is built: a minimal spy world (addBall
@@ -31,7 +39,7 @@ function makeSession(): GameSession {
     applyImpulse: () => {},
   };
   const router = new CollisionRouter({ drainEvents: () => [] });
-  const session = new GameSession(world, router, { x: 0, y: 0 });
+  const session = new GameSession(world, router, { x: 0, y: 0 }, NO_GATE);
   session.onStart();
   return session;
 }
@@ -141,7 +149,7 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
   };
   let batch: CollisionEvent[] = [];
   const router = new CollisionRouter({ drainEvents: () => batch });
-  const session = new GameSession(world, router, SPAWN);
+  const session = new GameSession(world, router, SPAWN, NO_GATE);
   const dispatchOnly = (...events: CollisionEvent[]): void => {
     batch = events;
     router.dispatch();

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
-import { FlipperController } from "../control/flipper-controller";
+import { FlipperController, type FlipperPhase } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
-import { GameSession } from "../game/game-session";
+import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
@@ -29,7 +29,8 @@ import { formatScore, HudView, type TextSink } from "../ui/hud";
  *
  * Composition: a no-options `PlanckWorld` (TABLE_SPEC), `FlipperInput` and
  * `FlipperController` (before any ball, so both bats rest at motor 0),
- * `PlungerInput`, `PlungerController`, `GameInput`, `CollisionRouter`,
+ * `PlungerInput`, `PlungerController`, `GameInput`, `CollisionRouter`, the
+ * flipper gate (controller.setEnabled plus the held-key re-press),
  * `GameSession` (serving at PLUNGER_REST), `ReactiveElements` and the real
  * `FixedStepLoop`. The flippers are never pressed, so every launched ball
  * eventually drains (the 04-03 dead-flipper energy bound).
@@ -74,6 +75,10 @@ const ENTER = key("Enter");
 
 interface Game {
   readonly world: PlanckWorld;
+  readonly input: FlipperInput;
+  readonly controller: FlipperController;
+  readonly leftFlipperId: number;
+  readonly rightFlipperId: number;
   readonly session: GameSession;
   readonly reactive: ReactiveElements;
   readonly plunger: PlungerController;
@@ -108,10 +113,6 @@ function makeGame(): Game {
   const gameInput = new GameInput();
 
   const router = new CollisionRouter(world);
-  const session = new GameSession(world, router, { x: PLUNGER_REST.x, y: PLUNGER_REST.y });
-  const reactive = new ReactiveElements(world, router, session);
-
-  const loop = new FixedStepLoop(world);
 
   const flippersByX = world
     .getFlippers()
@@ -119,6 +120,25 @@ function makeGame(): Game {
     .sort((a, b) => a.pivotX - b.pivotX);
   const leftFlipperId = flippersByX[0]?.id ?? 0;
   const rightFlipperId = flippersByX[1]?.id ?? leftFlipperId;
+
+  const flipperGate: FlipperGate = {
+    setEnabled(on: boolean): void {
+      controller.setEnabled(on);
+      if (!on) return;
+      if (input.isHeld("left")) controller.onPressEdge(leftFlipperId);
+      if (input.isHeld("right")) controller.onPressEdge(rightFlipperId);
+    },
+  };
+
+  const session = new GameSession(
+    world,
+    router,
+    { x: PLUNGER_REST.x, y: PLUNGER_REST.y },
+    flipperGate,
+  );
+  const reactive = new ReactiveElements(world, router, session);
+
+  const loop = new FixedStepLoop(world);
 
   const drainedIds: BallId[] = [];
   const touchedIds = new Set<BallId>();
@@ -158,6 +178,10 @@ function makeGame(): Game {
 
   const game: Game = {
     world,
+    input,
+    controller,
+    leftFlipperId,
+    rightFlipperId,
     session,
     reactive,
     plunger,
@@ -617,5 +641,158 @@ describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot 
     // TILT, "", GAME OVER.
     expect(ball.writes).toBe(6);
     expect(status.writes).toBe(6);
+  });
+});
+
+/**
+ * The flipper relay (plan 04-08 Task 1, GAME-03, R11, Open Question 1,
+ * Pitfall 5): the flippers are dead before a game and after the last ball,
+ * live in play, dropped and locked by a tilt, and back on with the next serve,
+ * where a key still held raises its bat with no new press.
+ */
+
+const KEY_Z = key("KeyZ");
+const SLASH = key("Slash");
+
+/** Steps a dead bat is watched for after a press. */
+const DEAD_WATCH_STEPS = 30;
+
+/** Steps for a pressed bat to reach its upper limit. */
+const RAISE_CAP_STEPS = 30;
+
+/** Steps for a dropped bat to settle at rest. */
+const SETTLE_CAP_STEPS = 60;
+
+/** Press `k` and watch both bats for `steps` steps: neither may leave resting. */
+function expectDeadPress(g: Game, k: KeyEventLike, steps: number): void {
+  g.input.handleKeyDown(k);
+  for (let i = 0; i < steps; i++) {
+    runSteps(g, FRAME_120_HZ, 1);
+    expect(g.controller.getPhase(g.leftFlipperId)).toBe("resting");
+    expect(g.controller.getPhase(g.rightFlipperId)).toBe("resting");
+  }
+  g.input.handleKeyUp(k);
+  runSteps(g, FRAME_120_HZ, 1);
+}
+
+/** Run single steps until the left bat reaches `phase`; returns the steps taken. */
+function stepsUntilLeft(g: Game, phase: FlipperPhase, cap: number): number {
+  for (let i = 1; i <= cap; i++) {
+    runSteps(g, FRAME_120_HZ, 1);
+    if (g.controller.getPhase(g.leftFlipperId) === phase) return i;
+  }
+  throw new Error(`left bat never reached ${phase} within ${cap} steps`);
+}
+
+/** Whether a bat is up or on its way up (what a dead relay must never allow). */
+function isRaised(phase: FlipperPhase): boolean {
+  return phase === "flipping-up" || phase === "held-up";
+}
+
+describe("flipper relay (GAME-03, R11): dead outside a game, dropped by TILT, back on the next serve", () => {
+  it("before Enter (attract), KeyZ keeps the left bat resting", () => {
+    const g = makeGame();
+    expect(g.session.getState()).toBe("game-over");
+    expect(g.controller.isEnabled()).toBe(false);
+    expectDeadPress(g, KEY_Z, DEAD_WATCH_STEPS);
+  });
+
+  it("after Enter, KeyZ raises the left bat to flipping-up and then held-up", () => {
+    const g = makeGame();
+    pressEnter(g);
+    expect(g.controller.isEnabled()).toBe(true);
+    g.input.handleKeyDown(KEY_Z);
+    runSteps(g, FRAME_120_HZ, 1);
+    expect(g.controller.getPhase(g.leftFlipperId)).toBe("flipping-up");
+    stepsUntilLeft(g, "held-up", RAISE_CAP_STEPS);
+    expect(g.controller.getPhase(g.rightFlipperId)).toBe("resting");
+  });
+
+  it("a tilt drops a held-up bat and locks it; the key held through the drain raises it on ball 2; game over leaves both bats dead", () => {
+    const g = makeGame();
+    pressEnter(g);
+
+    // Launch ball 1 into the field.
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, FULL_HOLD_STEPS);
+    g.plungerInput.handleKeyUp(SPACE);
+    runSteps(g, FRAME_120_HZ, IN_FIELD_STEPS);
+
+    // Hold KeyZ: the left bat goes up and stays up.
+    g.input.handleKeyDown(KEY_Z);
+    stepsUntilLeft(g, "held-up", RAISE_CAP_STEPS);
+    const tiltedId = g.session.activeBallId;
+    expect(g.drainedIds).not.toContain(tiltedId);
+
+    // Four nudge edges, NUDGE_SPACING_STEPS apart, stepped one at a time so
+    // the tilt step is known exactly. The fourth tilts.
+    let tiltStep = -1;
+    let step = 0;
+    for (let n = 1; n <= 4; n++) {
+      g.gameInput.handleKeyDown(KEY_X);
+      for (let i = 0; i < NUDGE_SPACING_STEPS; i++) {
+        if (i === NUDGE_KEY_HOLD_STEPS) g.gameInput.handleKeyUp(KEY_X);
+        runSteps(g, FRAME_120_HZ, 1);
+        step++;
+        expect(g.session.activeBallId).toBe(tiltedId);
+        if (tiltStep < 0 && g.session.getState() === "tilted") tiltStep = step;
+        if (n === 4) break;
+      }
+      if (n < 4) {
+        expect(g.session.getState()).toBe("playing");
+        expect(g.controller.getPhase(g.leftFlipperId)).toBe("held-up");
+      }
+    }
+    expect(g.session.getState()).toBe("tilted");
+    expect(tiltStep).toBe(step);
+    expect(g.controller.isEnabled()).toBe(false);
+
+    // Dropped within 2 steps of the tilt, then settled at rest.
+    const tiltScore = g.session.getScore();
+    let dropSteps = 0;
+    while (g.controller.getPhase(g.leftFlipperId) !== "returning") {
+      runSteps(g, FRAME_120_HZ, 1);
+      dropSteps++;
+      expect(dropSteps).toBeLessThanOrEqual(2);
+    }
+    stepsUntilLeft(g, "resting", SETTLE_CAP_STEPS);
+    expect(g.controller.getPhase(g.rightFlipperId)).toBe("resting");
+
+    // While tilted: a fresh KeyZ keyup/keydown never raises the bat, and the
+    // score stays put until the drain. KeyZ stays held through the drain.
+    g.input.handleKeyUp(KEY_Z);
+    g.input.handleKeyDown(KEY_Z);
+    let steps = 0;
+    for (;;) {
+      if (steps >= DRAIN_CAP_STEPS) throw new Error(`tilted ball ${tiltedId} did not drain`);
+      steps += g.frame(FRAME_120_HZ);
+      if (g.drainedIds.includes(tiltedId)) break;
+      expect(g.session.getState()).toBe("tilted");
+      expect(isRaised(g.controller.getPhase(g.leftFlipperId))).toBe(false);
+      expect(g.session.getScore()).toBe(tiltScore);
+    }
+    expect(g.session.getScore()).toBe(tiltScore);
+
+    // Ball 2 is served live, and the held key raises the left bat with no new
+    // press; the right bat stays resting.
+    expect(g.session.getState()).toBe("playing");
+    expect(g.session.getBall()).toBe(2);
+    expect(g.controller.isEnabled()).toBe(true);
+    expect(g.controller.getPhase(g.leftFlipperId)).toBe("flipping-up");
+    stepsUntilLeft(g, "held-up", RAISE_CAP_STEPS);
+    expect(g.controller.getPhase(g.rightFlipperId)).toBe("resting");
+
+    // Release, then play balls 2 and 3 out.
+    g.input.handleKeyUp(KEY_Z);
+    stepsUntilLeft(g, "resting", SETTLE_CAP_STEPS);
+    launchAndDrain(g, FULL_HOLD_STEPS);
+    launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(g.session.getState()).toBe("game-over");
+    expect(g.controller.isEnabled()).toBe(false);
+
+    // Game over: KeyZ and Slash leave both bats resting.
+    expectDeadPress(g, KEY_Z, DEAD_WATCH_STEPS);
+    expectDeadPress(g, SLASH, DEAD_WATCH_STEPS);
   });
 });

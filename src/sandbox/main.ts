@@ -15,6 +15,10 @@
  * the table. Enter or NumpadEnter starts a 3-ball game through `GameSession`,
  * which serves every ball to the plunger (launched with Space), serves the next
  * one when the ball in play drains, and ends the game after the third drain.
+ * The flippers are dead outside a game and on a tilt (GAME-03): the session
+ * switches them through a flipper gate that wraps
+ * `FlipperController.setEnabled`, and on every serve the gate re-presses a bat
+ * whose key is still held (Pitfall 5).
  *
  * Every contact flows through the one-way collision bus (D-11): a
  * `CollisionRouter` drains the world once per fixed step and fans the batch out
@@ -44,7 +48,7 @@ import { PlanckWorld } from "../physics/planck-world";
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
-import { GameSession } from "../game/game-session";
+import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
@@ -117,25 +121,39 @@ function main(): void {
   // the session so it can listen for the drain from the start.
   const router = new CollisionRouter(world);
 
-  // Phase-4 rules (GAME-01/GAME-02/ELEM-01..03): the session is the 3-ball FSM,
-  // the rules gate and the score; it boots into game-over with no ball. The
-  // reactive elements score through it. Listener registration order is not
-  // load-bearing: both listeners only record or award, and the world is mutated
-  // only in the two service() calls, in the fixed order of onPostStep.
-  const session = new GameSession(world, router, BALL_SPAWN);
-  const reactive = new ReactiveElements(world, router, session);
-
-  const loop = new FixedStepLoop(world);
-
   // Side -> flipper-id mapping (D-09/D-10): the physically-LEFT flipper (smaller
   // pivot x) answers the left keys; the right flipper answers the right keys.
-  // Computed ONCE from the world.
+  // Computed ONCE from the world, before the session needs it for the gate.
   const flippersByX = world
     .getFlippers()
     .slice()
     .sort((a, b) => a.pivotX - b.pivotX);
   const leftFlipperId = flippersByX[0]?.id ?? 0;
   const rightFlipperId = flippersByX[1]?.id ?? leftFlipperId;
+
+  // The flipper relay (R11, Open Question 1, Pitfall 5): the session turns it
+  // off at boot, on a tilt and at game over, and on with every serve. Turning
+  // it on re-presses any side whose key is held right now, so a key held
+  // through a drain raises its bat on the next ball with no new press. Built
+  // once; called only on a start, a tilt, a drain or game over.
+  const flipperGate: FlipperGate = {
+    setEnabled(on: boolean): void {
+      controller.setEnabled(on);
+      if (!on) return;
+      if (input.isHeld("left")) controller.onPressEdge(leftFlipperId);
+      if (input.isHeld("right")) controller.onPressEdge(rightFlipperId);
+    },
+  };
+
+  // Phase-4 rules (GAME-01/GAME-02/ELEM-01..03): the session is the 3-ball FSM,
+  // the rules gate and the score; it boots into game-over with no ball. The
+  // reactive elements score through it. Listener registration order is not
+  // load-bearing: both listeners only record or award, and the world is mutated
+  // only in the two service() calls, in the fixed order of onPostStep.
+  const session = new GameSession(world, router, BALL_SPAWN, flipperGate);
+  const reactive = new ReactiveElements(world, router, session);
+
+  const loop = new FixedStepLoop(world);
 
   // The drain-and-tick step callback (D-10). Built ONCE as a stable, long-lived
   // reference and passed BY REFERENCE to `loop.advance()` every frame, so it adds
