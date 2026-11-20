@@ -13,33 +13,33 @@
  * parked on the plunger and launched with Space.
  *
  * Every contact flows through the one-way collision bus (D-11): a
- * `CollisionRouter` drains the world once per fixed step and fans the batch to
- * a single demo listener that logs what the ball touched. No scoring, kicks or
- * rules live here (D-06); those are Phase 4 consumers of the same bus.
+ * `CollisionRouter` drains the world once per fixed step and fans the batch out
+ * in registration order. The Phase-4 rules consume it first: `ReactiveElements`
+ * records bumper hits (points through the `GameSession` gate, kicks applied in
+ * its `service()` right after dispatch), then the ball feed watches the drain,
+ * and a demo listener logs what the ball touched. The running score shows in a
+ * DOM HUD overlay (`#hud-score`, written only when it changes).
  *
- * This is a DIAGNOSIS tool only: it asserts nothing about pass/fail. The
- * tunnel-proof gates stay headless (`npm run soak`).
+ * The canvas readout (FPS, physics Hz, KE, contacts) is a DIAGNOSIS tool only:
+ * it asserts nothing about pass/fail. The tunnel-proof gates stay headless
+ * (`npm run soak`).
  */
 
 import { PlanckWorld } from "../physics/planck-world";
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
+import { GameSession } from "../game/game-session";
+import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput } from "../input/flipper-input";
 import { PlungerInput } from "../input/plunger-input";
+import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import type { CollisionEvent } from "../physics/types";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
+import { HudView, type TextSink } from "../ui/hud";
 import { BallFeed } from "./ball-feed";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
-
-/**
- * Diagnostic "mass" density (kg/m²), mirroring the adapter's solver density
- * (`BALL_DENSITY = 1` in planck-world.ts) so the HUD kinetic-energy read is
- * consistent with the simulated ball. KE here is a settle/energy TREND readout,
- * not a physics-authoritative quantity (the pass/fail gate is the soak, 01-06).
- */
-const BALL_DENSITY = 1;
 
 /**
  * Ball feed: park ONE ball on the plunger at `PLUNGER_REST` (from the spec), so
@@ -85,11 +85,11 @@ function main(): void {
   // `PhysicsWorld` interface / synthetic-friendly handlers.
   //
   // ORDER (idle-symmetry fix): build the controller — whose constructor commands
-  // motor 0 on every flipper, freezing both bats at their symmetric construction
-  // angle (level) — BEFORE the first ball. If the ball were added first, its CCD-
-  // priming step would run the flippers' default motor for one step and drift the
-  // mirror pair a quarter-radian apart (the human-checkpoint "not on the same
-  // height" idle). Both bats then rest LEVEL and mirror-symmetric until a key press.
+  // motor 0 on every flipper — BEFORE the first ball, so the controller's
+  // resting == motor-0 invariant already holds when the first ball's CCD-priming
+  // step runs the world. TABLE_SPEC mounts use `restPose`, so both bats are built
+  // at their droop limit with motor 0: they rest DROOPED in the inverted-V,
+  // mirror-symmetric, until a key press (not level; 03-REVIEW IN-03).
   const input = new FlipperInput();
   input.attach();
   const controller = new FlipperController(world);
@@ -105,6 +105,13 @@ function main(): void {
   // dispatched once per fixed step at the loop's post-step seam. Built before
   // the first ball so the feed can listen for the drain from the start.
   const router = new CollisionRouter(world);
+
+  // Phase-4 rules (ELEM-01/GAME-01): the session is the rules gate and holds the
+  // score; the reactive elements register on the bus BEFORE the feed, so a kick
+  // is queued and applied before a drained ball is removed.
+  const session = new GameSession();
+  const reactive = new ReactiveElements(world, router, session);
+
   const feed = new BallFeed(world, router, BALL_SPAWN);
   const loop = new FixedStepLoop(world);
 
@@ -167,15 +174,19 @@ function main(): void {
 
   // Built ONCE and passed by reference, like onFixedStep: runs right after each
   // fixed step's world.step(), so every simulated step's events reach the
-  // listeners as exactly one batch and the event pool stays bounded. The feed
-  // then replaces a ball the batch reported drained, at this fixed-step
-  // boundary (never in the render frame), after the batch is delivered.
+  // listeners as exactly one batch and the event pool stays bounded. After the
+  // batch is delivered, at this fixed-step boundary (never in the render frame),
+  // the rules apply their queued kicks, then the feed replaces a ball the batch
+  // reported drained.
   function onPostStep(): void {
     router.dispatch();
+    reactive.service();
     feed.service();
   }
 
   const renderer = new DebugRenderer(canvas);
+  // Score HUD: the DOM overlay, written only when the score changes.
+  const hudView = new HudView(requireTextSink("hud-score"));
   renderer.resize(world);
   window.addEventListener("resize", () => renderer.resize(world));
 
@@ -253,8 +264,8 @@ function main(): void {
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i];
       if (!b) continue;
-      const mass = BALL_DENSITY * Math.PI * b.radius * b.radius;
-      kineticEnergy += 0.5 * mass * (b.vx * b.vx + b.vy * b.vy);
+      // Settle/energy TREND readout, not a physics-authoritative quantity.
+      kineticEnergy += 0.5 * ballMass(b.radius) * (b.vx * b.vx + b.vy * b.vy);
     }
 
     // Push HUD numbers on a throttle so the readout is legible and the renderer
@@ -270,9 +281,18 @@ function main(): void {
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
     renderer.draw(world, interpolated, hud, plunger.getCharge());
+    // The score lands in the frame the hit lands (write only on change).
+    hudView.update(session);
   }
 
   requestAnimationFrame(frame);
+}
+
+/** The element with this id as a text sink; throws a clear error if missing. */
+function requireTextSink(id: string): TextSink {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`sandbox HUD element #${id} not found`);
+  return el;
 }
 
 /** Grow `pool` to at least `n` reusable ball buffers (only allocates on growth). */
