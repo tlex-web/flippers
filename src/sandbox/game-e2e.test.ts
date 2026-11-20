@@ -25,6 +25,12 @@ import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
  * `GameSession` (serving at PLUNGER_REST), `ReactiveElements` and the real
  * `FixedStepLoop`. The flippers are never pressed, so every launched ball
  * eventually drains (the 04-03 dead-flipper energy bound).
+ *
+ * It also carries the real-world cases of the retired sandbox ball feed
+ * (03-REVIEW CR-01) into a started game: the parked ball sits BELOW the drain
+ * line (PLUNGER_REST.y 6.2 > DRAIN_Y 6.05), so only a bus drain may replace it;
+ * a launch at real render cadences keeps the same ball; and the IN-02 plunger
+ * fix is proven live through `applyEdges` with `isHeld()`.
  */
 
 /** Steps until a held charge reaches the cap (the clamp lands on this step). */
@@ -154,11 +160,11 @@ function runSteps(g: Game, deltaMs: number, steps: number): void {
   while (done < steps) done += g.frame(deltaMs);
 }
 
-/** Press and release Enter, then run one fixed step. */
-function pressEnter(g: Game): void {
+/** Press and release Enter, then run one render frame's worth of fixed steps. */
+function pressEnter(g: Game, deltaMs = FRAME_120_HZ): void {
   g.gameInput.handleKeyDown(ENTER);
   g.gameInput.handleKeyUp(ENTER);
-  runSteps(g, FRAME_120_HZ, 1);
+  runSteps(g, deltaMs, 1);
 }
 
 function inZone(b: { x: number; y: number }): boolean {
@@ -254,5 +260,97 @@ describe("game e2e (GAME-02): Enter, three balls on the real table, game over, r
     expect(g.session.getScore()).toBe(0);
     expect(g.world.getBalls()).toHaveLength(1);
     for (const r of ROLLOVER_IDS) expect(g.reactive.isLit(r)).toBe(false);
+  });
+});
+
+const RATES_HZ = [60, 120, 144] as const;
+
+describe("ported ball-feed cases (CR-01) in a started game", () => {
+  it("after Enter, the parked ball is never respawned while idle (120 Hz, 1 step/frame)", () => {
+    const g = makeGame();
+    pressEnter(g);
+    const id = g.session.activeBallId;
+    for (let i = 0; i < 600; i++) {
+      g.frame(FRAME_120_HZ);
+      expect(g.session.activeBallId).toBe(id);
+      expect(g.world.getBalls()).toHaveLength(1);
+    }
+    expect(inZone(g.ball())).toBe(true);
+    expect(g.session.getBall()).toBe(1);
+  });
+
+  for (const hz of RATES_HZ) {
+    it(`a full-charge Space launch clears the chute top at ${hz} Hz`, () => {
+      const g = makeGame();
+      const dt = 1000 / hz;
+      pressEnter(g, dt);
+      runSteps(g, dt, SETTLE_STEPS);
+      const id = g.session.activeBallId;
+
+      g.plungerInput.handleKeyDown(SPACE);
+      runSteps(g, dt, FULL_HOLD_STEPS);
+      g.plungerInput.handleKeyUp(SPACE);
+
+      let cleared = false;
+      let steps = 0;
+      while (!cleared && steps < Math.round(3 / FIXED_DT)) {
+        steps += g.frame(dt);
+        expect(g.session.activeBallId).toBe(id);
+        if (g.ball().y < g.chuteTopY) cleared = true;
+      }
+      expect(cleared).toBe(true);
+    });
+  }
+
+  it("a minimum-impulse tap at 60 Hz keeps the same ball: it climbs and falls back onto the plunger", () => {
+    const g = makeGame();
+    const dt = 1000 / 60;
+    pressEnter(g, dt);
+    runSteps(g, dt, SETTLE_STEPS);
+    const id = g.session.activeBallId;
+    const restY = g.ball().y;
+
+    g.plungerInput.handleKeyDown(SPACE);
+    g.frame(dt);
+    g.plungerInput.handleKeyUp(SPACE);
+
+    let minY = restY;
+    for (let i = 0; i < 180; i++) {
+      g.frame(dt);
+      expect(g.session.activeBallId).toBe(id);
+      minY = Math.min(minY, g.ball().y);
+    }
+    expect(restY - minY).toBeGreaterThan(0.3);
+    expect(inZone(g.ball())).toBe(true);
+  });
+});
+
+describe("IN-02 live: a release and re-press inside one fixed-step window", () => {
+  it("launches the ball and starts a new charge", () => {
+    const g = makeGame();
+    pressEnter(g);
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, 40);
+    expect(g.plunger.getPhase()).toBe("charging");
+    const id = g.session.activeBallId;
+
+    // Both edges land before the next step drains the latch.
+    g.plungerInput.handleKeyUp(SPACE);
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, 1);
+    expect(g.plunger.getPhase()).toBe("charging");
+
+    // Launched: the ball climbs on every one of the next 10 steps.
+    let prevY = g.ball().y;
+    for (let i = 0; i < 10; i++) {
+      runSteps(g, FRAME_120_HZ, 1);
+      const y = g.ball().y;
+      expect(y).toBeLessThan(prevY);
+      prevY = y;
+    }
+    expect(g.session.activeBallId).toBe(id);
+    expect(g.plunger.getPhase()).toBe("charging");
+    expect(g.plunger.getCharge()).toBeGreaterThan(0);
   });
 });
