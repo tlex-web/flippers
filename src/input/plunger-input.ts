@@ -100,9 +100,14 @@ export class PlungerInput {
     return this.view;
   }
 
-  /** Skeleton (RED): not implemented yet. */
+  /**
+   * Whether Space is held right now, as far as this latch has seen: true after a
+   * genuine keydown, false after keyup, blur or a hidden tab. The consumer reads
+   * it right after `drainEdges()` to order edges that landed in the same fixed
+   * step window (IN-02): held at drain time means the last edge was a press.
+   */
   isHeld(): boolean {
-    return false;
+    return this.held;
   }
 
   /** Wire the handlers to the real browser globals (browser only; not in tests). */

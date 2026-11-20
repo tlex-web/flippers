@@ -15,7 +15,8 @@
  *
  * Observable FSM: `idle -> charging -> idle`, driven by edges drained from the
  * keyboard latch at the top of each fixed step (`onPressEdge` /
- * `onReleaseEdge` / `onCancelEdge`) and advanced by `update()` once per step.
+ * `onReleaseEdge` / `onCancelEdge`, or all of one window's edges in their real
+ * order through `applyEdges`) and advanced by `update()` once per step.
  * Release and cancel always return to idle with charge 0; cancel (focus loss)
  * never launches.
  *
@@ -112,9 +113,39 @@ export class PlungerController {
     this.reset();
   }
 
-  /** Skeleton (RED): not implemented yet. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  applyEdges(press: boolean, release: boolean, cancel: boolean, heldNow: boolean, ballId: BallId): void {}
+  /**
+   * Apply the edges drained from one fixed-step window in the order they really
+   * happened (IN-02). The latch's booleans do not record order, but the held
+   * state at drain time does:
+   *  - `heldNow`: the key is down, so the last edge was a press. Apply release,
+   *    then cancel, then press. A release and re-press inside one window launches
+   *    and then starts a new charge; a blur and re-press drops the old charge and
+   *    starts a new one.
+   *  - not held: the last edge was a release or cancel, so a press in the same
+   *    window came first. Apply press, then release, then cancel. A tap shorter
+   *    than one window launches at PLUNGER_MIN_IMPULSE and ends idle instead of
+   *    stranding a charge that never ends.
+   * The review's fixed release-cancel-press order would strand that sub-window
+   * tap, which is why held state decides the order. Edges that are false are
+   * skipped, so a single edge behaves exactly like its direct `on*Edge` call.
+   */
+  applyEdges(
+    press: boolean,
+    release: boolean,
+    cancel: boolean,
+    heldNow: boolean,
+    ballId: BallId,
+  ): void {
+    if (heldNow) {
+      if (release) this.onReleaseEdge(ballId);
+      if (cancel) this.onCancelEdge();
+      if (press) this.onPressEdge();
+    } else {
+      if (press) this.onPressEdge();
+      if (release) this.onReleaseEdge(ballId);
+      if (cancel) this.onCancelEdge();
+    }
+  }
 
   /**
    * Advance one fixed step: while charging, raise the charge up to the cap. The
