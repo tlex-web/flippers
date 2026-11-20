@@ -17,12 +17,21 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 - [x] Stable 2D ball physics — gravity, momentum, realistic bounce, no tunneling through thin walls/flippers at speed, frame-rate-independent (fixed 120Hz timestep) — **Validated in Phase 1 (Physics Core Spike):** headless swept-containment soak gate is green with a proven-red CCD-off negative control (incl. the fast test-flipper intra-step case); ball feel is bit-identical at 60/120/144Hz and survives tab-blur; physics is isolated behind an N-ball-ready ball/flipper/event interface; engine chosen and locked on evidence (Planck.js 1.5 `setBullet` + `continuousPhysics`). The by-feel "heavy" verdict was deferred to Phase 2 and is now **settled** (see below).
 - [x] Two keyboard-controlled flippers with correct rotational physics and ball interaction — **Validated in Phase 2 (Flippers & Feel):** two mirrored, keyboard-driven capsule flippers on motorized revolute joints respond sub-frame (per-fixed-step input drain at 120Hz; `event.code` multi-binding, auto-repeat/blur-safe), transfer real rotational momentum (a tip hit out-launches a base hit, `v = ω × r`), hold a jitter-free cradle via an explicit `resting → flipping-up → held-up → returning` FSM, and can **never** be swept through the ball (adaptive angular sub-stepping, proven by a seeded green gate with a proven-red sub-stepping-OFF negative control). Input + FSM are engine-agnostic (only `planck-world.ts` imports `planck`). The Phase-1-deferred "heavy, not floaty" verdict is **operator-accepted on the live rig** — this is the project's stated Core Value, proven and tuned.
 
+- [x] Ball launches via a plunger with variable power (hold to charge, release to fire): **Validated in Phase 3 (Table, Plunger & Event Bus).**
+  - A Space hold charges over about 0.67 s.
+  - Release fires one impulse up the chute, scaled from the minimum to the maximum by the charge (launch speed is linear in charge).
+  - A bottom-to-top meter and the plunger pullback read the same `getCharge()` value that sets the impulse.
+  - Focus loss cancels the charge and never launches.
+- [x] Original table layout built from standard pinball elements: **Validated in Phase 3.**
+  - Elements: right-side launch chute, three-bumper cluster, rollover lanes, orbit guides, inlanes, slingshots, drain funnel and inverted-V flippers.
+  - All of it comes from one parametric `table/spec`, so the colliders and the drawing cannot drift apart.
+  - Seeded drops drain with no traps. A real-table swept-containment soak gate is green.
+  - In the UAT Chrome run, 10 launches all drained with no stalls, and the layout was operator-accepted by eye.
+
 ### Active
 
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
-- [ ] Ball launches via a plunger with variable power (hold to charge, release to fire)
-- [ ] Original space-themed table layout built from standard pinball elements: right-side launch chute, upper bumper cluster, lanes/rollovers, guide walls/ramps, and center-bottom drain funnel, positioned for good ball flow
 - [ ] Bumpers and targets react (bounce + visual flash + sound) and award points
 - [ ] Live score display
 - [ ] Tilt / nudge mechanic (nudge the table, over-nudge triggers tilt)
@@ -69,6 +78,8 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | Original table design (not a recreation of any existing table) | Avoids copying another game's layout, names, or signature mechanics; standard pinball elements arranged for good ball flow | ✓ Decided 2026-11-19 |
 | Core pinball loop first; missions/ranks/multiball deferred | De-risk the physics and feel before layering progression systems | — Pending |
 | Synthesized audio (Web Audio) over sound files | Keeps asset load at zero; retro pinball sfx synthesize convincingly | — Pending |
+| One `table/spec` → `resolve()` drives both the colliders and the drawing | What's hit and what's drawn cannot drift (WR-03 confirmed the flipper drawing matches its collider) | ✓ Phase 3 |
+| Typed one-way collision bus, drained once per fixed step at the `onPostStep` seam | Scoring, rendering and audio (Phases 4–5) consume contacts without touching the world; the drain is read off the bus, not by position (CR-01) | ✓ Phase 3 |
 
 ## Evolution
 
@@ -88,4 +99,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-19 after re-scope to an original table (quick task 261119-sbr)*
+*Last updated: 2026-11-20 after Phase 3*

@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 03
-current_phase_name: Table, Plunger & Event Bus
-status: verifying
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-11-19T22:26:38.680Z"
-last_activity: 2026-11-19
-last_activity_desc: Phase 03 execution started
-state_head: fe2428fa15cae56bb53e269fc08c50d83c4a7646
+current_phase: 4
+current_phase_name: Reactive Elements & Game Rules
+status: planning
+stopped_at: Phase 3 complete, ready to plan Phase 4
+last_updated: "2026-11-20T13:26:16.714Z"
+last_activity: 2026-11-20
+last_activity_desc: Phase 2 complete, transitioned to Phase 4
+state_head: 78890f7f499788b1d993e9d76e9702a673fce3f8
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 19
   completed_plans: 19
+  percent: 50
 milestone_name: milestone
 ---
 
@@ -21,25 +22,25 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-19)
+See: .planning/PROJECT.md (updated 2026-11-20)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 03 — Table, Plunger & Event Bus
+**Current focus:** Phase 4 — Reactive Elements & Game Rules
 
 ## Current Position
 
-Phase: 03 (Table, Plunger & Event Bus) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
-Last activity: 2026-11-19 — Phase 03 execution started
+Phase: 4 — Reactive Elements & Game Rules
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-20 — Phase 2 complete, transitioned to Phase 4
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 14
+- Total plans completed: 20
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -48,7 +49,8 @@ Progress: [███░░░░░░░] 33%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
-| 02 | 7 | - | - |
+| 2 | 7 | - | - |
+| 3 | 6 | - | - |
 
 **Recent Trend:**
 
@@ -126,6 +128,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-06: CollisionEvent is normalized (ballId + elementKind/elementId from TABLE_SPEC, CollisionPartnerKind = ElementKind | ball); raw pair removed; type stays coarse; exported pure normalizeContact
 - [Phase 03]: 03-06: sensors emit on begin-contact only (impulse 0, point = ball center); solids stay on post-solve; shared zero-alloc emitContact reserves a slot only for ball pairs
 - [Phase 03]: 03-06: CollisionRouter (src/app) drains once per fixed step at the new FixedStepLoop onPostStep seam, fans out in registration order, zero-copy, one-way; sandbox has one throttled logging listener
+- [Phase 03]: UAT 6/6 passed on 2026-11-20. Tests 2–6 were driven in Chrome with recorded evidence; test 1 (layout readability) was passed by eye. Phase 2's roadmap entry was closed in the same session; it had been stuck at "5/6 In Progress" despite passing verification.
 
 ### Pending Todos
 
@@ -133,8 +136,13 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 3]: Table layout is an original design authored in 03-01 from standard pinball elements (positions chosen for good ball flow, sized from the unchanged Phase-2 feel constants) — no external layout source.
-- [Phase 2]: Rotational CCD (angular sub-stepping + capsule/speculative contacts) is a narrower, less-documented subproblem than linear CCD — warrants a focused research pass before building.
+- [Phase 3]: Five info findings from the code review (IN-01..IN-05) are still `open` in 03-REVIEW-DISPOSITION.md, along with the WR-01 residual (an extra hidden priming step on every `addBall`). Triage them before Phase 4 builds on the plunger and the bus.
+- [Phase 3 → 5]: The 03-UI-REVIEW carry-forwards apply to the real renderer:
+  - The HUD ignores the display fit and renders at about 3.4 px.
+  - `#ef476f` is used for the drain, the velocity arrow and the full meter.
+  - There is no on-screen controls hint and no `aria-label` on the canvas.
+- [Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display. The headless ball-feed tests cover those rates.
+- [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
 
 ### Quick Tasks Completed
 
@@ -152,6 +160,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-19T22:26:37.919Z
-Stopped at: Completed 03-06-PLAN.md
+Last session: 2026-11-20T13:45:00.000Z
+Stopped at: Phase 3 complete, ready to plan Phase 4
 Resume file: None
