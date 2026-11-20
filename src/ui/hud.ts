@@ -2,9 +2,10 @@
  * Game HUD (GAME-01, GAME-02, GAME-03): a DOM text overlay with three lines,
  * the running score, the ball number and the game status.
  *
- * DOM text, not canvas text, so it stays crisp at any display fit (the canvas
- * HUD in the debug renderer renders at about 3.4 px once the table is fitted to
- * the viewport; it stays as the diagnosis readout).
+ * DOM text, not canvas text, so it stays crisp at any display fit (canvas text
+ * rendered at about 3.4 px once the table was fitted to the viewport, G-04-6).
+ * The diagnosis readout (FPS, physics Hz, kinetic energy) is DOM text too, in
+ * its own panel (`DiagView`); the canvas paints no text.
  *
  * Lines:
  * - score: the running score with thousands separators (`formatScore`);
@@ -124,5 +125,58 @@ export class HudView {
     this.lastState = state;
     this.lastPlayed = played;
     this.lastWarning = warning;
+  }
+}
+
+/** The diagnosis readout's numbers. The sandbox mutates one instance in place. */
+export interface DiagData {
+  /** Rendered frames per second (smoothed). */
+  fps: number;
+  /** Fixed physics steps per real second (windowed); should track ~120. */
+  physicsHz: number;
+  /** Total kinetic energy across all balls (J); a settle/energy-trend read. */
+  kineticEnergy: number;
+}
+
+/** The readout line: "FPS 60 | PHYS 120 Hz | KE 0.012 J". */
+export function diagText(d: Readonly<DiagData>): string {
+  return `FPS ${d.fps.toFixed(0)} | PHYS ${d.physicsHz.toFixed(0)} Hz | KE ${d.kineticEnergy.toFixed(3)} J`;
+}
+
+/**
+ * The diagnosis readout (G-04-6): one line of DOM text. Write-on-change like
+ * `HudView`: it caches the three numbers it last wrote, so a steady frame builds
+ * no string and costs no DOM write (T-04-25). Text-only (T-04-24).
+ */
+export class DiagView {
+  private readonly sink: TextSink;
+
+  /** False so the first update writes. */
+  private written = false;
+
+  /** The numbers the line was last written from. */
+  private lastFps = 0;
+  private lastHz = 0;
+  private lastKe = 0;
+
+  constructor(sink: TextSink) {
+    this.sink = sink;
+  }
+
+  /** Rewrite the line only when one of the three numbers changed since the last write. */
+  update(d: Readonly<DiagData>): void {
+    if (
+      this.written &&
+      d.fps === this.lastFps &&
+      d.physicsHz === this.lastHz &&
+      d.kineticEnergy === this.lastKe
+    ) {
+      return;
+    }
+    this.sink.textContent = diagText(d);
+    this.written = true;
+    this.lastFps = d.fps;
+    this.lastHz = d.physicsHz;
+    this.lastKe = d.kineticEnergy;
   }
 }

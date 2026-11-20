@@ -5,7 +5,7 @@
  * `TABLE_SPEC` (the ONLY engine-specific line is `new PlanckWorld(...)`, the
  * composition root), drives it through the engine-agnostic fixed-step loop, and
  * renders the INTERPOLATED ball + table outline + flippers + velocity + contacts
- * + HUD + plunger charge meter via the Canvas debug renderer. The outline
+ * + plunger charge meter via the Canvas debug renderer, which paints no text. The outline
  * (outer walls, right-side launch chute, drain funnel, trough walls) and both
  * flipper mounts all come from the single resolve of the spec, so what is drawn
  * is what is hit. Every read of world state goes through the `PhysicsWorld`
@@ -39,7 +39,9 @@
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve).
  *
- * The canvas readout (FPS, physics Hz, KE, contacts) is a DIAGNOSIS tool only:
+ * The diagnosis readout (FPS, physics Hz, KE) is DOM text in `#hud-diag`
+ * (`DiagView`, written only when a throttled number changes); with the canvas
+ * contact markers it is a DIAGNOSIS tool only:
  * it asserts nothing about pass/fail. The tunnel-proof gates stay headless
  * (`npm run soak`).
  */
@@ -56,8 +58,8 @@ import { PlungerInput } from "../input/plunger-input";
 import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
-import { HudView, type TextSink } from "../ui/hud";
-import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
+import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
+import { DebugRenderer, type InterpolatedBall } from "./debug-draw";
 
 /**
  * Serve point: the session parks every ball on the plunger at `PLUNGER_REST`
@@ -212,13 +214,16 @@ function main(): void {
     requireTextSink("hud-ball"),
     requireTextSink("hud-status"),
   );
+  // Diagnosis readout: DOM text in its own panel (G-04-6), written only when a
+  // throttled number changes.
+  const diagView = new DiagView(requireTextSink("hud-diag"));
   renderer.resize(world);
   window.addEventListener("resize", () => renderer.resize(world));
 
   // Pre-allocated render buffers — grown only when the ball count grows, so the
   // steady-state rAF loop performs NO per-frame heap allocation (threat T-03-01).
   const interpolated: InterpolatedBall[] = [];
-  const hud: HudData = { fps: 0, physicsHz: 120, kineticEnergy: 0 };
+  const diag: DiagData = { fps: 0, physicsHz: 120, kineticEnergy: 0 };
 
   // Loop-local scalars (mutated in place; no per-frame allocation).
   let lastTimeMs = performance.now();
@@ -293,22 +298,23 @@ function main(): void {
       kineticEnergy += 0.5 * ballMass(b.radius) * (b.vx * b.vx + b.vy * b.vy);
     }
 
-    // Push HUD numbers on a throttle so the readout is legible and the renderer
-    // only reformats its cached strings on change (no per-frame string churn).
+    // Push the readout numbers on a throttle so the readout is legible and
+    // DiagView rebuilds its line only on change (no per-frame string churn).
     hudElapsedMs += deltaMs;
     if (hudElapsedMs >= HUD_UPDATE_MS) {
-      hud.fps = smoothedFps;
-      hud.physicsHz = hzDisplay;
-      hud.kineticEnergy = kineticEnergy;
+      diag.fps = smoothedFps;
+      diag.physicsHz = hzDisplay;
+      diag.kineticEnergy = kineticEnergy;
       hudElapsedMs = 0;
     }
 
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
-    renderer.draw(world, interpolated, hud, plunger.getCharge(), reactive);
+    renderer.draw(world, interpolated, plunger.getCharge(), reactive);
     // The score, ball and status land in the frame the session changes them
     // (each line written only on change).
     hudView.update(session);
+    diagView.update(diag);
   }
 
   requestAnimationFrame(frame);

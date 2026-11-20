@@ -4,8 +4,9 @@
  * Diagnosis-only: it draws the live physics world — the table elements of the
  * one resolved spec (`getElements()`: wall/chute polylines, dashed sensors,
  * circles), the flipper bats, the ball at its INTERPOLATED position, the ball's velocity
- * vector, the current contact points, and a text HUD (FPS, physics-step Hz, total
- * kinetic energy). It reads world state ONLY through the engine-agnostic
+ * vector, the current contact points and the plunger charge meter. It paints no
+ * text: the diagnosis readout (FPS, physics-step Hz, total kinetic energy) is DOM
+ * text (`DiagView` in src/ui/hud.ts, G-04-6). It reads world state ONLY through the engine-agnostic
  * `PhysicsWorld` interface — it NEVER imports Planck — so it is a pure consumer of
  * the contract, exactly like the soak harness (D-05).
  *
@@ -28,16 +29,6 @@ import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
 /** A ball snapshot at its drawn (interpolated) position — a mutable `BallState`. */
 export type InterpolatedBall = { -readonly [K in keyof BallState]: BallState[K] };
 
-/** Live HUD readouts (numbers only; the renderer owns their formatting/caching). */
-export interface HudData {
-  /** Rendered frames per second (smoothed). */
-  fps: number;
-  /** Fixed physics steps per real second (windowed) — should track ~120. */
-  physicsHz: number;
-  /** Total kinetic energy across all balls (J) — a settle/energy-trend read. */
-  kineticEnergy: number;
-}
-
 /**
  * Read-only light state the renderer draws from (the rules side, e.g.
  * `ReactiveElements`). The renderer never writes it.
@@ -46,7 +37,7 @@ export interface LightState {
   isLit(elementId: number): boolean;
 }
 
-/** Padding (CSS px) around the world box so strokes/HUD are not clipped. */
+/** Padding (CSS px) around the world box so strokes are not clipped. */
 const PAD = 24;
 
 /**
@@ -64,7 +55,6 @@ const COL_BALL_CORE = "#ffd166";
 const COL_BALL_EDGE = "#e07a1f";
 const COL_VEL = "#ef476f";
 const COL_CONTACT = "#06d6a0";
-const COL_HUD = "#e0e6f0";
 const COL_METER_FRAME = "#9fb3c8";
 const COL_METER_TICK = "rgba(159, 179, 200, 0.45)";
 const COL_METER_FILL = "#f4a261";
@@ -174,12 +164,6 @@ export class DebugRenderer {
   private ballGradient: CanvasGradient | null = null;
   private ballGradientRadiusPx = -1;
 
-  // Cached HUD strings — reformatted only when a HUD value changes.
-  private readonly hudLines: string[] = ["", "", ""];
-  private lastFps = NaN;
-  private lastHz = NaN;
-  private lastKe = NaN;
-
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
@@ -227,7 +211,6 @@ export class DebugRenderer {
   draw(
     world: PhysicsWorld,
     balls: readonly InterpolatedBall[],
-    hud: HudData,
     plungerCharge: number,
     lights?: LightState,
   ): void {
@@ -250,10 +233,6 @@ export class DebugRenderer {
     this.drawBalls(balls);
     this.drawVelocities(balls);
     this.drawContacts(world.getContactPoints());
-
-    // HUD in screen space (dpr scale only, no world translate).
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.drawHud(hud);
   }
 
   /**
@@ -471,33 +450,6 @@ export class DebugRenderer {
         s * 2,
         s * 2,
       );
-    }
-  }
-
-  private drawHud(hud: HudData): void {
-    const ctx = this.ctx;
-    if (
-      hud.fps !== this.lastFps ||
-      hud.physicsHz !== this.lastHz ||
-      hud.kineticEnergy !== this.lastKe
-    ) {
-      this.lastFps = hud.fps;
-      this.lastHz = hud.physicsHz;
-      this.lastKe = hud.kineticEnergy;
-      this.hudLines[0] = `FPS        ${hud.fps.toFixed(0)}`;
-      this.hudLines[1] = `Physics    ${hud.physicsHz.toFixed(0)} Hz`;
-      this.hudLines[2] = `Kinetic E  ${hud.kineticEnergy.toFixed(3)} J`;
-    }
-
-    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-    ctx.fillRect(8, 8, 196, 68);
-    ctx.font = "14px ui-monospace, Menlo, Consolas, monospace";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = COL_HUD;
-    let y = 16;
-    for (const line of this.hudLines) {
-      ctx.fillText(line, 16, y);
-      y += 18;
     }
   }
 }
