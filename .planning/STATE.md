@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
-status: verifying
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-11-20T22:34:48.614Z"
-last_activity: 2026-11-20
+status: executing
+stopped_at: Completed 04-12-PLAN.md
+last_updated: "2026-11-20T23:50:26.388Z"
+last_activity: 2026-11-21
 last_activity_desc: Phase 04 execution started
-state_head: 98d1b3c1b1f789ab7cdf33c88c6093f707839537
+state_head: 28d7e9bd9a353240e5c9965b696456cc750ba4a7
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 30
-  completed_plans: 30
+  total_plans: 32
+  completed_plans: 31
 milestone_name: milestone
 ---
 
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 11 of 11
-Status: Phase complete — ready for verification
-Last activity: 2026-11-20 — Phase 04 execution started
+Plan: 13 of 13
+Status: Ready to execute
+Last activity: 2026-11-21 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -90,6 +90,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P09 | 9 min | 2 tasks | 7 files |
 | Phase 04 P10 | 4 min | 2 tasks | 5 files |
 | Phase 04 P11 | 7 min | 2 tasks | 5 files |
+| Phase 04 P12 | 8 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-11: a non-Shift key event with shiftKey strictly false drops a held ShiftLeft/ShiftRight; Shift-key events and events without shiftKey never reconcile (D-09 cradle safe)
 - [Phase 04]: 04-11: FlipperInput latches edges from each event's net per-side transition, so Z over a stale ShiftLeft is edge-free and its keyup releases the bat
 - [Phase 04]: 04-11: Sticky-Keys-ON residual accepted (T-04-29); keeping Shift as a default flipper binding is a pending user decision, bindings unchanged
+- [Phase 04]: 04-12: both Windows Shift heals (second-press recovery, final-keyup drop-both) share windowsShiftHeal, default off; main.ts sets it from isWindowsPlatform(navigator); off equals f481932 behavior (B6 intact)
+- [Phase 04]: 04-12: WR-01 fixed in drainEdges: a same-window release is dropped when the side is pressed and held at drain time (IN-02 rule); no consumer drain code changed
+- [Phase 04]: 04-12: Windows residual accepted and pinned: a bat whose Shift is released while the other Shift is held stays up until the other Shift is released
 
 ### Pending Todos
 
@@ -196,6 +200,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T22:34:47.147Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-11-20T23:50:24.756Z
+Stopped at: Completed 04-12-PLAN.md
 Resume file: None
