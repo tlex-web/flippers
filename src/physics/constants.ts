@@ -252,3 +252,27 @@ export const PLUNGER_MAX_IMPULSE = 1.5;
  * velocity and no spin.
  */
 export const PLUNGER_AXIS = { x: 0, y: -1 } as const;
+
+/* ------------------------------------------------------------------------- *
+ * BALL MASS (Phase 4). One density source for every consumer that turns a
+ * velocity change into an impulse: the rules' bumper/sling kick math, the
+ * sandbox kinetic-energy readout and (switched over in 04-04) the adapter.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Ball solver density (kg/m²). The 2D solver integrates mass over the circle's
+ * area, so this is an areal density; 1 is the value the adapter already builds
+ * the ball fixture with.
+ */
+export const BALL_DENSITY = 1;
+
+/**
+ * Ball mass (kg) for a given radius: m = BALL_DENSITY · π · r². At
+ * `BALL_RADIUS_M` (0.2 m) that is π · 0.04 ≈ 0.1257 kg. This is the single
+ * density source shared by the adapter (switched over in 04-04), the sandbox KE
+ * readout and the rules' kick math, so an impulse j = m · Δv lands exactly the
+ * velocity change it was computed for.
+ */
+export function ballMass(radius: number): number {
+  return BALL_DENSITY * Math.PI * radius * radius;
+}
