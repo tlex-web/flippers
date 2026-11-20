@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 import { GameInput } from "./game-input";
 
 /**
- * Unit proof for the Enter/NumpadEnter start latch (plan 04-05, R6). Like the
+ * Unit proof for the Enter/NumpadEnter start latch (plan 04-05, R6) and the
+ * KeyX/Period/ArrowUp nudge latch (plan 04-06, R9). Like the
  * other input tests, every case drives the directly-callable handlers with
  * SYNTHETIC `{ code, repeat, preventDefault }` objects: no DOM, no engine.
  */
@@ -107,5 +108,134 @@ describe("GameInput: start latch (R6)", () => {
     input.handleVisibilityChange(false);
     input.handleKeyDown(ev("Enter"));
     expect(input.drainEdges().start).toBe(false);
+  });
+});
+
+/** The nudge codes and the edge each one latches (plan 04-06, R9). */
+const NUDGE_KEYS = [
+  { code: "KeyX", edge: "nudgeLeft" },
+  { code: "Period", edge: "nudgeRight" },
+  { code: "ArrowUp", edge: "nudgeUp" },
+] as const;
+
+/** Codes owned by the flipper and plunger latches; GameInput must never touch them. */
+const FOREIGN_CODES = [
+  "KeyZ",
+  "Slash",
+  "ArrowLeft",
+  "ArrowRight",
+  "ShiftLeft",
+  "ShiftRight",
+  "Space",
+] as const;
+
+/** Every edge in the drained view, as a plain object for whole-view comparisons. */
+function snapshot(input: GameInput) {
+  const e = input.drainEdges();
+  return { start: e.start, nudgeLeft: e.nudgeLeft, nudgeRight: e.nudgeRight, nudgeUp: e.nudgeUp };
+}
+
+const NONE = { start: false, nudgeLeft: false, nudgeRight: false, nudgeUp: false } as const;
+
+describe("GameInput: nudge latch (R9)", () => {
+  for (const { code, edge } of NUDGE_KEYS) {
+    it(`${code} latches only ${edge}; start stays false`, () => {
+      const input = new GameInput();
+      input.handleKeyDown(ev(code));
+      expect(snapshot(input)).toEqual({ ...NONE, [edge]: true });
+      expect(snapshot(input)).toEqual(NONE);
+    });
+
+    it(`an auto-repeat ${code} keydown latches nothing`, () => {
+      const input = new GameInput();
+      input.handleKeyDown(ev(code, true));
+      expect(snapshot(input)).toEqual(NONE);
+    });
+
+    it(`a second ${code} keydown without a keyup latches nothing; keyup then keydown latches again`, () => {
+      const input = new GameInput();
+      input.handleKeyDown(ev(code));
+      input.drainEdges();
+      input.handleKeyDown(ev(code));
+      expect(snapshot(input)).toEqual(NONE);
+      input.handleKeyUp(ev(code));
+      expect(snapshot(input)).toEqual(NONE); // keyup alone latches nothing
+      input.handleKeyDown(ev(code));
+      expect(snapshot(input)).toEqual({ ...NONE, [edge]: true });
+    });
+
+    it(`preventDefault fires for ${code} on keydown, repeat and keyup`, () => {
+      const input = new GameInput();
+      const down = ev(code);
+      const repeat = ev(code, true);
+      const up = ev(code);
+      input.handleKeyDown(down);
+      input.handleKeyDown(repeat);
+      input.handleKeyUp(up);
+      expect(down.preventDefault).toHaveBeenCalled();
+      expect(repeat.preventDefault).toHaveBeenCalled();
+      expect(up.preventDefault).toHaveBeenCalled();
+    });
+
+    it(`after handleBlur() while ${code} is held, the next ${code} keydown latches`, () => {
+      const input = new GameInput();
+      input.handleKeyDown(ev(code));
+      input.drainEdges();
+      input.handleBlur();
+      expect(snapshot(input)).toEqual(NONE);
+      input.handleKeyDown(ev(code));
+      expect(snapshot(input)).toEqual({ ...NONE, [edge]: true });
+    });
+
+    it(`after handleVisibilityChange(true) while ${code} is held, the next ${code} keydown latches`, () => {
+      const input = new GameInput();
+      input.handleKeyDown(ev(code));
+      input.drainEdges();
+      input.handleVisibilityChange(true);
+      expect(snapshot(input)).toEqual(NONE);
+      input.handleKeyDown(ev(code));
+      expect(snapshot(input)).toEqual({ ...NONE, [edge]: true });
+    });
+  }
+
+  it("the three nudge keys and Enter latch independently in one window", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyX"));
+    input.handleKeyDown(ev("Period"));
+    input.handleKeyDown(ev("ArrowUp"));
+    input.handleKeyDown(ev("Enter"));
+    expect(snapshot(input)).toEqual({ start: true, nudgeLeft: true, nudgeRight: true, nudgeUp: true });
+  });
+
+  it("never calls preventDefault on, or latches, a flipper key or Space", () => {
+    const input = new GameInput();
+    for (const code of FOREIGN_CODES) {
+      const down = ev(code);
+      const repeat = ev(code, true);
+      const up = ev(code);
+      input.handleKeyDown(down);
+      input.handleKeyDown(repeat);
+      input.handleKeyUp(up);
+      expect(down.preventDefault, code).not.toHaveBeenCalled();
+      expect(repeat.preventDefault, code).not.toHaveBeenCalled();
+      expect(up.preventDefault, code).not.toHaveBeenCalled();
+      expect(snapshot(input), code).toEqual(NONE);
+    }
+  });
+
+  it("drainEdges() resets all three nudge edges on the same reused view", () => {
+    const input = new GameInput();
+    const first = input.drainEdges();
+    input.handleKeyDown(ev("KeyX"));
+    input.handleKeyDown(ev("Period"));
+    input.handleKeyDown(ev("ArrowUp"));
+    const latched = input.drainEdges();
+    expect(latched).toBe(first);
+    expect(latched.nudgeLeft && latched.nudgeRight && latched.nudgeUp).toBe(true);
+    const drained = input.drainEdges();
+    expect(drained).toBe(first);
+    expect(drained.nudgeLeft).toBe(false);
+    expect(drained.nudgeRight).toBe(false);
+    expect(drained.nudgeUp).toBe(false);
   });
 });
