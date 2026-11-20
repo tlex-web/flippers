@@ -1,22 +1,25 @@
 /**
- * Reactive table elements (Phase 4): bumpers that pop the ball away and score.
+ * Reactive table elements (Phase 4): bumpers that pop the ball away and
+ * slingshots that kick it off their rubber face, both scoring.
  *
  * Record-then-service, the same split as the sandbox ball feed:
  * - construct it once at the composition root (see `main.ts`), with the router
  *   and the rules gate;
  * - call `service()` from `onPostStep`, right AFTER `router.dispatch()`.
  *
- * The bus listener only records: on a qualifying bumper contact it awards the
- * points through the gate and queues a kick for that ball. It never calls the
- * world (the bus is one-way). `service()` applies the queued kicks through
+ * The bus listener only records: on a qualifying contact it awards the points
+ * through the gate and queues a kick for that ball. It never calls the world
+ * (the bus is one-way). `service()` applies the queued kicks through
  * `applyImpulse` after the batch has been delivered, i.e. between fixed steps,
  * which is the only time the impulse contract allows.
  *
- * Kick law (R1): the ball's outward speed along bumper-center -> ball-center is
- * raised to `BUMPER_KICK_SPEED`; its tangential velocity is kept and a ball
- * already leaving faster is not slowed. Burst collapse (R3): a per-bumper
- * cooldown of `KICKER_REARM_STEPS` fixed steps; `service()` is the step clock,
- * never wall-clock.
+ * Kick law (R1/R2): the ball's speed along the kick normal is raised to the
+ * kicker's target; its tangential velocity is kept and a ball already leaving
+ * faster is not slowed. A bumper's normal is bumper-center -> ball-center; a
+ * slingshot's is the fixed outward normal of its rubber face, derived once
+ * from the resolved geometry (`deriveKickFace`). Burst collapse (R3): a
+ * per-element cooldown of `KICKER_REARM_STEPS` fixed steps; `service()` is the
+ * step clock, never wall-clock.
  *
  * Engine-agnostic: the world is a type-only `PhysicsWorld` slice. Steady state
  * allocates nothing (fixed kicker array, Map lookup, index loops).
@@ -25,7 +28,16 @@
 import type { CollisionRouter } from "../app/collision-router";
 import { ballMass } from "../physics/constants";
 import type { BallId, CollisionEvent, PhysicsWorld } from "../physics/types";
-import { BUMPER_KICK_SPEED, BUMPER_POINTS, KICKER_REARM_STEPS } from "./tuning";
+import type { ResolvedElement } from "../table/resolve";
+import {
+  BUMPER_KICK_SPEED,
+  BUMPER_POINTS,
+  KICKER_REARM_STEPS,
+  SLING_FACE_TOL,
+  SLING_KICK_SPEED,
+  SLING_MIN_IMPULSE,
+  SLING_POINTS,
+} from "./tuning";
 
 /**
  * The rules side the reactive elements report to. `isLive()` false means
@@ -39,11 +51,103 @@ export interface RulesGate {
 /** The world slice the reactive elements need. */
 export type ReactiveWorld = Pick<PhysicsWorld, "getElements" | "getBalls" | "applyImpulse">;
 
-/** One bumper's mutable kicker record, built once. */
+/**
+ * A slingshot's rubber face: segment endpoints (a, b) and its unit normal
+ * (nx, ny) pointing out of the slingshot, toward the field.
+ */
+export interface KickFace {
+  readonly ax: number;
+  readonly ay: number;
+  readonly bx: number;
+  readonly by: number;
+  readonly nx: number;
+  readonly ny: number;
+}
+
+/**
+ * Derive a slingshot's kick face from its resolved polyline (Pattern 3): the
+ * longest segment, with the unit normal oriented away from the vertex centroid
+ * (dot with midpoint minus centroid is positive). Null when there is no
+ * segment. Pure; called once per element at construction.
+ */
+export function deriveKickFace(el: ResolvedElement): KickFace | null {
+  let best = -1;
+  let bestLen = 0;
+  for (let i = 0; i < el.segments.length; i++) {
+    const s = el.segments[i];
+    if (!s) continue;
+    const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
+    if (len > bestLen) {
+      bestLen = len;
+      best = i;
+    }
+  }
+  const face = best >= 0 ? el.segments[best] : undefined;
+  if (!face || bestLen === 0) return null;
+
+  let cx = 0;
+  let cy = 0;
+  const n = el.vertices.length;
+  for (let i = 0; i < n; i++) {
+    const v = el.vertices[i];
+    if (!v) continue;
+    cx += v.x;
+    cy += v.y;
+  }
+  if (n > 0) {
+    cx /= n;
+    cy /= n;
+  }
+
+  let nx = -(face.b.y - face.a.y) / bestLen;
+  let ny = (face.b.x - face.a.x) / bestLen;
+  const mx = (face.a.x + face.b.x) / 2;
+  const my = (face.a.y + face.b.y) / 2;
+  if (nx * (mx - cx) + ny * (my - cy) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  return { ax: face.a.x, ay: face.a.y, bx: face.b.x, by: face.b.y, nx, ny };
+}
+
+/** Distance from (px, py) to the segment (ax, ay)-(bx, by), clamped projection. */
+function distanceToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+type KickerKind = "bumper" | "slingshot";
+
+/** One kicking element's mutable record (bumper or slingshot), built once. */
 interface Kicker {
   readonly id: number;
+  readonly kind: KickerKind;
+  /** Bumper center (unused for a slingshot). */
   readonly cx: number;
   readonly cy: number;
+  /** Slingshot face endpoints and fixed outward normal (unused for a bumper). */
+  readonly ax: number;
+  readonly ay: number;
+  readonly bx: number;
+  readonly by: number;
+  readonly nx: number;
+  readonly ny: number;
+  /** Outward speed the kick raises the ball to (m/s). */
+  readonly targetSpeed: number;
+  /** Points awarded per trigger. */
+  readonly points: number;
   /** First step on which this kicker may trigger again. */
   armedAtStep: number;
   /** Ball queued for a kick on the next `service()`, or -1. */
@@ -54,7 +158,7 @@ export class ReactiveElements {
   private readonly world: ReactiveWorld;
   private readonly gate: RulesGate;
   private readonly kickers: Kicker[] = [];
-  private readonly byId = new Map<number, Kicker>();
+  private readonly kickerById = new Map<number, Kicker>();
 
   /** Fixed steps serviced so far: the only clock. */
   private step = 0;
@@ -65,18 +169,51 @@ export class ReactiveElements {
     const elements = world.getElements();
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
-      if (!el || el.kind !== "bumper" || el.circle === null) continue;
-      const k: Kicker = {
-        id: el.id,
-        cx: el.circle.center.x,
-        cy: el.circle.center.y,
-        armedAtStep: 0,
-        pendingBall: -1,
-      };
-      this.kickers.push(k);
-      this.byId.set(el.id, k);
+      if (!el) continue;
+      if (el.kind === "bumper" && el.circle !== null) {
+        this.addKicker({
+          id: el.id,
+          kind: "bumper",
+          cx: el.circle.center.x,
+          cy: el.circle.center.y,
+          ax: 0,
+          ay: 0,
+          bx: 0,
+          by: 0,
+          nx: 0,
+          ny: 0,
+          targetSpeed: BUMPER_KICK_SPEED,
+          points: BUMPER_POINTS,
+          armedAtStep: 0,
+          pendingBall: -1,
+        });
+      } else if (el.kind === "slingshot") {
+        const face = deriveKickFace(el);
+        if (!face) continue;
+        this.addKicker({
+          id: el.id,
+          kind: "slingshot",
+          cx: 0,
+          cy: 0,
+          ax: face.ax,
+          ay: face.ay,
+          bx: face.bx,
+          by: face.by,
+          nx: face.nx,
+          ny: face.ny,
+          targetSpeed: SLING_KICK_SPEED,
+          points: SLING_POINTS,
+          armedAtStep: 0,
+          pendingBall: -1,
+        });
+      }
     }
     router.register(this.onEvent);
+  }
+
+  private addKicker(k: Kicker): void {
+    this.kickers.push(k);
+    this.kickerById.set(k.id, k);
   }
 
   /**
@@ -94,21 +231,25 @@ export class ReactiveElements {
     this.step++;
   }
 
-  /** Raise the queued ball's outward speed to the target (R1). */
+  /** Raise the queued ball's outward speed to the kicker's target (R1/R2). */
   private kick(k: Kicker): void {
     const balls = this.world.getBalls();
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i];
       if (!b || b.id !== k.pendingBall) continue;
-      const dx = b.x - k.cx;
-      const dy = b.y - k.cy;
-      const len = Math.hypot(dx, dy);
-      if (len === 0) return;
-      const nx = dx / len;
-      const ny = dy / len;
+      let nx = k.nx;
+      let ny = k.ny;
+      if (k.kind === "bumper") {
+        const dx = b.x - k.cx;
+        const dy = b.y - k.cy;
+        const len = Math.hypot(dx, dy);
+        if (len === 0) return;
+        nx = dx / len;
+        ny = dy / len;
+      }
       const vn = b.vx * nx + b.vy * ny;
-      if (vn < BUMPER_KICK_SPEED) {
-        const j = ballMass(b.radius) * (BUMPER_KICK_SPEED - vn);
+      if (vn < k.targetSpeed) {
+        const j = ballMass(b.radius) * (k.targetSpeed - vn);
         this.world.applyImpulse(b.id, j * nx, j * ny);
       }
       return;
@@ -118,13 +259,23 @@ export class ReactiveElements {
 
   /** Bus listener, bound once: record and award, never touch the world here. */
   private readonly onEvent = (e: CollisionEvent): void => {
-    if (e.elementKind !== "bumper") return;
-    const k = this.byId.get(e.elementId);
-    if (!k) return;
-    if (!(e.normalImpulse > 0) || this.step < k.armedAtStep) return;
+    const kind = e.elementKind;
+    if (kind !== "bumper" && kind !== "slingshot") return;
+    const k = this.kickerById.get(e.elementId);
+    if (!k || k.kind !== kind) return;
+    if (this.step < k.armedAtStep) return;
+    if (kind === "bumper") {
+      if (!(e.normalImpulse > 0)) return;
+    } else {
+      // Rubber face only, and only a real strike (R2, Pitfall 2). Scalars are
+      // copied out; the pooled record is never retained.
+      if (!(e.normalImpulse >= SLING_MIN_IMPULSE)) return;
+      const d = distanceToSegment(e.point.x, e.point.y, k.ax, k.ay, k.bx, k.by);
+      if (!(d <= SLING_FACE_TOL)) return;
+    }
     if (!this.gate.isLive()) return;
     k.armedAtStep = this.step + KICKER_REARM_STEPS;
     k.pendingBall = e.ballId;
-    this.gate.award(BUMPER_POINTS);
+    this.gate.award(k.points);
   };
 }

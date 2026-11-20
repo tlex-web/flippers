@@ -6,8 +6,15 @@ import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, CollisionPartnerKind } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
-import { ReactiveElements, type RulesGate } from "./reactive-elements";
-import { BUMPER_KICK_SPEED, BUMPER_POINTS, KICKER_REARM_STEPS } from "./tuning";
+import { deriveKickFace, ReactiveElements, type KickFace, type RulesGate } from "./reactive-elements";
+import {
+  BUMPER_KICK_SPEED,
+  BUMPER_POINTS,
+  KICKER_REARM_STEPS,
+  SLING_KICK_SPEED,
+  SLING_MIN_IMPULSE,
+  SLING_POINTS,
+} from "./tuning";
 
 /**
  * Phase-4 tracer (plan 04-01 Task 1) on the REAL table: a bumper contact travels
@@ -164,5 +171,86 @@ describe("bumper rule on the real table (ELEM-01 tracer)", () => {
     }
     expect(rig.gate.score).toBeGreaterThan(0);
     expect(rig.gate.score).toBe(BUMPER_POINTS * triggers);
+  });
+});
+
+/** A slingshot's kick face, read through the one resolve. */
+function slingFace(world: PlanckWorld, id: number): KickFace {
+  const el = world.getElements().find((x) => x.id === id);
+  const face = el ? deriveKickFace(el) : null;
+  if (!face) throw new Error(`slingshot ${id} has no kick face`);
+  return face;
+}
+
+const ONE_SECOND = Math.round(1 / FIXED_DT);
+
+/** Distance out from the face midpoint the strike starts at (m). */
+const SLING_STRIKE_OFFSET = 0.35;
+/** Strike speed straight at the face (m/s). */
+const SLING_STRIKE_SPEED = 2;
+
+interface SlingStrike {
+  readonly rig: Rig;
+  readonly ballId: BallId;
+  readonly face: KickFace;
+}
+
+/**
+ * Throw a ball straight at sling `id`'s rubber face from SLING_STRIKE_OFFSET out
+ * along its normal, and step until the first qualifying sling event arrives.
+ */
+function strikeSling(id: number): SlingStrike {
+  const rig = makeRig(true);
+  const face = slingFace(rig.world, id);
+  const mx = (face.ax + face.bx) / 2;
+  const my = (face.ay + face.by) / 2;
+  const ballId = rig.world.addBall({
+    x: mx + SLING_STRIKE_OFFSET * face.nx,
+    y: my + SLING_STRIKE_OFFSET * face.ny,
+    vx: -SLING_STRIKE_SPEED * face.nx,
+    vy: -SLING_STRIKE_SPEED * face.ny,
+  });
+  const isHit = (e: Seen): boolean =>
+    e.elementKind === "slingshot" && e.elementId === id && e.normalImpulse >= SLING_MIN_IMPULSE;
+  for (let i = 0; i < ONE_SECOND; i++) {
+    rig.run(1);
+    if (rig.seen.some(isHit)) return { rig, ballId, face };
+  }
+  throw new Error(`no qualifying slingshot-${id} event within 1 s`);
+}
+
+/** Ball velocity along the face normal, plus its raw components. */
+function slingExit(s: SlingStrike): { vn: number; vx: number; vy: number } {
+  const b = s.rig.world.getBalls().find((x) => x.id === s.ballId);
+  if (!b) throw new Error("ball missing");
+  return { vn: b.vx * s.face.nx + b.vy * s.face.ny, vx: b.vx, vy: b.vy };
+}
+
+describe("slingshot rule on the real table (ELEM-02 tracer)", () => {
+  it("the left sling (300) face normal points out to the field and up-table", () => {
+    const rig = makeRig(true);
+    const f = slingFace(rig.world, 300);
+    expect(f.nx).toBeCloseTo(0.9487, 3);
+    expect(f.ny).toBeCloseTo(-0.3162, 3);
+  });
+
+  it("a strike on sling 300 scores SLING_POINTS and kicks out along the face normal", () => {
+    const s = strikeSling(300);
+    expect(s.rig.gate.score).toBe(SLING_POINTS);
+    s.rig.run(1);
+    const out = slingExit(s);
+    expect(out.vn).toBeGreaterThanOrEqual(SLING_KICK_SPEED - 0.25);
+    expect(out.vx).toBeGreaterThan(0);
+    expect(out.vy).toBeLessThan(0);
+  });
+
+  it("a strike on sling 301 (the mirror) scores SLING_POINTS and kicks out to the left", () => {
+    const s = strikeSling(301);
+    expect(s.rig.gate.score).toBe(SLING_POINTS);
+    s.rig.run(1);
+    const out = slingExit(s);
+    expect(out.vn).toBeGreaterThanOrEqual(SLING_KICK_SPEED - 0.25);
+    expect(out.vx).toBeLessThan(0);
+    expect(out.vy).toBeLessThan(0);
   });
 });

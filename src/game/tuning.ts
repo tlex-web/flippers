@@ -36,3 +36,34 @@ export const KICKER_REARM_STEPS = 6;
  * copied from any table; assumption A1, cosmetic).
  */
 export const BUMPER_POINTS = 1000;
+
+/**
+ * Slingshot kick target (m/s): on a face hit the ball's speed along the kick
+ * face's outward normal is raised to this value; the tangential velocity is
+ * kept and a ball already leaving faster is not slowed (R2, same law as the
+ * bumper). Probe-bounded together with BUMPER_KICK_SPEED (04-RESEARCH
+ * Pitfall 4): 5.5 / 4.5 m/s kept all 12 seeded drops draining, peak 7.47 m/s.
+ */
+export const SLING_KICK_SPEED = 4.5;
+
+/**
+ * Minimum solver normal impulse (kg·m/s) for a slingshot contact to fire.
+ * Above the probed rolling contact on the face (0.0015 per step) and a ball
+ * resting on a bumper (0.0048), below a 1 m/s-class hit (0.0393), so only a
+ * real strike kicks (04-RESEARCH Pitfall 2).
+ */
+export const SLING_MIN_IMPULSE = 0.02;
+
+/**
+ * Maximum distance (m) from the contact point to the kick-face segment for a
+ * slingshot contact to fire. Planck's circle-vs-chain manifold point sits about
+ * 0.01 m off the face line (probe: hit at (0.963, 4.479)), so 0.05 m accepts a
+ * face hit while the passive faces stay well outside it (R2).
+ */
+export const SLING_FACE_TOL = 0.05;
+
+/**
+ * Points per slingshot kick. An original, conventional magnitude (assumption
+ * A1, cosmetic).
+ */
+export const SLING_POINTS = 500;
