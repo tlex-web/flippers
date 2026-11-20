@@ -67,3 +67,27 @@ export const SLING_FACE_TOL = 0.05;
  * A1, cosmetic).
  */
 export const SLING_POINTS = 500;
+
+/**
+ * Per-sensor re-arm cooldown, in FIXED steps (30 steps = 0.25 s at 120 Hz),
+ * for rollovers and inlanes (R3). Sensors already fire once per overlap begin,
+ * so this only guards a ball rattling on the line from double-scoring.
+ */
+export const SENSOR_REARM_STEPS = 30;
+
+/**
+ * Points per top-rollover pass. An original, conventional magnitude
+ * (assumption A1, cosmetic).
+ */
+export const ROLLOVER_POINTS = 1000;
+
+/**
+ * Bonus when all three top rollovers are lit; the three lights then reset
+ * (R4/R12, assumption A1).
+ */
+export const ROLLOVER_BANK_BONUS = 10000;
+
+/**
+ * Points per inlane pass. Inlanes score but do not light (assumption A1/A7).
+ */
+export const INLANE_POINTS = 2000;

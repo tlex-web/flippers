@@ -1,6 +1,8 @@
 /**
- * Reactive table elements (Phase 4): bumpers that pop the ball away and
- * slingshots that kick it off their rubber face, both scoring.
+ * Reactive table elements (Phase 4): bumpers that pop the ball away,
+ * slingshots that kick it off their rubber face, and the top rollovers and
+ * inlanes that score as the ball passes (the rollovers also light and pay a
+ * bank bonus when all three are lit).
  *
  * Record-then-service, the same split as the sandbox ball feed:
  * - construct it once at the composition root (see `main.ts`), with the router
@@ -21,6 +23,11 @@
  * per-element cooldown of `KICKER_REARM_STEPS` fixed steps; `service()` is the
  * step clock, never wall-clock.
  *
+ * Sensors (R3/R4/R12): a rollover or inlane event that is armed and live arms
+ * `SENSOR_REARM_STEPS` and awards its points. A rollover also lights; when
+ * every rollover is lit the bank bonus is paid and all of them go dark.
+ * Lights persist across balls and are cleared by `resetLights()` (new game).
+ *
  * Engine-agnostic: the world is a type-only `PhysicsWorld` slice. Steady state
  * allocates nothing (fixed kicker array, Map lookup, index loops).
  */
@@ -32,7 +39,11 @@ import type { ResolvedElement } from "../table/resolve";
 import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
+  INLANE_POINTS,
   KICKER_REARM_STEPS,
+  ROLLOVER_BANK_BONUS,
+  ROLLOVER_POINTS,
+  SENSOR_REARM_STEPS,
   SLING_FACE_TOL,
   SLING_KICK_SPEED,
   SLING_MIN_IMPULSE,
@@ -154,11 +165,27 @@ interface Kicker {
   pendingBall: BallId;
 }
 
+type SensorKind = "rollover" | "lane";
+
+/** One scoring sensor's mutable rule (rollover or inlane), built once. */
+interface SensorRule {
+  readonly id: number;
+  readonly kind: SensorKind;
+  /** First step on which this sensor may score again. */
+  armedAtStep: number;
+  /** Rollover light (always false for a lane). */
+  lit: boolean;
+}
+
 export class ReactiveElements {
   private readonly world: ReactiveWorld;
   private readonly gate: RulesGate;
   private readonly kickers: Kicker[] = [];
   private readonly kickerById = new Map<number, Kicker>();
+  private readonly sensors: SensorRule[] = [];
+  private readonly sensorById = new Map<number, SensorRule>();
+  /** The rollover rules only, for the bank check and resetLights(). */
+  private readonly rollovers: SensorRule[] = [];
 
   /** Fixed steps serviced so far: the only clock. */
   private step = 0;
@@ -206,9 +233,29 @@ export class ReactiveElements {
           armedAtStep: 0,
           pendingBall: -1,
         });
+      } else if (el.kind === "rollover" || el.kind === "lane") {
+        const rule: SensorRule = { id: el.id, kind: el.kind, armedAtStep: 0, lit: false };
+        this.sensors.push(rule);
+        this.sensorById.set(el.id, rule);
+        if (el.kind === "rollover") this.rollovers.push(rule);
       }
     }
     router.register(this.onEvent);
+  }
+
+  /** Whether rollover `elementId` is lit. False for lanes and unknown ids. */
+  isLit(elementId: number): boolean {
+    const rule = this.sensorById.get(elementId);
+    return rule !== undefined && rule.lit;
+  }
+
+  /** Turn every rollover light off (a new game; not a new ball). */
+  resetLights(): void {
+    const rollovers = this.rollovers;
+    for (let i = 0; i < rollovers.length; i++) {
+      const r = rollovers[i];
+      if (r) r.lit = false;
+    }
   }
 
   private addKicker(k: Kicker): void {
@@ -257,9 +304,34 @@ export class ReactiveElements {
     // The ball is gone (drained or removed): drop the kick.
   }
 
+  /** Score a rollover or inlane pass; light and bank a rollover (R4/R12). */
+  private onSensor(e: CollisionEvent): void {
+    const rule = this.sensorById.get(e.elementId);
+    if (!rule || rule.kind !== e.elementKind) return;
+    if (this.step < rule.armedAtStep) return;
+    if (!this.gate.isLive()) return;
+    rule.armedAtStep = this.step + SENSOR_REARM_STEPS;
+    if (rule.kind === "lane") {
+      this.gate.award(INLANE_POINTS);
+      return;
+    }
+    this.gate.award(ROLLOVER_POINTS);
+    rule.lit = true;
+    const rollovers = this.rollovers;
+    for (let i = 0; i < rollovers.length; i++) {
+      if (!rollovers[i]?.lit) return;
+    }
+    this.gate.award(ROLLOVER_BANK_BONUS);
+    this.resetLights();
+  }
+
   /** Bus listener, bound once: record and award, never touch the world here. */
   private readonly onEvent = (e: CollisionEvent): void => {
     const kind = e.elementKind;
+    if (kind === "rollover" || kind === "lane") {
+      this.onSensor(e);
+      return;
+    }
     if (kind !== "bumper" && kind !== "slingshot") return;
     const k = this.kickerById.get(e.elementId);
     if (!k || k.kind !== kind) return;

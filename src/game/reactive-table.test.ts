@@ -33,14 +33,28 @@ interface Seen {
   readonly normalImpulse: number;
 }
 
-/** Always-live test gate that sums what it is awarded. */
+/** One award, tagged with the index of the bus event being dispatched. */
+interface Award {
+  readonly eventIndex: number;
+  readonly points: number;
+}
+
+/**
+ * Always-live test gate that sums what it is awarded. The rules listener is
+ * registered before the recording listener, so at award time `cursor()` (the
+ * recorded-event count) is the index the triggering event is about to take:
+ * every award is attributable to the element that caused it.
+ */
 class SumGate implements RulesGate {
   score = 0;
+  readonly awards: Award[] = [];
+  constructor(private readonly cursor: () => number) {}
   isLive(): boolean {
     return true;
   }
   award(points: number): void {
     this.score += points;
+    this.awards.push({ eventIndex: this.cursor(), points });
   }
 }
 
@@ -58,9 +72,9 @@ function makeRig(withRules: boolean): Rig {
   // Both bats brake-held at motor 0 before the first ball (main.ts order).
   new FlipperController(world);
   const router = new CollisionRouter(world);
-  const gate = new SumGate();
-  const reactive = withRules ? new ReactiveElements(world, router, gate) : null;
   const seen: Seen[] = [];
+  const gate = new SumGate(() => seen.length);
+  const reactive = withRules ? new ReactiveElements(world, router, gate) : null;
   let step = 0;
   router.register((e) => {
     seen.push({
@@ -155,7 +169,7 @@ describe("bumper rule on the real table (ELEM-01 tracer)", () => {
     expect(rig.gate.score).toBe(0);
   });
 
-  it("over 4 s the score equals BUMPER_POINTS times the cooldown-predicted trigger count", () => {
+  it("over 4 s the bumper score equals BUMPER_POINTS times the cooldown-predicted trigger count", () => {
     const rig = makeRig(true);
     dropOnLowerBumper(rig);
     rig.run(FOUR_SECONDS);
@@ -171,8 +185,14 @@ describe("bumper rule on the real table (ELEM-01 tracer)", () => {
       armedAt.set(e.elementId, e.step + KICKER_REARM_STEPS);
       triggers++;
     }
-    expect(rig.gate.score).toBeGreaterThan(0);
-    expect(rig.gate.score).toBe(BUMPER_POINTS * triggers);
+    // The ball also reaches slings and lanes (04-03), so attribute each award
+    // to the element whose event triggered it and count the bumper ones.
+    let bumperScore = 0;
+    for (const a of rig.gate.awards) {
+      if (rig.seen[a.eventIndex]?.elementKind === "bumper") bumperScore += a.points;
+    }
+    expect(triggers).toBeGreaterThan(0);
+    expect(bumperScore).toBe(BUMPER_POINTS * triggers);
   });
 });
 
