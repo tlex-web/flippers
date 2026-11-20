@@ -3,7 +3,7 @@ status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T19:19:27.227Z
+updated: 2026-11-20T20:25:31Z
 ---
 
 ## Current Test
@@ -73,12 +73,32 @@ reported: "I noticed already that the flippers might get stuck when using the ar
 severity: major
 note: "Automated confirmation (Claude, live page, Z / Slash and arrows alike): (a) a tap released 5-8 fixed steps (40-65 ms) after the press leaves the bat stuck UP (FSM resting, motor 0) until the next press, in 20 of 800 fuzzed taps (7 arrows, 13 Z/Slash), about 25% of taps in that window; (b) after any hold of 10+ steps the bat stays motionless 15-16 steps (~130 ms) after release; (c) the press lag is 1-5 steps depending on the prior rest state. Not specific to the arrow keys: every binding shares the same side latch."
 
+### 11. Flipper feel on all six bindings (UAT test 10 re-test). Run `npm run dev`, press Enter. On each of Z, Left Shift, Left Arrow, /, Right Shift, Right Arrow: make quick taps of varied length, hold a long cradle then release, and over-nudge to TILT once while holding a bat up.
+expected: Each bat snaps up the instant its key goes down and starts falling the instant it comes up, even after a multi-second cradle. No tap leaves a bat hanging raised. On TILT the held bat drops at once with no visible ~130 ms pause. Cradle and catch still feel heavy (the Phase 2 approval was given on the pre-04-09 dynamics).
+result: [pending]
+
+### 12. Real-table flipper launch / pinch check (code-review WR-03). On the real table, raise each bat with the ball resting near the base (about 30 percent of bat length), the middle, and the tip, with the ball resting against the bat under the slingshot.
+expected: A tip hit still launches visibly harder than a base hit, and a base or mid-bat flip does not fire the ball out at an unnaturally high speed (reviewer measured a 19.4 m/s peak for a left-bat base flip; verifier measured 9 to 16 m/s peaks across 0.3-0.8 reach, with no reactive layer).
+result: [pending]
+
+### 13. HUD panel layout at 1280x684, 150% display scaling (UAT test 6 re-test). Open the page, press Enter, charge the plunger.
+expected: The controls panel shows five rows (Start, Launch, Left flipper, Right flipper, Nudge), each with its key caps on one line and no wrap. The Slash key shows as its own key cap. The bottom-left FPS / PHYS / KE readout is comfortably legible. Neither panel covers the table or the plunger charge meter. Score, BALL n / 3 and status look as before.
+result: [pending]
+
+### 14. Nudge key directions are discoverable (04-REVIEW IN-09). Read the Nudge row of the controls list.
+expected: A new player can tell which of X, period and Up nudges which way, or the user accepts that the row only lists keys.
+result: [pending]
+
+### 15. Carried from the first verification, already passed in UAT (automated, 04-UAT tests 1-5, 7-9): bumper pop feel, sling snap feel, nudge direction convention (assumption A2), tilt fairness, attract behavior, judgment-tier prohibitions.
+expected: No regression after 04-09. The user may re-glance during the flipper-feel pass above.
+result: [pending]
+
 ## Summary
 
-total: 10
+total: 15
 passed: 8
 issues: 2
-pending: 0
+pending: 5
 skipped: 0
 blocked: 0
 
