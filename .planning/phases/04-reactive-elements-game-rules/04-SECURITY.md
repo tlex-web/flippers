@@ -12,7 +12,7 @@ created: "2026-11-20"
 
 > Per-phase security contract: threat register, accepted risks, and audit trail.
 
-This phase has no network, storage, auth or user-data surface. The threat model is about game integrity and availability: rules injecting energy into the ball (kicks, nudges), untrusted key input becoming impulses or new bodies, scoring that a rolling contact or a repeated event could inflate, replay determinism, and the HUD writing text into the page. The register was written at plan time in each 04-0N-PLAN.md `<threat_model>` and verified at ASVS L1 by grep against the implementation. The cited test files were re-run at HEAD (15 files, 227 tests green) and `tsc --noEmit` exits 0.
+This phase has no network, storage, auth or user-data surface. The threat model is about game integrity and availability: rules injecting energy into the ball (kicks, nudges), untrusted key input becoming impulses or new bodies, scoring that a rolling contact or a repeated event could inflate, replay determinism, and the HUD writing text into the page. The register was written at plan time in each 04-0N-PLAN.md `<threat_model>` and verified at ASVS L1 by grep against the implementation. The cited test files were re-run at HEAD (15 files, 227 tests green) and `tsc --noEmit` exits 0. The gap-closure plans 04-09 (G-04-10, flipper latency) and 04-10 (G-04-6, HUD legibility) added T-04-21..T-04-26; their cited test files were re-run at 45bb2a1 (5 files, 105 tests green).
 
 ---
 
@@ -30,6 +30,10 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | keyboard (flipper keys) -> FlipperInput -> FlipperController (enable gate) -> setFlipperMotor | Untrusted input drives the bats; the session decides when input is honored | KeyboardEvent edges, motor command |
 | rules/session state -> DOM HUD text | Constant strings and formatted numbers written as text into the page | score, ball number, status string |
 | game state -> replay determinism | Any hidden time or ordering source would break replay and the proofs built on it | step counts |
+| keyboard (six flipper bindings) -> FlipperInput latch -> FlipperController FSM -> setFlipperMotor -> Planck joint (04-09) | Untrusted, arbitrarily timed key input; tap timing must never leave a bat stuck raised | KeyboardEvent edges, motor command |
+| application code -> planck@1.5.0 RevoluteJoint (04-09) | Third-party solver behavior the limit-impulse reset depends on | joint limit flag, motor speed |
+| simulation numbers -> DOM text sink `#hud-diag` (04-10) | Formatted numbers written into the page on the HUD throttle | FPS, physics Hz, kinetic energy |
+| static markup (index.html) -> assistive tech (04-10) | The controls hint and the readout are exposed to screen readers | static text |
 
 ---
 
@@ -57,7 +61,13 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | T-04-18 | Tampering (replay integrity) | Cadence-dependent rules (cooldowns, decay, serves) | medium | mitigate | `game.determinism.test.ts:212` drives the same scripted key timeline at 60/120/144 Hz and asserts identical steps, score, ball, state, ball and flipper states; non-vacuous: `hasPlayed` and `sawTilt` true in every run (`:221-222`) | closed |
 | T-04-19 | Denial of Service (frame budget) | HudView rebuilding strings or writing three DOM nodes every frame | low | mitigate | Per-line cache of last inputs (`hud.ts:89-93`); each line's string is built and written only when its own inputs change (`:111-118`); `hud.test.ts:168` (100 unchanged updates write nothing) and `:174/183/192` (single-line rewrites) | closed |
 | T-04-20 | Tampering (DOM integrity) | HUD text interpreted as markup | low | mitigate | Every HUD write assigns `TextSink.textContent` with constant strings or `formatScore` output (`hud.ts:112/115/118`); guard `grep -rn "innerHTML" src` = 0 at HEAD, and no `outerHTML` / `insertAdjacentHTML` / `document.write` in `src` or `index.html` | closed |
-| T-04-SC | Tampering | npm/pip/cargo installs | low | accept | No packages installed this phase: `package.json` / lockfile unchanged across 8871026..HEAD | closed |
+| T-04-21 | Denial of Service (game integrity) | FlipperController returning -> resting on drift; a tap timing parks a bat raised (04-09) | high | mitigate | `flipper-controller.ts:75` `REST_ANGLE_TOL = 0.1`, `:83` `REST_SETTLE_UPDATES = 2`; `:212-220` enters resting only after 2 settled updates within tolerance of `restLimitAngle`, else keeps motor -1; `drop()` resets the counter (`:244`). Spy cases `flipper-controller.test.ts:351` (drift short of rest), `:371` (mirror), `:394` (first observation), `:415` (never-moved tap); e2e six-binding 192-tap sweep with per-step resting invariant `flipper-e2e.test.ts:299` | closed |
+| T-04-22 | Tampering (dependency drift) | setFlipperMotor reset relying on Planck solver internals (04-09) | medium | mitigate | Public `RevoluteJoint.enableLimit(false)` / `(true)` only, on a commanded sign change (`planck-world.ts:883-887`); non-comment grep for `m_motorImpulse\|m_impulse` = 0; adapter-level latency pin `flipper-response.test.ts:71` (TABLE_SPEC + PROOF_BOX_SPEC, both ids); `package.json:18` pins `"planck": "1.5.0"` exactly; `planck-world.ts` is the only planck importer in `src` | closed |
+| T-04-23 | Denial of Service (frame budget) | setFlipperMotor allocating a search closure at 120 Hz (04-09) | low | mitigate | Indexed for-loop lookup `planck-world.ts:879`; `grep -c "flipperJoints.find(" src/physics/planck-world.ts` = 0 | closed |
+| T-04-24 | Tampering (markup injection) | DiagView writing `#hud-diag` (04-10) | low | mitigate | `hud.ts:176` assigns `TextSink.textContent` only; `diagText` (`hud.ts:142-143`) builds the line from `toFixed` numbers and constant text; `grep -rn innerHTML src index.html` = 0, and no `outerHTML` / `insertAdjacentHTML` / `document.write` | closed |
+| T-04-25 | Denial of Service (frame budget) | Per-frame DOM writes and string building from the readout (04-10) | low | mitigate | `DiagView.update` (`hud.ts:167-181`) returns before building a string when the three cached numbers are unchanged; fed on the `HUD_UPDATE_MS` 200 ms throttle (`main.ts:81`, `:304`, `:317`); write-count cases `hud.test.ts:235` (first update writes once) and `:241` (same numbers write nothing) | closed |
+| T-04-26 | Information disclosure (a11y noise) | Developer readout announced to screen readers (04-10) | low | mitigate | `index.html:135` `#hud-diag` carries `aria-hidden="true"`; the only `aria-live` region is `#hud-status` (`index.html:121`) | closed |
+| T-04-SC | Tampering | npm/pip/cargo installs | low | accept | No packages installed this phase: `package.json` / lockfile unchanged across 8871026..HEAD, including the 04-09/04-10 gap closure (`git diff 2cd8dbf..45bb2a1 -- package.json package-lock.json` empty) | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -69,7 +79,7 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
-| AR-04-01 | T-04-SC | Supply-chain install surface: the phase adds no dependency (RESEARCH Package Legitimacy Audit: none), so there is nothing to vet. Disposition `accept` was set at plan time in all eight plans and is confirmed by an unchanged `package.json` / lockfile. | plan-time threat model (04-01..04-08) | 2026-11-20 |
+| AR-04-01 | T-04-SC | Supply-chain install surface: the phase adds no dependency (RESEARCH Package Legitimacy Audit: none), so there is nothing to vet. Disposition `accept` was set at plan time in all eight plans and is confirmed by an unchanged `package.json` / lockfile. | plan-time threat model (04-01..04-10) | 2026-11-20 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -80,6 +90,7 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-11-20 | 21 | 21 | 0 | gsd-secure-phase orchestrator (ASVS L1 grep-depth plus re-run of the cited tests; auditor skipped per short-circuit: threats_open 0, register authored at plan time) |
+| 2026-11-20 | 27 | 27 | 0 | gsd-secure-phase orchestrator, gap-closure re-audit for 04-09/04-10 (T-04-21..T-04-26 added; ASVS L1 grep-depth plus re-run of the cited tests; auditor skipped per the same short-circuit) |
 
 ---
 
@@ -91,3 +102,11 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 - [x] `status: verified` set in frontmatter
 
 **Approval:** verified 2026-11-20
+
+## Security Audit 2026-11-20
+
+| Metric | Count |
+|---|---|
+| Threats found | 27 |
+| Closed | 27 |
+| Open | 0 |
