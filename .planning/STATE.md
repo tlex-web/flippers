@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-11-20T18:00:10.247Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-11-20T18:08:54.007Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: e77153c10612126fa12c7bb63bc179171acc97db
+state_head: 3b33217d383ed1765ba85da7ca90e2b6007383e2
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 25
+  completed_plans: 26
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -85,6 +85,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P04 | 3min | 2 tasks | 8 files |
 | Phase 04 P05 | 11min | 3 tasks | 8 files |
 | Phase 04 P06 | 18min | 3 tasks | 9 files |
+| Phase 04 P07 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,7 @@ Recent decisions affecting current work:
 - [Phase 04]: main.ts drives the plunger through applyEdges(..., isHeld(), session.activeBallId) (IN-02 live); Enter/NumpadEnter start latch in GameInput; a started game calls reactive.resetLights()
 - [Phase 04]: Nudge is velocity-only applyImpulse to every ball (NUDGE_IMPULSE 0.15, X +x / Period -x / ArrowUp -y), accepted only while playing and >= 30 fixed steps after the last; GameSession.tick() is the step clock
 - [Phase 04]: TiltMeter is pure and step-driven (cost 1, decay 0.5/s per step, rising-edge WARNING at >= 2, TILT at >= 3); tilted makes isLive() false; every serve and onStart clear meter and warning; a tilt costs only the current ball
+- [Phase 04]: HUD is three DOM lines (score, BALL n / 3, status) each written only when its own inputs change; status is the only aria-live line; TILT wins over WARNING; the ball line is keyed on state or ball so a tilt rewrites it once
 
 ### Pending Todos
 
@@ -180,6 +182,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T18:00:08.831Z
-Stopped at: Completed 04-06-PLAN.md
+Last session: 2026-11-20T18:08:52.519Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None

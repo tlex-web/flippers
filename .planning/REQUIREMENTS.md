@@ -37,7 +37,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Game Rules (GAME)
 
-- [ ] **GAME-01**: Player sees a live running score in an on-screen HUD
+- [x] **GAME-01**: Player sees a live running score in an on-screen HUD
 - [ ] **GAME-02**: A 3-ball game loop — draining serves the next ball to the plunger; game over after the last ball
 - [ ] **GAME-03**: Player can nudge the table (small impulse); over-nudging triggers TILT — elements go dead and the flippers drop
 
@@ -110,7 +110,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | ELEM-01 | Phase 4 | Complete |
 | ELEM-02 | Phase 4 | Complete |
 | ELEM-03 | Phase 4 | Complete |
-| GAME-01 | Phase 4 | Pending |
+| GAME-01 | Phase 4 | Complete |
 | GAME-02 | Phase 4 | Pending |
 | GAME-03 | Phase 4 | Pending |
 | RND-01 | Phase 5 | Pending |
