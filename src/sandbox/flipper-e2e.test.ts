@@ -336,3 +336,67 @@ describe("flipper response after any hold or rest (G-04-10)", () => {
     expect(restingAway).toEqual([]);
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * G-04-11: a keyup lost to an OS dialog must never strand a bat raised.
+ * ------------------------------------------------------------------------- */
+
+/** Step until `id` reports `phase`; returns the step count, or -1 past `cap`. */
+function stepsUntilPhase(
+  rig: ReturnType<typeof makeRig>,
+  id: number,
+  phase: string,
+  cap: number,
+): number {
+  for (let i = 1; i <= cap; i++) {
+    rig.step();
+    if (rig.controller.getPhase(id) === phase) return i;
+  }
+  return -1;
+}
+
+describe("a lost keyup never strands a bat (G-04-11)", () => {
+  // The Shift codes are the reported ones (the Windows Sticky Keys prompt); the
+  // late-keydown race (a keydown handled after the dialog's blur, whose keyup
+  // then goes to the dialog) can hit any binding.
+  for (const b of [
+    { code: "ShiftLeft", side: "left" },
+    { code: "ShiftRight", side: "right" },
+    { code: "KeyZ", side: "left" },
+    { code: "Slash", side: "right" },
+  ] as const) {
+    it(`${b.code}: a keydown whose keyup never arrives is released by a window focus regain`, () => {
+      const rig = makeRig();
+      const id = sideId(rig, b.side);
+      for (let i = 0; i < 20; i++) rig.step();
+      const restTip = rig.tipY(id);
+
+      // The keydown reaches the page; its keyup is taken by the OS dialog.
+      rig.input.handleKeyDown(key(b.code));
+      for (let i = 0; i < 20; i++) rig.step();
+      expect(rig.controller.getPhase(id)).toBe("held-up");
+      // The stale state the diagnosis reproduced (S2): the bat stays up.
+      for (let i = 0; i < 120; i++) rig.step();
+      expect(rig.controller.getPhase(id)).toBe("held-up");
+
+      // The window regains focus: the stale key is cleared and the bat falls.
+      rig.input.handleFocus();
+      const fall = stepsUntilMoved(rig, id, 40);
+      expect(fall).toBeGreaterThanOrEqual(1);
+      expect(fall).toBeLessThanOrEqual(2);
+      for (let i = 0; i < 90; i++) rig.step();
+      expect(rig.controller.getPhase(id)).toBe("resting");
+      expect(Math.abs(rig.tipY(id) - restTip)).toBeLessThan(0.02);
+      expect(rig.input.isHeld(b.side)).toBe(false);
+
+      // A fresh press of the same key is no longer de-duped: the bat rises again.
+      rig.input.handleKeyDown(key(b.code));
+      const rise = stepsUntilMoved(rig, id, 40);
+      expect(rise).toBeGreaterThanOrEqual(1);
+      expect(rise).toBeLessThanOrEqual(2);
+      expect(stepsUntilPhase(rig, id, "held-up", 30)).toBeGreaterThan(0);
+      rig.input.handleKeyUp(key(b.code));
+      expect(stepsUntilPhase(rig, id, "resting", 90)).toBeGreaterThan(0);
+    });
+  }
+});

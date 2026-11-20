@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { FlipperInput } from "./flipper-input";
 
@@ -219,5 +219,78 @@ describe("FlipperInput.isHeld (Pitfall 5: the held-key re-press on serve)", () =
     const edges = input.drainEdges();
     expect(edges.leftPress).toBe(false);
     expect(edges.leftRelease).toBe(false);
+  });
+});
+
+describe("focus regain (G-04-11)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("handleFocus() force-clears like blur: releases every held side and un-dedupes the codes", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(ev("KeyZ"));
+    input.handleKeyDown(ev("ShiftRight"));
+    input.drainEdges();
+
+    input.handleFocus();
+    const edges = input.drainEdges();
+    expect(edges.leftRelease).toBe(true);
+    expect(edges.rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+
+    // A late keyup of a cleared code emits no phantom release.
+    input.handleKeyUp(ev("KeyZ"));
+    input.handleKeyUp(ev("ShiftRight"));
+    const after = input.drainEdges();
+    expect(after.leftRelease).toBe(false);
+    expect(after.rightRelease).toBe(false);
+
+    // A fresh ShiftRight keydown is no longer de-duped.
+    input.handleKeyDown(ev("ShiftRight"));
+    expect(input.drainEdges().rightPress).toBe(true);
+  });
+
+  it("handleFocus() with nothing held emits no edges", () => {
+    const input = new FlipperInput();
+    input.handleFocus();
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(false);
+    expect(edges.leftRelease).toBe(false);
+    expect(edges.rightPress).toBe(false);
+    expect(edges.rightRelease).toBe(false);
+  });
+
+  it("attach() registers a window focus listener that clears the held set; detach() removes the same function", () => {
+    const win = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    const doc = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    vi.stubGlobal("window", win);
+    vi.stubGlobal("document", doc);
+
+    const input = new FlipperInput();
+    input.attach();
+
+    const focusCall = win.addEventListener.mock.calls.find((c) => c[0] === "focus");
+    expect(focusCall).toBeDefined();
+    const onFocus: unknown = focusCall?.[1];
+    expect(typeof onFocus).toBe("function");
+
+    // The captured listener routes to the force-clear.
+    input.handleKeyDown(ev("KeyZ"));
+    input.drainEdges();
+    (onFocus as () => void)();
+    expect(input.drainEdges().leftRelease).toBe(true);
+
+    // The pre-existing listeners are still wired.
+    const added = win.addEventListener.mock.calls.map((c) => c[0]);
+    expect(added).toEqual(expect.arrayContaining(["keydown", "keyup", "blur", "focus"]));
+    expect(doc.addEventListener).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+
+    input.detach();
+    expect(win.removeEventListener).toHaveBeenCalledWith("focus", onFocus);
+    const removed = win.removeEventListener.mock.calls.map((c) => c[0]);
+    expect(removed).toEqual(expect.arrayContaining(["keydown", "keyup", "blur", "focus"]));
+    expect(doc.removeEventListener).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
   });
 });
