@@ -173,6 +173,94 @@ describe("plunger end-to-end: charge -> release -> applyImpulse -> real chute (L
   });
 });
 
+/** Rest-gate speed the controller uses (IN-01); restated so the proof is explicit. */
+const REST_SPEED_EPS = 0.05;
+
+function snapshot(b: BallState): readonly number[] {
+  return [b.x, b.y, b.vx, b.vy, b.angle];
+}
+
+describe("plunger end-to-end: only a resting ball is launched (IN-01)", () => {
+  it("a release while the ball falls back into the plunger lane applies nothing; a release from rest still launches", () => {
+    // Two identical rigs. Both get the same minimum tap; rig A then gets a second
+    // press/release while its ball falls back through PLUNGER_ZONE, rig B does not.
+    const a = makeRig();
+    const b = makeRig();
+    const both = (topA?: () => void, topB?: () => void): void => {
+      a.step(topA);
+      b.step(topB);
+    };
+    const upd = (r: Rig) => (): void => r.plunger.update();
+
+    // Tap: press, then release on the very next step (k = 0, minimum impulse).
+    both(
+      () => {
+        a.plunger.onPressEdge();
+        a.plunger.update();
+      },
+      () => {
+        b.plunger.onPressEdge();
+        b.plunger.update();
+      },
+    );
+    both(
+      () => {
+        a.plunger.onReleaseEdge(a.ballId);
+        a.plunger.update();
+      },
+      () => {
+        b.plunger.onReleaseEdge(b.ballId);
+        b.plunger.update();
+      },
+    );
+    expect(a.ball().vy).toBeLessThan(0);
+
+    // Watch rig A until the ball falls back (vy > 0) into the zone still moving.
+    let found = -1;
+    for (let i = 0; i < WATCH_STEPS; i++) {
+      both(upd(a), upd(b));
+      const ball = a.ball();
+      if (ball.vy > 0 && inZone(ball) && Math.hypot(ball.vx, ball.vy) >= REST_SPEED_EPS) {
+        found = i;
+        break;
+      }
+    }
+    expect(found).toBeGreaterThanOrEqual(0);
+    expect(snapshot(a.ball())).toEqual(snapshot(b.ball()));
+
+    // Press in rig A only, release on the next step: the ball is in the zone and
+    // still moving at the release, so the gate must refuse it.
+    both(() => {
+      a.plunger.onPressEdge();
+      a.plunger.update();
+    }, upd(b));
+    expect(snapshot(a.ball())).toEqual(snapshot(b.ball()));
+    const atRelease = a.ball();
+    expect(inZone(atRelease)).toBe(true);
+    expect(Math.hypot(atRelease.vx, atRelease.vy)).toBeGreaterThanOrEqual(REST_SPEED_EPS);
+    expect(a.plunger.getPhase()).toBe("charging");
+    both(() => {
+      a.plunger.onReleaseEdge(a.ballId);
+      a.plunger.update();
+    }, upd(b));
+    expect(a.plunger.getPhase()).toBe("idle");
+    expect(a.plunger.getCharge()).toBe(0);
+    expect(snapshot(a.ball())).toEqual(snapshot(b.ball()));
+    for (let i = 0; i < 10; i++) {
+      both(upd(a), upd(b));
+      expect(snapshot(a.ball())).toEqual(snapshot(b.ball()));
+    }
+
+    // Settle, then a genuine rest launch still fires.
+    for (let i = 0; i < 120; i++) both(upd(a), upd(b));
+    const rest = a.ball();
+    expect(inZone(rest)).toBe(true);
+    expect(Math.hypot(rest.vx, rest.vy)).toBeLessThan(REST_SPEED_EPS);
+    const r = launch(a, 0);
+    expect(r.climb).toBeGreaterThan(0.3);
+  });
+});
+
 /** A synthetic KeyboardEvent-shaped object (no real DOM needed). */
 function key(code: string, repeat = false): KeyEventLike {
   return { code, repeat, preventDefault: () => {} };

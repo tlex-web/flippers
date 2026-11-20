@@ -29,9 +29,9 @@ class SpyWorld implements PlungerWorld {
   readonly calls: ImpulseCall[] = [];
   readonly balls: BallState[] = [];
 
-  /** Script one ball at (x, y). */
-  putBall(id: BallId, x: number, y: number): void {
-    this.balls.push({ id, x, y, vx: 0, vy: 0, radius: 0.2, angle: 0 });
+  /** Script one ball at (x, y) moving at (vx, vy); at rest by default. */
+  putBall(id: BallId, x: number, y: number, vx = 0, vy = 0): void {
+    this.balls.push({ id, x, y, vx, vy, radius: 0.2, angle: 0 });
   }
 
   getBalls(): readonly BallState[] {
@@ -193,6 +193,38 @@ describe("PlungerController: release impulse (D-07/D-09)", () => {
     plunger.onPressEdge();
     plunger.onReleaseEdge(BALL);
     expect(world.calls.length).toBe(1);
+  });
+});
+
+describe("PlungerController: rest gate (IN-01)", () => {
+  /** An in-zone ball at PLUNGER_REST moving at (vx, vy): charge 20 steps, release. */
+  function releaseMoving(vx: number, vy: number): { world: SpyWorld; plunger: PlungerController } {
+    const world = new SpyWorld();
+    world.putBall(BALL, PLUNGER_REST.x, PLUNGER_REST.y, vx, vy);
+    const plunger = new PlungerController(world);
+    plunger.onPressEdge();
+    for (let i = 0; i < 20; i++) plunger.update();
+    plunger.onReleaseEdge(BALL);
+    return { world, plunger };
+  }
+
+  it("an in-zone ball moving at (0, 2) gets no impulse, and the controller ends idle with charge 0", () => {
+    const { world, plunger } = releaseMoving(0, 2);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getPhase()).toBe("idle");
+    expect(plunger.getCharge()).toBe(0);
+  });
+
+  it("an in-zone ball at 0.049 m/s is resting and launches", () => {
+    const { world } = releaseMoving(0, 0.049);
+    expect(world.calls.length).toBe(1);
+  });
+
+  it("an in-zone ball at exactly 0.05 m/s is not resting (strict less-than)", () => {
+    const { world, plunger } = releaseMoving(0.03, 0.04); // hypot = 0.05 exactly
+    expect(Math.hypot(0.03, 0.04)).toBe(0.05);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getCharge()).toBe(0);
   });
 });
 

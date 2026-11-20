@@ -8,8 +8,10 @@
  * (`PLUNGER_CHARGE_RATE · FIXED_DT`, clamped at `PLUNGER_MAX_CHARGE`). On release
  * it applies ONE impulse along `PLUNGER_AXIS` whose magnitude maps the charge
  * linearly onto [PLUNGER_MIN_IMPULSE, PLUNGER_MAX_IMPULSE], but only when the
- * named ball is resting inside the plunger zone. There is no spring body and no
- * moving plunger body.
+ * named ball is resting inside the plunger zone: its center inside the zone AND
+ * its speed below `PLUNGER_REST_SPEED_EPS` (IN-01). A ball falling back down the
+ * chute after a weak launch, or shoved by a nudge, is not launched. There is no
+ * spring body and no moving plunger body.
  *
  * Observable FSM: `idle -> charging -> idle`, driven by edges drained from the
  * keyboard latch at the top of each fixed step (`onPressEdge` /
@@ -39,6 +41,17 @@ import {
 } from "../physics/constants";
 import type { BallId, PhysicsWorld } from "../physics/types";
 import { PLUNGER_ZONE } from "../table/spec";
+
+/**
+ * "Is resting" speed threshold (m/s) for the release gate (IN-01). A detector
+ * threshold, not a feel magnitude, so it lives with the controller (same
+ * reasoning as `ANGLE_SETTLE_EPS` in the flipper FSM). Plan-time probe: a ball
+ * parked at PLUNGER_REST on TABLE_SPEC reads exactly 0 m/s from step 0 through
+ * step 600, while a ball dropping back after a minimum tap passes through the
+ * zone at several m/s, so 0.05 m/s sits far from both regimes. Strict
+ * less-than: a ball at exactly this speed is not resting.
+ */
+const PLUNGER_REST_SPEED_EPS = 0.05;
 
 /** The slice of `PhysicsWorld` the plunger reads and drives. */
 export type PlungerWorld = Pick<PhysicsWorld, "applyImpulse" | "getBalls">;
@@ -77,13 +90,16 @@ export class PlungerController {
   }
 
   /**
-   * Launch key went up. Only while charging: if `ballId` is a live ball whose
-   * center lies inside the zone, apply one impulse along `PLUNGER_AXIS` scaled by
-   * the current charge. Always returns to idle with charge 0.
+   * Launch key went up. Only while charging: if `ballId` is a live ball resting
+   * inside the zone (center inside the zone and speed below
+   * `PLUNGER_REST_SPEED_EPS`), apply one impulse along `PLUNGER_AXIS` scaled by
+   * the current charge. A moving ball gets nothing, so the launch can never add
+   * to a velocity the meter does not show (IN-01, D-10). Always returns to idle
+   * with charge 0.
    */
   onReleaseEdge(ballId: BallId): void {
     if (this.phase !== "charging") return;
-    if (this.ballInZone(ballId)) {
+    if (this.ballRestingInZone(ballId)) {
       const mag =
         PLUNGER_MIN_IMPULSE + (PLUNGER_MAX_IMPULSE - PLUNGER_MIN_IMPULSE) * this.getCharge();
       this.world.applyImpulse(ballId, PLUNGER_AXIS.x * mag, PLUNGER_AXIS.y * mag);
@@ -126,13 +142,15 @@ export class PlungerController {
     this.charge = 0;
   }
 
-  private ballInZone(ballId: BallId): boolean {
+  /** True when `ballId` is live, centered inside the zone, and at rest (IN-01). */
+  private ballRestingInZone(ballId: BallId): boolean {
     const balls = this.world.getBalls();
     const z = this.zone;
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i];
       if (!b || b.id !== ballId) continue;
-      return b.x >= z.minX && b.x <= z.maxX && b.y >= z.minY && b.y <= z.maxY;
+      const inZone = b.x >= z.minX && b.x <= z.maxX && b.y >= z.minY && b.y <= z.maxY;
+      return inZone && Math.hypot(b.vx, b.vy) < PLUNGER_REST_SPEED_EPS;
     }
     return false;
   }
