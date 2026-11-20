@@ -3,7 +3,7 @@ status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T21:55:43Z
+updated: 2026-11-20T23:58:00Z
 ---
 
 ## Current Test
@@ -96,12 +96,24 @@ result: pass
 expected: No regression after 04-09. The user may re-glance during the flipper-feel pass above.
 result: pass
 
+### 16. UAT test 11 re-test on a real Windows keyboard. Confirm Sticky Keys is OFF, run `npm run dev`, press Enter. On each of Z, Left Shift, Left Arrow, /, Right Shift, Right Arrow make quick taps of varied length, hold a long cradle then release, and hold both Shifts together for a cradle. Then tap Left Shift five times to open the Sticky Keys prompt, close it with the mouse (No), return to the game and tap Z, Left Arrow, then Left Shift. Also over-nudge to TILT once while holding a bat up.
+expected: Each bat snaps up on its key and falls on release on all six bindings. The both-Shift cradle holds both bats up. After the prompt closes, no bat stays raised once the window has focus; a tap of Z, Left Arrow or Space releases a raised bat; every binding works afterwards. On TILT the held bat drops at once. Cradle and catch still feel heavy. Known residual, not a failure: if Sticky Keys was turned ON by the prompt, Windows itself holds Shift down after a Shift tap until the next non-Shift key.
+result: [pending]
+
+### 17. Windows both-Shift release (code-review WR-02). Hold ShiftLeft and ShiftRight together (both bats up), release ShiftLeft first, then ShiftRight, then watch both bats.
+expected: Both bats drop. If the left bat stays raised after both Shifts are up (Windows emits no keyup for the first Shift released while both are held), it is the unhealed WR-02 residual and clears on the next non-Shift key press or a focus regain.
+result: [pending]
+
+### 18. Shift as a default binding (plan 04-11 flagged design note, T-04-29 accepted). Decide whether Left/Right Shift stay default flipper bindings (Phase 2 D-09) given the OS Sticky Keys shortcut, and whether the controls list should hint at it.
+expected: A recorded user decision. Bindings are unchanged in the code today.
+result: [pending]
+
 ## Summary
 
-total: 15
+total: 18
 passed: 12
 issues: 3
-pending: 0
+pending: 3
 skipped: 0
 blocked: 0
 
