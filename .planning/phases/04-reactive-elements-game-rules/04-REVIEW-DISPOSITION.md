@@ -3,6 +3,26 @@ phase: 04
 review: 04-REVIEW.md
 titles: json
 findings:
+  - id: WR-01
+    severity: warning
+    disposition: open
+    title: "A stale-Shift heal and a same-side press in one drain window drop the bat while the key is held"
+  - id: WR-02
+    severity: warning
+    disposition: open
+    title: "The Windows both-Shift lost keyup is never reconciled, because Shift-key events are excluded"
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "PlungerInput and GameInput lack the focus-regain clear, so the same late-keydown race strands a plunger charge"
+  - id: IN-02
+    severity: info
+    disposition: open
+    title: "`handleFocus` doc says \"window focus only follows a blur\", which is not always true"
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "The game-e2e comment says Space reaches every input, but `g.gameInput` is not fed"
   - id: WR-03
     severity: warning
     disposition: open
@@ -27,26 +47,6 @@ findings:
     severity: info
     disposition: open
     title: "The controls list does not say which nudge key goes which way, and key alternatives have no separator"
-  - id: WR-01
-    severity: warning
-    disposition: open
-    title: "The e2e and determinism proofs test a hand-copied composition, not `main.ts`"
-  - id: WR-02
-    severity: warning
-    disposition: open
-    title: "Auto-repeat keydowns on the flipper keys are not `preventDefault`ed (Firefox quick-find on a held `/`)"
-  - id: IN-01
-    severity: info
-    disposition: open
-    title: "A second kick on the same ball in one `service()` reads a stale velocity snapshot"
-  - id: IN-02
-    severity: info
-    disposition: open
-    title: "For one render frame after a drain or serve, the drained ball still shows and the new ball is missing"
-  - id: IN-03
-    severity: info
-    disposition: open
-    title: "`applyEdges` loses a press-release-press tap that lands inside one fixed-step window from idle"
   - id: IN-04
     severity: info
     disposition: open
@@ -57,24 +57,24 @@ findings:
     title: "The controls hint uses \"/\" both as a separator and as the Slash key"
 open: 13
 total: 13
-recorded: 2026-11-20T20:19:40.993Z
+recorded: 2026-11-20T22:45:53.783Z
 ---
 
 # Phase 04: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-03 | warning | open | - |
-| WR-04 | warning | open | - |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
-| IN-08 | info | open | - |
-| IN-09 | info | open | - |
-| WR-01 | warning | open | - (not in the current review) |
-| WR-02 | warning | open | - (not in the current review) |
-| IN-01 | info | open | - (not in the current review) |
-| IN-02 | info | open | - (not in the current review) |
-| IN-03 | info | open | - (not in the current review) |
+| WR-01 | warning | open | - |
+| WR-02 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | open | - |
+| WR-03 | warning | open | - (not in the current review) |
+| WR-04 | warning | open | - (not in the current review) |
+| IN-06 | info | open | - (not in the current review) |
+| IN-07 | info | open | - (not in the current review) |
+| IN-08 | info | open | - (not in the current review) |
+| IN-09 | info | open | - (not in the current review) |
 | IN-04 | info | open | - (not in the current review) |
 | IN-05 | info | open | - (not in the current review) |
 
