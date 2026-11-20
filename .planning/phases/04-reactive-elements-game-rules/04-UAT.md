@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T21:44:56.066Z
+updated: 2026-11-20T21:55:43Z
 ---
 
 ## Current Test
@@ -156,5 +156,17 @@ blocked: 0
   reason: "User reported: i was only able to test the flippers with the arrow keys. i noticed that the shift key is not working properly since the left shift is activating sticky keys after many clicks and the flipper gets stuck."
   severity: major
   test: 11
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "FlipperInput's held-key set is updated only by keydown/keyup pairs plus forceClear on blur/visibilitychange; it never re-checks itself (no clear on window focus, no shiftKey/getModifierState check). When Windows swallows a Shift keyup (Sticky Keys switched ON from the 5x-Shift prompt holds Shift down until a non-modifier key; or a keydown lands after the dialog's blur and its keyup goes to the dialog), the stale ShiftLeft keeps the whole left side held: Z and ArrowLeft cannot release the bat, a new ShiftLeft keydown is a no-op, and flipperGate.setEnabled(true) re-raises the bat on every serve. Right side identical with ShiftRight. Input and flipper logic are correct whenever keydown/keyup arrive paired (headless experiment S1-S7); not key-identity related (keys on event.code)."
+  artifacts:
+    - path: "src/input/flipper-input.ts"
+      issue: "Held set never self-heals: forceClear only on blur/hidden; no clear on focus regain; one stale code pins its whole side"
+    - path: "src/sandbox/main.ts"
+      issue: "flipperGate.setEnabled(true) re-presses any side input.isHeld() reports, so a stale key survives every serve"
+    - path: "index.html"
+      issue: "Left/Right Shift are default bindings (Phase 2 D-09); the OS Sticky Keys shortcut cannot be blocked by preventDefault"
+  missing:
+    - "Clear held flipper keys when the window regains focus (focus/pageshow), not only on blur, to cover the late-keydown/lost-keyup case"
+    - "Drop a held ShiftLeft/ShiftRight when any later key event reports shiftKey false"
+    - "Regression tests: keydown with no keyup followed by focus regain ends released; a stale ShiftLeft does not stop Z or ArrowLeft releasing the left bat (same for right)"
+    - "Design note (user call, not required): a Sticky-Keys-held Shift still reads as down to the browser, so no JS check can release it; consider whether Shift stays a default binding or gets a hint"
+  debug_session: ".planning/debug/left-shift-sticky-keys-flipper-stuck.md"
