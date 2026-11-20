@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-11-20T17:23:54.906Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-11-20T17:37:53.605Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: 61e12ba24847341b611e589c247940f439133dd6
+state_head: da67148b5852d33f8144ff5bf6fa9059916776a5
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 23
+  completed_plans: 24
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -83,6 +83,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P02 | 5min | 2 tasks | 5 files |
 | Phase 04 P03 | 14min | 3 tasks | 6 files |
 | Phase 04 P04 | 3min | 2 tasks | 8 files |
+| Phase 04 P05 | 11min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Energy bound proven: 12 seeded dead-flipper drops (0x0403) all drain within 60 s, peak 6.74 m/s, kicks fire; 20 m/s kicks turn it red
 - [Phase 04]: Rules-live soak: ReactiveSoakWorld decorator over PlanckWorld(TABLE_SPEC) joins the unchanged soak through SoakConfig.makeWorld; 630 s real-table gate green at 60 m/s with CCD on and kicks > 0; CCD-off control goes RED and replays
 - [Phase 04]: drainEvents() returns readonly CollisionEvent[] in the interface and all implementations (IN-05); adapter ball density imports BALL_DENSITY; IN-03 docs fixed; IN-04 deferred with reason in the gate docstring
+- [Phase 04]: GameSession is the 3-ball FSM (game-over/playing, BALLS_PER_GAME 3): boots into attract with no ball, onStart() only from game-over, the third drain ends the game with the score kept; drain read from the bus for the active id only (CR-01); BallFeed retired
+- [Phase 04]: main.ts drives the plunger through applyEdges(..., isHeld(), session.activeBallId) (IN-02 live); Enter/NumpadEnter start latch in GameInput; a started game calls reactive.resetLights()
 
 ### Pending Todos
 
@@ -174,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T17:23:53.407Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-11-20T17:37:52.222Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
