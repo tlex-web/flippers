@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-20T20:25:31Z
+updated: 2026-11-20T21:44:56.066Z
 ---
 
 ## Current Test
@@ -75,30 +75,33 @@ note: "Automated confirmation (Claude, live page, Z / Slash and arrows alike): (
 
 ### 11. Flipper feel on all six bindings (UAT test 10 re-test). Run `npm run dev`, press Enter. On each of Z, Left Shift, Left Arrow, /, Right Shift, Right Arrow: make quick taps of varied length, hold a long cradle then release, and over-nudge to TILT once while holding a bat up.
 expected: Each bat snaps up the instant its key goes down and starts falling the instant it comes up, even after a multi-second cradle. No tap leaves a bat hanging raised. On TILT the held bat drops at once with no visible ~130 ms pause. Cradle and catch still feel heavy (the Phase 2 approval was given on the pre-04-09 dynamics).
-result: [pending]
+result: issue
+reported: "i was only able to test the flippers with the arrow keys. i noticed that the shift key is not working properly since the left shift is activating sticky keys after many clicks and the flipper gets stuck."
+severity: major
+note: "Arrow keys were tested and not reported as faulty. Left Shift: repeated presses trigger the Windows Sticky Keys prompt and the bat then stays stuck up. Z, / and Right Shift were not tested."
 
 ### 12. Real-table flipper launch / pinch check (code-review WR-03). On the real table, raise each bat with the ball resting near the base (about 30 percent of bat length), the middle, and the tip, with the ball resting against the bat under the slingshot.
 expected: A tip hit still launches visibly harder than a base hit, and a base or mid-bat flip does not fire the ball out at an unnaturally high speed (reviewer measured a 19.4 m/s peak for a left-bat base flip; verifier measured 9 to 16 m/s peaks across 0.3-0.8 reach, with no reactive layer).
-result: [pending]
+result: pass
 
 ### 13. HUD panel layout at 1280x684, 150% display scaling (UAT test 6 re-test). Open the page, press Enter, charge the plunger.
 expected: The controls panel shows five rows (Start, Launch, Left flipper, Right flipper, Nudge), each with its key caps on one line and no wrap. The Slash key shows as its own key cap. The bottom-left FPS / PHYS / KE readout is comfortably legible. Neither panel covers the table or the plunger charge meter. Score, BALL n / 3 and status look as before.
-result: [pending]
+result: pass
 
 ### 14. Nudge key directions are discoverable (04-REVIEW IN-09). Read the Nudge row of the controls list.
 expected: A new player can tell which of X, period and Up nudges which way, or the user accepts that the row only lists keys.
-result: [pending]
+result: pass
 
 ### 15. Carried from the first verification, already passed in UAT (automated, 04-UAT tests 1-5, 7-9): bumper pop feel, sling snap feel, nudge direction convention (assumption A2), tilt fairness, attract behavior, judgment-tier prohibitions.
 expected: No regression after 04-09. The user may re-glance during the flipper-feel pass above.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 15
-passed: 8
-issues: 2
-pending: 5
+passed: 12
+issues: 3
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -106,7 +109,9 @@ blocked: 0
 
 - gap_id: G-04-6
   truth: "Score, BALL n / 3, status and the controls hint are readable and do not overlap or hide the plunger charge meter or the table. The controls hint reads clearly."
-  status: failed
+  status: resolved
+  resolved_by: 04-10-PLAN.md
+  resolved_at: 2026-11-20
   reason: "Automated run reported: controls hint reads '· / / → / Right Shift' (Slash key indistinguishable from the separator, IN-05 open) and wraps 'left / flipper' and 'right / flipper' across lines; the canvas FPS/Hz/KE readout renders ~3.5 px tall and is unreadable."
   severity: cosmetic
   test: 6
@@ -123,7 +128,9 @@ blocked: 0
 
 - gap_id: G-04-10
   truth: "A bat starts rising within 1-2 fixed steps of a press and starts falling within 1-2 steps of a release, whatever the hold length, and a released bat always returns to rest."
-  status: failed
+  status: resolved
+  resolved_by: 04-09-PLAN.md
+  resolved_at: 2026-11-20
   reason: "User reported: I noticed already that the flippers might get stuck when using the arrow keys"
   severity: major
   test: 10
@@ -142,3 +149,12 @@ blocked: 0
     - "Only enter resting (motor 0) when the bat is actually at its rest limit; a released bat must always return"
     - "Regression tests: release latency after a >= 60-step hold <= 2 steps; press latency after a long rest <= 2 steps; quick-tap sweep (hold 3-10 steps) never leaves a bat raised"
   debug_session: ""
+
+- gap_id: G-04-11
+  truth: "Each bat snaps up the instant its key goes down and starts falling the instant it comes up, on all six bindings. No tap leaves a bat hanging raised."
+  status: failed
+  reason: "User reported: i was only able to test the flippers with the arrow keys. i noticed that the shift key is not working properly since the left shift is activating sticky keys after many clicks and the flipper gets stuck."
+  severity: major
+  test: 11
+  artifacts: []  # Filled by diagnosis
+  missing: []    # Filled by diagnosis
