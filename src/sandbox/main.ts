@@ -52,7 +52,7 @@ import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
-import { FlipperInput } from "../input/flipper-input";
+import { FlipperInput, isWindowsPlatform } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
 import { ballMass } from "../physics/constants";
@@ -102,7 +102,8 @@ function main(): void {
   // step runs the world. TABLE_SPEC mounts use `restPose`, so both bats are built
   // at their droop limit with motor 0: they rest DROOPED in the inverted-V,
   // mirror-symmetric, until a key press (not level; 03-REVIEW IN-03).
-  const input = new FlipperInput();
+  // On Windows the input heals the both-Shift merge (G-04-17).
+  const input = new FlipperInput({ windowsShiftHeal: isWindowsPlatform(navigator) });
   input.attach();
   const controller = new FlipperController(world);
 

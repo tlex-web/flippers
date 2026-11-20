@@ -72,6 +72,41 @@ export interface InputEdges {
   readonly rightRelease: boolean;
 }
 
+/** Construction options for {@link FlipperInput}. */
+export interface FlipperInputOptions {
+  /**
+   * Heal the Windows both-Shift merge (G-04-17): accept the second Shift press
+   * that Windows flags as a repeat, and drop both Shift codes on a Shift keyup
+   * reporting `shiftKey` false. Defaults to off. main.ts passes
+   * `isWindowsPlatform(navigator)`; tests choose a path explicitly.
+   */
+  readonly windowsShiftHeal?: boolean;
+}
+
+/**
+ * The platform fields {@link isWindowsPlatform} reads. A real `Navigator` is
+ * structurally assignable (lib.dom has no `userAgentData`, so it is optional).
+ */
+export interface PlatformLike {
+  readonly platform?: string;
+  readonly userAgentData?: { readonly platform?: string };
+}
+
+/**
+ * Whether the browser runs on Windows: matches `"Win32"` (`navigator.platform`)
+ * and `"Windows"` (`navigator.userAgentData.platform`, Chromium). A non-empty
+ * `userAgentData.platform` wins; an empty or missing one falls back to
+ * `platform`. Called once at boot by main.ts to set
+ * {@link FlipperInputOptions.windowsShiftHeal}; FlipperInput itself never reads
+ * a global (Node >= 21 exposes a `navigator` that follows the test host).
+ */
+export function isWindowsPlatform(nav: PlatformLike | undefined): boolean {
+  const uaPlatform = nav?.userAgentData?.platform;
+  const name =
+    typeof uaPlatform === "string" && uaPlatform !== "" ? uaPlatform : (nav?.platform ?? "");
+  return name.toLowerCase().startsWith("win");
+}
+
 /** Internal mutable twin of {@link InputEdges}. */
 interface MutableEdges {
   leftPress: boolean;
@@ -112,6 +147,9 @@ function resetEdges(edges: MutableEdges): void {
 }
 
 export class FlipperInput {
+  /** Windows both-Shift heal switch (G-04-17), fixed at construction. */
+  private readonly windowsShiftHeal: boolean;
+
   /** Long-lived set of currently-down bound `event.code`s (never re-created). */
   private readonly held = new Set<string>();
 
@@ -140,6 +178,10 @@ export class FlipperInput {
   private readonly onVisibilityChange = (): void =>
     this.handleVisibilityChange(document.hidden);
 
+  constructor(options: FlipperInputOptions = {}) {
+    this.windowsShiftHeal = options.windowsShiftHeal === true;
+  }
+
   /**
    * Genuine keydown. Drops a stale Shift first (every event, repeat or unbound
    * included, carries valid modifier state), then ignores OS auto-repeat,
@@ -151,7 +193,7 @@ export class FlipperInput {
     const leftBefore = this.isSideHeld("left");
     const rightBefore = this.isSideHeld("right");
     this.dropStaleShift(e);
-    if (e.repeat) {
+    if (e.repeat && !this.isSecondShiftPress(e.code)) {
       // auto-repeat suppression: never re-triggers a flip, never preventDefaults
       this.commitTransitions(leftBefore, rightBefore);
       return;
@@ -278,9 +320,24 @@ export class FlipperInput {
    * cradle). Latches no edge itself: the caller commits the net transition.
    */
   private dropStaleShift(e: KeyEventLike): void {
-    if (e.shiftKey !== false || e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT) return;
+    if (e.shiftKey !== false) return;
+    if (!this.windowsShiftHeal && (e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT)) return;
     this.held.delete(SHIFT_LEFT);
     this.held.delete(SHIFT_RIGHT);
+  }
+
+  /**
+   * Windows second Shift press (G-04-17): with the heal on, a repeat keydown for
+   * a Shift code that is not held while the OTHER Shift is held is the second
+   * physical Shift, which Windows flags as a repeat of the shared VK_SHIFT. A
+   * held Shift's own auto-repeat and a lone repeat stay ignored. Allocates
+   * nothing.
+   */
+  private isSecondShiftPress(code: string): boolean {
+    if (!this.windowsShiftHeal) return false;
+    if (code === SHIFT_LEFT) return !this.held.has(SHIFT_LEFT) && this.held.has(SHIFT_RIGHT);
+    if (code === SHIFT_RIGHT) return !this.held.has(SHIFT_RIGHT) && this.held.has(SHIFT_LEFT);
+    return false;
   }
 
   /**

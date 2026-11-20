@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { FlipperInput } from "./flipper-input";
+import { FlipperInput, isWindowsPlatform } from "./flipper-input";
 
 /**
  * Unit proof for the first keyboard-input module in the codebase (D-10). Every
@@ -401,5 +401,65 @@ describe("stale Shift reconciliation (G-04-11)", () => {
       false,
     );
     expect(input.isHeld("left")).toBe(true);
+  });
+});
+
+describe("Windows both-Shift merge (G-04-17)", () => {
+  /**
+   * A synthetic key event shaped like the live Chrome 157 / Windows 11 capture:
+   * explicit Shift modifier state and repeat flag (s = shiftKey, r = repeat).
+   */
+  function wev(code: string, shiftKey: boolean, repeat: boolean) {
+    return { code, shiftKey, repeat, preventDefault: vi.fn() };
+  }
+
+  it("A1: captured order A (LD RD LU RU) presses both sides and the final ShiftRight keyup releases both", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+
+    input.handleKeyDown(wev("ShiftLeft", true, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+
+    // Windows flags the second Shift press as a repeat (one shared VK_SHIFT).
+    const second = wev("ShiftRight", true, true);
+    input.handleKeyDown(second);
+    expect(input.drainEdges().rightPress).toBe(true);
+    expect(second.preventDefault).toHaveBeenCalledTimes(1);
+
+    // Physical LU sends nothing; the only keyup is ShiftRight with Shift up.
+    input.handleKeyUp(wev("ShiftRight", false, false));
+    const end = input.drainEdges();
+    expect(end.leftRelease).toBe(true);
+    expect(end.rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  });
+
+  describe("isWindowsPlatform", () => {
+    it('is true for navigator.platform "Win32"', () => {
+      expect(isWindowsPlatform({ platform: "Win32" })).toBe(true);
+    });
+    it('is true for userAgentData.platform "Windows"', () => {
+      expect(isWindowsPlatform({ userAgentData: { platform: "Windows" } })).toBe(true);
+    });
+    it('is false for platform "MacIntel"', () => {
+      expect(isWindowsPlatform({ platform: "MacIntel" })).toBe(false);
+    });
+    it('is false for platform "Linux x86_64"', () => {
+      expect(isWindowsPlatform({ platform: "Linux x86_64" })).toBe(false);
+    });
+    it("is false for undefined", () => {
+      expect(isWindowsPlatform(undefined)).toBe(false);
+    });
+    it("is false for an empty object", () => {
+      expect(isWindowsPlatform({})).toBe(false);
+    });
+    it('falls back to platform "Win32" when userAgentData.platform is empty', () => {
+      expect(isWindowsPlatform({ platform: "Win32", userAgentData: { platform: "" } })).toBe(true);
+    });
+    it('lets a non-empty userAgentData.platform "macOS" win over platform "Win32"', () => {
+      expect(isWindowsPlatform({ platform: "Win32", userAgentData: { platform: "macOS" } })).toBe(
+        false,
+      );
+    });
   });
 });

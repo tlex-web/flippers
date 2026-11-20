@@ -45,8 +45,12 @@ function key(code: string, repeat = false): KeyEventLike {
   return { code, repeat, preventDefault: () => {} };
 }
 
-/** The real end-to-end rig, wired exactly as `main.ts` will wire it. */
-function makeRig(): {
+/**
+ * The real end-to-end rig, wired exactly as `main.ts` will wire it.
+ * `windowsShiftHeal` picks the FlipperInput path (G-04-17); every pre-existing
+ * caller passes nothing and gets the default (off) path.
+ */
+function makeRig(windowsShiftHeal = false): {
   input: FlipperInput;
   controller: FlipperController;
   leftId: number;
@@ -60,7 +64,7 @@ function makeRig(): {
   step: () => void;
 } {
   const world = new PlanckWorld();
-  const input = new FlipperInput();
+  const input = new FlipperInput({ windowsShiftHeal });
   const controller = new FlipperController(world);
   const loop = new FixedStepLoop(world);
 
@@ -227,6 +231,30 @@ function stepsUntilMoved(
     if (Math.abs(rig.angleOf(id) - start) > MOVE_EPS_RAD) return i;
   }
   return -1;
+}
+
+/**
+ * Record each id's angle, then step up to `cap` times. Returns, per id, the
+ * first step at which that angle left its start by more than MOVE_EPS_RAD, or
+ * -1 if it never moved within `cap`.
+ */
+function stepsUntilEachMoved(
+  rig: ReturnType<typeof makeRig>,
+  ids: readonly number[],
+  cap: number,
+): number[] {
+  const start = ids.map((id) => rig.angleOf(id));
+  const moved = ids.map(() => -1);
+  for (let i = 1; i <= cap; i++) {
+    rig.step();
+    ids.forEach((id, k) => {
+      if (moved[k] === -1 && Math.abs(rig.angleOf(id) - (start[k] ?? 0)) > MOVE_EPS_RAD) {
+        moved[k] = i;
+      }
+    });
+    if (moved.every((m) => m !== -1)) break;
+  }
+  return moved;
 }
 
 /** One primary and one arrow binding per side (the latency cases). */
@@ -467,5 +495,58 @@ describe("a lost keyup never strands a bat (G-04-11)", () => {
       rig.step();
       expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
     }
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * G-04-17: Windows merges both Shifts into one VK_SHIFT.
+ * ------------------------------------------------------------------------- */
+
+describe("Windows both-Shift hold (G-04-17)", () => {
+  /** A synthetic key event shaped like the live Windows capture (shiftKey, repeat). */
+  const wkey = (code: string, shiftKey: boolean, repeat: boolean): KeyEventLike => ({
+    code,
+    shiftKey,
+    repeat,
+    preventDefault: () => {},
+  });
+
+  it("order A (LD RD LU RU): both bats rise, and both drop on the final ShiftRight keyup", () => {
+    const rig = makeRig(true);
+    const ids = [rig.leftId, rig.rightId] as const;
+    for (let i = 0; i < 20; i++) rig.step();
+    const restTip = ids.map((id) => rig.tipY(id));
+
+    rig.input.handleKeyDown(wkey("ShiftLeft", true, false));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+
+    // The second Shift arrives flagged repeat (second-press recovery).
+    rig.input.handleKeyDown(wkey("ShiftRight", true, true));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    // Physical LU: the browser receives nothing, so both bats stay up (residual).
+    for (let i = 0; i < 30; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+      expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+    }
+
+    // Physical RU: the only keyup, ShiftRight with Shift up, drops both.
+    rig.input.handleKeyUp(wkey("ShiftRight", false, false));
+    const fall = stepsUntilEachMoved(rig, ids, 40);
+    for (const n of fall) {
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(2);
+    }
+    for (let i = 0; i < 90; i++) rig.step();
+    ids.forEach((id, k) => {
+      expect(rig.controller.getPhase(id)).toBe("resting");
+      expect(Math.abs(rig.tipY(id) - (restTip[k] ?? 0))).toBeLessThan(0.02);
+    });
+    expect(rig.input.isHeld("left")).toBe(false);
+    expect(rig.input.isHeld("right")).toBe(false);
   });
 });
