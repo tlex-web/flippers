@@ -188,8 +188,9 @@ const CHUTE_X = 2.9;
 const CHUTE_TOP_Y = 1.9;
 
 /**
- * Drain line (y). A ball whose center crosses this between the trough walls has
- * left play. The drain sensor (id 600) sits on it.
+ * Drain line (y). The drain sensor (id 600) lies on this line between the
+ * trough walls and fires on begin-contact, when the ball's rim first overlaps
+ * it: about one ball radius (0.2 m) before the ball's center reaches the line.
  */
 export const DRAIN_Y = 6.05;
 

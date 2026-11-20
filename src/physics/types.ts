@@ -59,9 +59,9 @@ export interface BallState {
 }
 
 /**
- * A read-only snapshot of one flipper. No real flippers exist yet (Phase 2); the
- * accessor returns an empty pooled array today, but the shape is fixed now so
- * downstream wiring is additive.
+ * A read-only snapshot of one flipper. The pooled snapshot holds one entry per
+ * flipper mount in the active table spec (TABLE_SPEC mounts 0 and 1: the left
+ * and right bats), refreshed in place by every `step()`.
  */
 export interface FlipperState {
   readonly id: number;
@@ -159,7 +159,10 @@ export interface PhysicsWorld {
   removeBall(id: BallId): void;
   /** Pooled, id-keyed snapshot of every live ball. */
   getBalls(): readonly BallState[];
-  /** Pooled snapshot of every flipper (a max-speed test flipper this phase). */
+  /**
+   * Pooled snapshot of every flipper the adapter built from the table spec's
+   * flipper mounts, in mount order (one entry per bat).
+   */
   getFlippers(): readonly FlipperState[];
   /**
    * Drive a flipper's motor (engine-agnostic hook, D-04/D-05). `direction > 0`
@@ -196,8 +199,13 @@ export interface PhysicsWorld {
    * what the swept-containment invariant and the soak gates read.
    */
   getBoundarySegments(): readonly Segment[];
-  /** Drain collision events accumulated since the last drain. */
-  drainEvents(): CollisionEvent[];
+  /**
+   * Drain collision events accumulated since the last drain. The batch is a
+   * reused view the adapter refills on the next drain: consumers read it and
+   * never mutate it (no push, splice or reassignment), which the readonly
+   * return type enforces (03-REVIEW IN-05).
+   */
+  drainEvents(): readonly CollisionEvent[];
   /** Pooled snapshot of active contact points this step (for debug-draw). */
   getContactPoints(): readonly Vec2[];
 }

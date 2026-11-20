@@ -112,8 +112,8 @@ export class ReactiveSoakWorld implements PhysicsWorld {
     return this.inner.getBoundarySegments();
   }
 
-  drainEvents(): CollisionEvent[] {
-    return NO_EVENTS as CollisionEvent[];
+  drainEvents(): readonly CollisionEvent[] {
+    return NO_EVENTS;
   }
 
   getContactPoints(): readonly Vec2[] {

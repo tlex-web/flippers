@@ -110,7 +110,7 @@ describe("CollisionRouter (D-11)", () => {
   it("driven by a real FixedStepLoop: 5 fixed steps = 5 dispatches over one reused drained view", () => {
     const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
     world.addBall({ x: 0.5, y: 1.79 }); // resting on the thin wall: contacts every step
-    const views: CollisionEvent[][] = [];
+    const views: (readonly CollisionEvent[])[] = [];
     const source: Pick<PhysicsWorld, "drainEvents"> = {
       drainEvents: () => {
         const view = world.drainEvents();

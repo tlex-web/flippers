@@ -103,10 +103,13 @@ export const MAX_FRAME_MS = 250;
  * ------------------------------------------------------------------------- */
 
 /**
- * Flipper bat length (meters) from pivot to the tip of the capsule. Sized for
- * the 2×3 m test rig; long enough that the tip carries real linear speed at the
- * raise rate below (tip speed = FLIPPER_UP_SPEED · FLIPPER_LENGTH_M ≈ 15 m/s),
- * which is what makes the `v = ω × r` tip-vs-base difference read (FLIP-02).
+ * Flipper bat length (meters) from pivot to the tip of the capsule: 2.5 ×
+ * BALL_RADIUS_M, i.e. a bat a little over one ball diameter beyond the hinge.
+ * TABLE_SPEC mounts two of these as its inverted-V bats (left and mirrored
+ * right) above the drain gap. Long enough that the tip carries real linear
+ * speed at the raise rate below (tip speed = FLIPPER_UP_SPEED ·
+ * FLIPPER_LENGTH_M ≈ 15 m/s), which is what makes the `v = ω × r` tip-vs-base
+ * difference read (FLIP-02).
  */
 export const FLIPPER_LENGTH_M = 0.5;
 
@@ -176,9 +179,12 @@ export const FLIPPER_MAX_MOTOR_TORQUE = 500;
 export const FLIPPER_LOWER_ANGLE = -Math.PI / 8;
 
 /**
- * Upper revolute-joint angle limit (radians) — the rest/droop stop. At +π/8 (tip
- * slightly below level) the bat rests here under gravity + the default motor.
- * Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE = π/4 ≈ 45° (D-07).
+ * Upper revolute-joint angle limit (radians). +π/8 (tip slightly below level)
+ * is the LEFT bat's droop limit. The reference-angle-mirrored right bat droops
+ * to the opposite joint limit (FLIPPER_LOWER_ANGLE in its joint frame, world
+ * angle 7π/8). TABLE_SPEC builds both bats at their droop limit through
+ * `MountSpec.restPose`. Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE
+ * = π/4 ≈ 45° (D-07).
  */
 export const FLIPPER_UPPER_ANGLE = Math.PI / 8;
 
@@ -256,20 +262,20 @@ export const PLUNGER_AXIS = { x: 0, y: -1 } as const;
 /* ------------------------------------------------------------------------- *
  * BALL MASS (Phase 4). One density source for every consumer that turns a
  * velocity change into an impulse: the rules' bumper/sling kick math, the
- * sandbox kinetic-energy readout and (switched over in 04-04) the adapter.
+ * sandbox kinetic-energy readout and the adapter's ball fixture.
  * ------------------------------------------------------------------------- */
 
 /**
  * Ball solver density (kg/m²). The 2D solver integrates mass over the circle's
- * area, so this is an areal density; 1 is the value the adapter already builds
- * the ball fixture with.
+ * area, so this is an areal density. The adapter (planck-world.ts) imports
+ * it for the ball fixture, so solver mass and kick math share one value.
  */
 export const BALL_DENSITY = 1;
 
 /**
  * Ball mass (kg) for a given radius: m = BALL_DENSITY · π · r². At
  * `BALL_RADIUS_M` (0.2 m) that is π · 0.04 ≈ 0.1257 kg. This is the single
- * density source shared by the adapter (switched over in 04-04), the sandbox KE
+ * density source shared by the adapter's ball fixture, the sandbox KE
  * readout and the rules' kick math, so an impulse j = m · Δv lands exactly the
  * velocity change it was computed for.
  */

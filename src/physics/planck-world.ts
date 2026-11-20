@@ -26,6 +26,7 @@ import {
 } from "planck";
 
 import {
+  BALL_DENSITY,
   BALL_FRICTION,
   BALL_LINEAR_DAMPING,
   BALL_RADIUS_M,
@@ -64,9 +65,6 @@ import {
 // --- Solver tuning (Box2D defaults; crank up only if bounces feel mushy). ---
 const VELOCITY_ITERATIONS = 8;
 const POSITION_ITERATIONS = 3;
-
-// --- Ball material (density is a solver param, not a feel constant). ---
-const BALL_DENSITY = 1;
 
 // --- Wall material: low grip so the ball slides along walls like real steel. ---
 const WALL_FRICTION = 0.1;
@@ -893,7 +891,7 @@ export class PlanckWorld implements PhysicsWorld {
     return slot;
   }
 
-  drainEvents(): CollisionEvent[] {
+  drainEvents(): readonly CollisionEvent[] {
     // Refill the reused view with the live pooled records and truncate it, then
     // reset the count so the pool is recycled (and stays BOUNDED) next cycle —
     // no new-array allocation per drain (mirrors the contact-point pool). The
