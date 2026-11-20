@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
-status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-11-20T18:08:54.007Z"
+status: verifying
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-11-20T18:21:35.857Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: 3b33217d383ed1765ba85da7ca90e2b6007383e2
+state_head: ab26532ea9b6d460dc4e42d6bec495b9bf056694
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 26
+  completed_plans: 27
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-20 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -86,6 +86,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P05 | 11min | 3 tasks | 8 files |
 | Phase 04 P06 | 18min | 3 tasks | 9 files |
 | Phase 04 P07 | 6min | 2 tasks | 5 files |
+| Phase 04 P08 | 9min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Nudge is velocity-only applyImpulse to every ball (NUDGE_IMPULSE 0.15, X +x / Period -x / ArrowUp -y), accepted only while playing and >= 30 fixed steps after the last; GameSession.tick() is the step clock
 - [Phase 04]: TiltMeter is pure and step-driven (cost 1, decay 0.5/s per step, rising-edge WARNING at >= 2, TILT at >= 3); tilted makes isLive() false; every serve and onStart clear meter and warning; a tilt costs only the current ball
 - [Phase 04]: HUD is three DOM lines (score, BALL n / 3, status) each written only when its own inputs change; status is the only aria-live line; TILT wins over WARNING; the ball line is keyed on state or ball so a tilt rewrites it once
+- [Phase 04]: TILT and attract drop the bats via FlipperController.setEnabled(false) (returning, motor -1, presses ignored); GameSession switches a FlipperGate off at boot, on tilt and at game over, on with every serve; main.ts adapter re-presses held sides (Pitfall 5)
+- [Phase 04]: Full game replays bit-identically at 60/120/144 Hz (game.determinism.test.ts); WR-01 residual priming step accepted; 03-REVIEW-DISPOSITION open: 0 (IN-04 deferred)
 
 ### Pending Todos
 
@@ -158,7 +161,6 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 3]: Five info findings from the code review (IN-01..IN-05) are still `open` in 03-REVIEW-DISPOSITION.md, along with the WR-01 residual (an extra hidden priming step on every `addBall`). Triage them before Phase 4 builds on the plunger and the bus.
 - [Phase 3 → 5]: The 03-UI-REVIEW carry-forwards apply to the real renderer:
   - The HUD ignores the display fit and renders at about 3.4 px.
   - `#ef476f` is used for the drain, the velocity arrow and the full meter.
@@ -182,6 +184,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T18:08:52.519Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-11-20T18:21:34.964Z
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None
