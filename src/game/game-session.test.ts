@@ -1,15 +1,29 @@
 import { describe, it, expect } from "vitest";
 
-import { GameSession } from "./game-session";
+import { CollisionRouter } from "../app/collision-router";
+import type { BallId } from "../physics/types";
+import { GameSession, type GameSessionWorld } from "./game-session";
 
 /**
  * GameSession score contract (plan 04-01 Task 2, GAME-01 precision edge): the
  * score is an exact, non-negative, saturating integer.
  */
 
-/** The ONE place a session is built (its constructor grows in 04-05). */
+/**
+ * The ONE place a score-contract session is built: a minimal spy world (addBall
+ * hands out increasing ids, removeBall does nothing) and a router over an empty
+ * source, then `onStart()` so the session is live for the award cases.
+ */
 function makeSession(): GameSession {
-  return new GameSession();
+  let nextId: BallId = 0;
+  const world: GameSessionWorld = {
+    addBall: () => nextId++,
+    removeBall: () => {},
+  };
+  const router = new CollisionRouter({ drainEvents: () => [] });
+  const session = new GameSession(world, router, { x: 0, y: 0 });
+  session.onStart();
+  return session;
 }
 
 describe("GameSession score (GAME-01)", () => {

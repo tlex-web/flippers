@@ -9,16 +9,28 @@
  * (outer walls, right-side launch chute, drain funnel, trough walls) and both
  * flipper mounts all come from the single resolve of the spec, so what is drawn
  * is what is hit. Every read of world state goes through the `PhysicsWorld`
- * interface — this file never imports the engine (D-05/D-07). Every ball is
- * parked on the plunger and launched with Space.
+ * interface — this file never imports the engine (D-05/D-07).
+ *
+ * The game (GAME-02): the sandbox boots into game-over (attract) with no ball on
+ * the table. Enter or NumpadEnter starts a 3-ball game through `GameSession`,
+ * which serves every ball to the plunger (launched with Space), serves the next
+ * one when the ball in play drains, and ends the game after the third drain.
  *
  * Every contact flows through the one-way collision bus (D-11): a
  * `CollisionRouter` drains the world once per fixed step and fans the batch out
- * in registration order. The Phase-4 rules consume it first: `ReactiveElements`
- * records bumper hits (points through the `GameSession` gate, kicks applied in
- * its `service()` right after dispatch), then the ball feed watches the drain,
- * and a demo listener logs what the ball touched. The running score shows in a
- * DOM HUD overlay (`#hud-score`, written only when it changes).
+ * in registration order. The session records the drain of the ball in play;
+ * `ReactiveElements` records kicks and awards points through the session's
+ * rules gate, which is live only while a ball is in play. Both only record or
+ * award in their listeners; the world is mutated only in their `service()`
+ * calls, in a fixed order, after dispatch. The running score shows in a DOM HUD
+ * overlay (`#hud-score`, written only when it changes).
+ *
+ * Fixed-step order:
+ * - `onFixedStep` (top of each step): flipper edges then the flipper FSM; the
+ *   plunger edges through `applyEdges` (same-window order from the held state)
+ *   then the charge; then the start edge (a started game resets the lights).
+ * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
+ *   `reactive.service()` (kicks), then `session.service()` (drain and serve).
  *
  * The canvas readout (FPS, physics Hz, KE, contacts) is a DIAGNOSIS tool only:
  * it asserts nothing about pass/fail. The tunnel-proof gates stay headless
@@ -32,22 +44,21 @@ import { PlungerController } from "../control/plunger-controller";
 import { GameSession } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput } from "../input/flipper-input";
+import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
 import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
-import type { CollisionEvent } from "../physics/types";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { HudView, type TextSink } from "../ui/hud";
-import { BallFeed } from "./ball-feed";
 import { DebugRenderer, type HudData, type InterpolatedBall } from "./debug-draw";
 
 /**
- * Ball feed: park ONE ball on the plunger at `PLUNGER_REST` (from the spec), so
- * the player launches every ball up the chute with Space. A fresh ball is re-fed
- * there only when the tracked one hits the drain sensor (on the bus, see
- * `BallFeed`), and the drained ball is REMOVED first, so exactly one ball ever
- * exists. (The rest position lies below `DRAIN_Y`, so a positional check would
- * respawn the parked ball every frame — 03-REVIEW CR-01.)
+ * Serve point: the session parks every ball on the plunger at `PLUNGER_REST`
+ * (from the spec), so the player launches each one up the chute with Space. The
+ * next ball is served there only when the ball in play hits the drain sensor (on
+ * the bus, see `GameSession`), and the drained ball is REMOVED first, so at most
+ * one ball ever exists. (The rest position lies below `DRAIN_Y`, so a positional
+ * check would respawn the parked ball every frame — 03-REVIEW CR-01.)
  */
 const BALL_SPAWN = { x: PLUNGER_REST.x, y: PLUNGER_REST.y } as const;
 
@@ -59,14 +70,6 @@ const HZ_WINDOW_MS = 500;
 
 /** Throttle (ms) for HUD number updates — keeps the readout legible. */
 const HUD_UPDATE_MS = 200;
-
-/**
- * Demo bus consumer throttle: solid contacts (walls, chute, bumpers, slings,
- * flippers, other balls) log at most once per this many events, because a
- * resting or rolling ball reports one every step. Sensor crossings are rare by
- * construction and always log (threat T-03-17: keep the console legible).
- */
-const SOLID_LOG_EVERY = 30;
 
 function main(): void {
   const canvas = document.getElementById("stage");
@@ -101,18 +104,23 @@ function main(): void {
   plungerInput.attach();
   const plunger = new PlungerController(world);
 
+  // Game controls (R6): Enter / NumpadEnter latch a start edge.
+  const gameInput = new GameInput();
+  gameInput.attach();
+
   // The collision bus (D-11): one router over the world's pooled event drain,
   // dispatched once per fixed step at the loop's post-step seam. Built before
-  // the first ball so the feed can listen for the drain from the start.
+  // the session so it can listen for the drain from the start.
   const router = new CollisionRouter(world);
 
-  // Phase-4 rules (ELEM-01/GAME-01): the session is the rules gate and holds the
-  // score; the reactive elements register on the bus BEFORE the feed, so a kick
-  // is queued and applied before a drained ball is removed.
-  const session = new GameSession();
+  // Phase-4 rules (GAME-01/GAME-02/ELEM-01..03): the session is the 3-ball FSM,
+  // the rules gate and the score; it boots into game-over with no ball. The
+  // reactive elements score through it. Listener registration order is not
+  // load-bearing: both listeners only record or award, and the world is mutated
+  // only in the two service() calls, in the fixed order of onPostStep.
+  const session = new GameSession(world, router, BALL_SPAWN);
   const reactive = new ReactiveElements(world, router, session);
 
-  const feed = new BallFeed(world, router, BALL_SPAWN);
   const loop = new FixedStepLoop(world);
 
   // Side -> flipper-id mapping (D-09/D-10): the physically-LEFT flipper (smaller
@@ -140,48 +148,31 @@ function main(): void {
     if (edges.rightRelease) controller.onReleaseEdge(rightFlipperId);
     controller.update();
 
-    // Plunger: same top-of-step drain. Press starts the charge, release launches
-    // the tracked ball (if it rests on the plunger), cancel (focus loss) drops
-    // the charge with no launch; then advance the charge one fixed step.
-    const plungerEdges = plungerInput.drainEdges();
-    if (plungerEdges.press) plunger.onPressEdge();
-    if (plungerEdges.release) plunger.onReleaseEdge(feed.activeBallId);
-    if (plungerEdges.cancel) plunger.onCancelEdge();
+    // Plunger: same top-of-step drain. All of this window's edges go through
+    // applyEdges, which orders them by the held state at drain time (IN-02): a
+    // release and re-press inside one step launches, then starts a new charge.
+    // Release launches the ball in play only if it rests on the plunger; cancel
+    // (focus loss) drops the charge with no launch. Then advance the charge.
+    const pe = plungerInput.drainEdges();
+    plunger.applyEdges(pe.press, pe.release, pe.cancel, plungerInput.isHeld(), session.activeBallId);
     plunger.update();
-  }
 
-  // Beside the feed's drain listener, exactly ONE demo listener. It copies out
-  // only scalars into the string of a line it actually logs; it never keeps the
-  // pooled record, never calls back into the world, and carries no scoring,
-  // kick or rule logic (D-06/D-11).
-  let solidSinceLog = 0;
-  router.register((e: CollisionEvent): void => {
-    const kind = e.elementKind;
-    if (kind === "lane" || kind === "rollover" || kind === "drain") {
-      console.log(
-        `[bus] ball ${e.ballId} ${kind} #${e.elementId} at (${e.point.x.toFixed(2)}, ${e.point.y.toFixed(2)})`,
-      );
-      return;
-    }
-    // Strings are built only for a line that is actually logged.
-    solidSinceLog++;
-    if (solidSinceLog < SOLID_LOG_EVERY) return;
-    solidSinceLog = 0;
-    console.log(
-      `[bus] ball ${e.ballId} ${kind} #${e.elementId} at (${e.point.x.toFixed(2)}, ${e.point.y.toFixed(2)}) impulse ${e.normalImpulse.toFixed(3)}`,
-    );
-  });
+    // Game: a start edge starts a game only from game-over (Enter mid-game is
+    // ignored by the session); a new game turns every rollover light off (R12).
+    const ge = gameInput.drainEdges();
+    if (ge.start && session.onStart()) reactive.resetLights();
+  }
 
   // Built ONCE and passed by reference, like onFixedStep: runs right after each
   // fixed step's world.step(), so every simulated step's events reach the
   // listeners as exactly one batch and the event pool stays bounded. After the
   // batch is delivered, at this fixed-step boundary (never in the render frame),
-  // the rules apply their queued kicks, then the feed replaces a ball the batch
-  // reported drained.
+  // the rules apply their queued kicks, then the session removes a ball the batch
+  // reported drained and serves the next one (or ends the game).
   function onPostStep(): void {
     router.dispatch();
     reactive.service();
-    feed.service();
+    session.service();
   }
 
   const renderer = new DebugRenderer(canvas);

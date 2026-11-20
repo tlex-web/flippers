@@ -1,28 +1,137 @@
 /**
- * GameSession: the score state behind the rules gate (GAME-01).
+ * GameSession: the 3-ball game state machine behind the rules gate (GAME-01,
+ * GAME-02). It owns the score, the ball count and the ball in play, and it
+ * serves every ball to the plunger.
  *
- * Engine-agnostic and world-free: it never touches the physics world, it only
- * decides whether contacts count (`isLive()`) and keeps the running score
- * (`award()`). This plan has no start or game-over yet, so a session is always
- * live; the 3-ball FSM in 04-05 adds those states behind the same
- * `isLive()`/`award()` surface.
+ * States (a hand-rolled string union, no state-machine library):
+ * - `"game-over"`: attract at boot and after the last ball. No ball on the
+ *   table, `activeBallId` is -1, nothing scores, and the final score is kept
+ *   until the next start.
+ * - `"playing"`: a ball is in play and the rules are live.
+ *
+ * Wiring (fixed-step seam, never the render frame), carried over from the
+ * retired sandbox ball feed:
+ * - construct it once, after the controllers, with the router;
+ * - `onStart()` from the top of a fixed step when the start key latched;
+ * - `service()` from `onPostStep`, right AFTER `router.dispatch()` (and after
+ *   `ReactiveElements.service()`, so a queued kick lands before a drained ball
+ *   is removed).
+ *
+ * The drain is read from the collision bus only (the drain sensor, spec id 600),
+ * never from a positional `y > DRAIN_Y` test: the plunger rest position lies
+ * BELOW the drain line, so a positional check mistakes the parked ball for a
+ * drained one and respawns it every frame (03-REVIEW CR-01). The bus listener
+ * only records the drained id; `service()` removes it and serves the next ball
+ * after the batch has been delivered (remove-then-add, so exactly one ball ever
+ * exists).
  *
  * The score is always an exact, non-negative integer: anything that is not a
  * non-negative safe integer is ignored, and the sum saturates at
  * `Number.MAX_SAFE_INTEGER` so it never loses integer precision.
+ *
+ * Engine-agnostic: type-only imports, talks to the `PhysicsWorld` interface
+ * only. Steady state allocates nothing; remove/add run only on a start or drain.
  */
 
+import type { CollisionRouter } from "../app/collision-router";
+import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
 import type { RulesGate } from "./reactive-elements";
 
-export class GameSession implements RulesGate {
-  private score = 0;
+/** Balls per game (GAME-02). */
+export const BALLS_PER_GAME = 3;
 
-  /** Whether contacts score right now. */
-  isLive(): boolean {
-    return true;
+/** Game states. 04-06 adds `"tilted"`. */
+export type GameState = "game-over" | "playing";
+
+/** The world slice the session needs. */
+export type GameSessionWorld = Pick<PhysicsWorld, "addBall" | "removeBall">;
+
+/** `activeBallId` when no ball is in play. */
+const NO_BALL: BallId = -1;
+
+export class GameSession implements RulesGate {
+  private readonly world: GameSessionWorld;
+  private readonly spawn: BallSpec;
+
+  private state: GameState = "game-over";
+  private score = 0;
+  private ball = 0;
+  private played = false;
+  private active: BallId = NO_BALL;
+
+  /** Id of the active ball seen on the drain sensor this step, or -1. */
+  private drained: BallId = NO_BALL;
+
+  constructor(world: GameSessionWorld, router: CollisionRouter, spawn: BallSpec) {
+    this.world = world;
+    this.spawn = spawn;
+    router.register(this.onEvent);
   }
 
-  /** Add points; ignores invalid input and saturates at MAX_SAFE_INTEGER. */
+  /**
+   * Start a game, only from game-over: score 0, ball 1, and one ball served to
+   * the spawn. Returns whether a game started; in any other state it returns
+   * false and changes nothing.
+   */
+  onStart(): boolean {
+    switch (this.state) {
+      case "game-over":
+        this.score = 0;
+        this.ball = 1;
+        this.played = true;
+        this.drained = NO_BALL;
+        this.state = "playing";
+        this.active = this.world.addBall(this.spawn);
+        return true;
+      case "playing":
+        return false;
+    }
+  }
+
+  /**
+   * Handle a drain recorded in this step's batch: remove the ball, then serve
+   * the next one, or end the game after the last. Call once per fixed step,
+   * right after `router.dispatch()`. No-op when nothing drained.
+   */
+  service(): void {
+    if (this.drained === NO_BALL) return;
+    this.world.removeBall(this.drained);
+    this.drained = NO_BALL;
+    if (this.ball < BALLS_PER_GAME) {
+      this.ball++;
+      this.active = this.world.addBall(this.spawn);
+    } else {
+      this.state = "game-over";
+      this.active = NO_BALL;
+    }
+  }
+
+  /** The ball in play (the one the plunger launches), or -1. */
+  get activeBallId(): BallId {
+    return this.active;
+  }
+
+  /** The current ball number: 0 before the first game, then 1..BALLS_PER_GAME. */
+  getBall(): number {
+    return this.ball;
+  }
+
+  /** The current state. */
+  getState(): GameState {
+    return this.state;
+  }
+
+  /** Whether a game has ever been started (the HUD's attract line). */
+  hasPlayed(): boolean {
+    return this.played;
+  }
+
+  /** Whether contacts score right now: only while a ball is in play. */
+  isLive(): boolean {
+    return this.state === "playing";
+  }
+
+  /** Add points; ignores invalid input, no-op when not live, saturates. */
   award(points: number): void {
     if (!Number.isSafeInteger(points) || points < 0) return;
     if (!this.isLive()) return;
@@ -30,8 +139,13 @@ export class GameSession implements RulesGate {
     this.score = points >= headroom ? Number.MAX_SAFE_INTEGER : this.score + points;
   }
 
-  /** The running score. */
+  /** The running score (kept after game over until the next start). */
   getScore(): number {
     return this.score;
   }
+
+  /** Bus listener, bound once: record the drain, never touch the world here. */
+  private readonly onEvent = (e: CollisionEvent): void => {
+    if (e.elementKind === "drain" && e.ballId === this.active) this.drained = e.ballId;
+  };
 }
