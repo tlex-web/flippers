@@ -9,8 +9,22 @@ import {
 } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import { PROOF_BOX_SPEC } from "../table/spec";
+import type { TableSpec } from "../table/spec";
 import type { PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
+
+/**
+ * The FLIP-02 launch rig: PROOF_BOX_SPEC without its thin interior wall (id 3,
+ * y = 2.0, x 0.2-0.8). That wall sits ~0.12 m above a ball placed at rFrac 0.8
+ * on the left bat. Since 04-09 removed the ~11-step limit-impulse dead time on
+ * the raise (G-04-10), the bat flings the tip ball into that wall within ~3
+ * steps and the pinch between the rising bat and the wall ejects it at ~16 m/s
+ * (measured tip 16.35 vs base 2.98, a 256% v = ω·r mismatch) — a rig artifact,
+ * not flipper physics. The dead time used to hide it. The launch proof is a
+ * free-flight measurement, so it runs on an unobstructed box; PROOF_BOX_SPEC
+ * itself stays untouched ("Do not edit") and the FLIP-03 cradle cases keep it.
+ */
+const OPEN_PROOF_BOX: TableSpec = PROOF_BOX_SPEC.filter((el) => el.id !== 3);
 
 /**
  * FLIPPER FEEL proofs — the Core-Value "fling realistically" (FLIP-02) and "heavy,
@@ -74,7 +88,8 @@ const ENERGY_NOISE_EPS = 1e-5;
  * v = ω·r ratio tolerance: the tip/base launch ratio must match the tip/base
  * contact-radius ratio to within this fraction. A physical scoop transfers a
  * hair less than the ideal at the tip (contact slip + gravity), so a generous but
- * meaningful 35% band is used; the measured mismatch is ~13%.
+ * meaningful 35% band is used; the measured mismatch is ~3% on OPEN_PROOF_BOX
+ * since 04-09 (it read ~13% against the old jammed-bat, walled rig).
  */
 const VR_RATIO_TOL = 0.35;
 
@@ -120,13 +135,13 @@ interface LaunchResult {
 }
 
 /**
- * Number of consecutive fixed steps a launch speed must PERSIST to count. At the
- * feel raise speed (FLIPPER_UP_SPEED = 30) a bat lifting off its droop limit gives
- * a brief 1–2 step Box2D motor+limit "release" burst (the same jam-lag flagged for
- * the 02-06 checkpoint) that momentarily over-speeds the ball before it settles to
- * its true v = ω·r launch. Requiring the speed to hold for a short window rejects
- * that transient so the tip/base ratio reflects real momentum transfer, not the
- * burst.
+ * Number of consecutive fixed steps a launch speed must PERSIST to count. Before
+ * 04-09 a bat lifting off its droop limit gave a brief 1–2 step Box2D
+ * motor+limit "release" burst (the warm-started limit-impulse jam, G-04-10) that
+ * momentarily over-sped the ball. 04-09 removed that jam (setFlipperMotor clears
+ * the limit impulse on every direction change), so the burst no longer occurs;
+ * the window is kept unchanged as a guard that the tip/base ratio reflects
+ * sustained momentum transfer, not any single-step transient.
  */
 const SUSTAIN_STEPS = 3;
 
@@ -134,13 +149,14 @@ const SUSTAIN_STEPS = 3;
  * Rest the bat at its droop limit (motor `-1` = return/down), place a ball just
  * above the bat face at fractional reach `rFrac`, then RAISE the bat (motor `+1` =
  * raise, the real press command): the bat sweeps the ball's side up and flings it.
+ * Runs on OPEN_PROOF_BOX (no interior wall in the flight path).
  * Returns the SUSTAINED launch speed (max speed held for `SUSTAIN_STEPS` steps, so
- * the jam-release transient is filtered), the peak bat |ω| during the raise, and
+ * any single-step transient is filtered), the peak bat |ω| during the raise, and
  * the TRUE contact radius (|ball − pivot|, which includes the unavoidable face gap
  * — so the honest v = ω·r comparison uses it, not the nominal horizontal reach).
  */
 function launchAtRadius(rFrac: number): LaunchResult {
-  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
+  const world: PhysicsWorld = new PlanckWorld({ table: OPEN_PROOF_BOX });
   const step = makeStepper(world);
   const fl = world.getFlippers()[0];
   if (!fl) throw new Error("expected the left flipper");
@@ -188,7 +204,7 @@ function launchAtRadius(rFrac: number): LaunchResult {
   }
 
   // SUSTAINED launch: the fastest speed the ball HOLDS for SUSTAIN_STEPS steps — a
-  // 1–2 step jam-release spike (which the raw max would capture equally for base
+  // 1–2 step spike (which the raw max would capture equally for base
   // and tip, collapsing the ratio) cannot satisfy it.
   let launch = 0;
   for (let i = 0; i + SUSTAIN_STEPS <= speeds.length; i++) {
@@ -219,7 +235,12 @@ describe("FLIP-02 tip-vs-base — a tip hit out-launches a base hit per v = ω·
     expect(base.launch).toBeGreaterThan(1.0);
 
     // Core FLIP-02 claim: the tip hit is measurably faster than the base hit.
-    expect(tip.launch).toBeGreaterThan(base.launch * 1.5);
+    // 1.3x, not 1.5x (04-09, user sign-off): on OPEN_PROOF_BOX with the jam
+    // removed, planning measured tip 11.48 vs base 7.72 m/s (ratio 1.49) against
+    // a contact-radius ratio of 1.54 (3% v = ω·r mismatch). A 1.5x floor cannot
+    // hold against a 1.54 geometric ratio once there is any contact slip; the
+    // primary v = ω·r band below is unchanged.
+    expect(tip.launch).toBeGreaterThan(base.launch * 1.3);
 
     // v = ω·r geometry: the launch ratio matches the TRUE contact-radius ratio
     // (which the face gap compresses toward ~1.7, not the nominal 3 — the honest

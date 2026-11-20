@@ -309,6 +309,12 @@ export class PlanckWorld implements PhysicsWorld {
     joint: RevoluteJoint;
     /** Motor-speed sign that RAISES this bat (tip toward -y). See buildFlipper. */
     raiseSign: number;
+    /**
+     * Last normalized command (-1, 0, +1) given to setFlipperMotor; NaN until
+     * the first command, so that first command always counts as a change. See
+     * the limit-impulse reset in setFlipperMotor.
+     */
+    lastDirection: number;
   }[] = [];
 
   /** The one resolve output (D-01): fixtures, segments and getElements() all read it. */
@@ -602,7 +608,9 @@ export class PlanckWorld implements PhysicsWorld {
       bat.setTransform(Vec2(px, py), restAngle + droop);
     }
 
-    this.flipperJoints.push({ id, body: bat, joint, raiseSign });
+    // lastDirection NaN: the construction motor speed is not a commanded
+    // direction, so the first setFlipperMotor call always resets the limit.
+    this.flipperJoints.push({ id, body: bat, joint, raiseSign, lastDirection: NaN });
     this.flipperPool.push({
       id,
       pivotX: px,
@@ -822,24 +830,64 @@ export class PlanckWorld implements PhysicsWorld {
     return this.flipperPool;
   }
 
+  /**
+   * Sign-only flipper drive (D-05), with a limit-impulse reset on every change
+   * of commanded direction (G-04-10).
+   *
+   * WHY THE RESET. Planck 1.5's RevoluteJoint warm-starts its accumulated
+   * impulses from one step to the next. A bat driven into a joint limit at
+   * FLIPPER_MAX_MOTOR_TORQUE saturates both: the motor impulse sits at its clamp
+   * (+dt·maxTorque) and the limit impulse grows to cancel it. The limit impulse
+   * is the one that pins the bat: on a reversal the motor's own stale warm start
+   * is cancelled inside its first velocity iteration (its clamp range always
+   * covers it), but the stale limit impulse stays as a reserve the new motor
+   * drive must unwind first, and the bat sits still for ~15 fixed steps
+   * (~130 ms) before it moves. That was the "flipper ignores my release / TILT
+   * pauses" dead time from UAT.
+   *
+   * THE FIX, through the public API only. `RevoluteJoint.enableLimit(flag)`
+   * clears the accumulated limit impulse whenever the flag changes, so toggling
+   * it off and back on before the new motor speed is Planck's public way to
+   * drop that reserve. The limit is re-enabled in the same call, before the
+   * next step, so the bat never runs without its limits. Measured on TABLE_SPEC
+   * through the real FSM: release after a 60-step hold 16 → 1 step, press after
+   * a 240-step rest 5 → 1 (adapter-level 11 → 1). Same-sign repeats (the held-up
+   * +1 re-asserted every step, the resting 0) never reset, so a held cradle
+   * keeps its warm-started limit impulse and stays pinned. The joint's internal
+   * impulse fields are deliberately never written: only the public toggle is
+   * used, and src/physics/flipper-response.test.ts pins the behavior it relies
+   * on for planck@1.5.0. (Toggling the MOTOR in the same call does nothing:
+   * Planck zeroes the motor impulse only when the motor is disabled at step
+   * time.)
+   *
+   * MAPPING. The engine-agnostic command (+1 = RAISE toward the up/held-up
+   * limit, −1 = RETURN toward the rest/down limit, 0 = hold; NaN = 0) maps to
+   * the FEEL speeds — a snappy raise and a softer return — times THIS bat's
+   * physical raise sign. The mirrored right bat counter-rotates, so raising it
+   * needs the opposite motor sign from the left; folding `raiseSign` in here
+   * (not in the controller) keeps the FSM engine-agnostic and makes +1 raise
+   * BOTH bats toward their own up limit (see buildFlipper).
+   *
+   * Indexed lookup (structural twin of applyImpulse): this runs per flipper on
+   * every 120 Hz step, so it allocates nothing.
+   */
   setFlipperMotor(id: number, direction: number): void {
-    const entry = this.flipperJoints.find((f) => f.id === id);
-    if (!entry) return;
-    // Sign-only hook (D-05): map the engine-agnostic command (+1 = RAISE toward the
-    // up/held-up limit, −1 = RETURN toward the rest/down limit, 0 = hold) to the
-    // FEEL speeds — a snappy raise and a softer return — then apply THIS bat's
-    // physical raise sign. The mirrored right bat counter-rotates, so raising it
-    // needs the opposite motor sign from the left; folding `raiseSign` in here (not
-    // in the controller) keeps the FSM engine-agnostic and makes +1 raise BOTH bats
-    // toward their own up limit (see buildFlipper). Uniform magnitude, per-bat sign.
-    const speed =
-      direction > 0
-        ? FLIPPER_UP_SPEED
-        : direction < 0
-          ? -FLIPPER_RETURN_SPEED
-          : 0;
-    entry.joint.setMotorSpeed(speed * entry.raiseSign);
-    entry.body.setAwake(true);
+    for (let i = 0; i < this.flipperJoints.length; i++) {
+      const entry = this.flipperJoints[i];
+      if (!entry || entry.id !== id) continue;
+      const sign = direction > 0 ? 1 : direction < 0 ? -1 : 0;
+      if (sign !== entry.lastDirection) {
+        // Clear the warm-started limit impulse (see the doc block above).
+        entry.joint.enableLimit(false);
+        entry.joint.enableLimit(true);
+        entry.lastDirection = sign;
+      }
+      const speed =
+        sign > 0 ? FLIPPER_UP_SPEED : sign < 0 ? -FLIPPER_RETURN_SPEED : 0;
+      entry.joint.setMotorSpeed(speed * entry.raiseSign);
+      entry.body.setAwake(true);
+      return;
+    }
   }
 
   applyImpulse(ballId: BallId, ix: number, iy: number): void {
