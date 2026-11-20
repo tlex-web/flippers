@@ -129,3 +129,35 @@ export const NUDGE_DIRS: Readonly<Record<NudgeDir, Vec2>> = {
   right: { x: -1, y: 0 },
   up: { x: 0, y: -1 },
 };
+
+// ---------------------------------------------------------------------------
+// Tilt (R10, R11, GAME-03)
+// ---------------------------------------------------------------------------
+//
+// An accumulate-and-decay meter, counted in fixed steps (never a wall clock).
+// Worked numbers with these defaults and the 30-step nudge cooldown (decay
+// 0.5 * FIXED_DT per step, so 0.125 per 30 steps): nudges 30 steps apart give
+// levels 1.0, 1.875, 2.75 (the 3rd WARNS), then 3.625 (the 4th TILTS). One
+// nudge every 240 steps (2 s) decays fully between nudges and peaks at 1.0, so
+// it never warns. Assumption A4, by-feel at the 04-07 human check.
+
+/** Meter level each accepted nudge adds. */
+export const TILT_NUDGE_COST = 1.0;
+
+/** Meter decay per second, applied per fixed step as TILT_DECAY_PER_S * FIXED_DT. */
+export const TILT_DECAY_PER_S = 0.5;
+
+/**
+ * WARNING fires on the rising edge of level >= this (inclusive). Three rapid
+ * nudges warn, matching the factory "3 actuations" warning default (R10).
+ */
+export const TILT_WARNING_LEVEL = 2.0;
+
+/** TILT fires at level >= this (inclusive): a fourth rapid nudge tilts. */
+export const TILT_LEVEL = 3.0;
+
+/**
+ * How long, in FIXED steps, the HUD shows WARNING after a warning edge
+ * (120 steps = 1 s at 120 Hz). Read through `GameSession.isWarning()` (04-07).
+ */
+export const WARNING_FLASH_STEPS = 120;

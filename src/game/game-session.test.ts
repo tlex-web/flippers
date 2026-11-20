@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
-import type { BallId, BallSpec, CollisionEvent } from "../physics/types";
+import type { BallId, BallSpec, BallState, CollisionEvent } from "../physics/types";
 import { BALLS_PER_GAME, GameSession, type GameSessionWorld } from "./game-session";
+import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuning";
 
 /**
  * GameSession contracts:
@@ -11,6 +12,9 @@ import { BALLS_PER_GAME, GameSession, type GameSessionWorld } from "./game-sessi
  * - 3-ball FSM (plan 04-05 Task 2, GAME-02): start, serve, drain, game over and
  *   restart, against a spy world and a real `CollisionRouter` over a scripted
  *   source. Each simulated step is `dispatch()` then `service()`, as in main.ts.
+ * - nudge and tilt (plan 04-06 Task 2, GAME-03, R9-R11): the direction table,
+ *   the warning window, the tilted state, and the tilt costing only the current
+ *   ball, against the same spy world (which also records every impulse).
  */
 
 /**
@@ -72,10 +76,20 @@ const FIRST_ID = 10;
 
 type Call = { readonly op: "add"; readonly spec: BallSpec } | { readonly op: "remove"; readonly id: BallId };
 
+interface Impulse {
+  readonly id: BallId;
+  readonly ix: number;
+  readonly iy: number;
+}
+
 interface Rig {
   readonly session: GameSession;
-  /** Every world call, in order. */
+  /** Every add/remove world call, in order. */
   readonly calls: Call[];
+  /** Every applyImpulse call, in order. */
+  readonly impulses: Impulse[];
+  /** Advance the session clock `n` fixed steps. */
+  tick(n: number): void;
   /** Balls currently in the spy world (added and not yet removed). */
   liveCount(): number;
   /** Deliver `events` as one bus batch WITHOUT the service() that follows it. */
@@ -95,8 +109,19 @@ function drainOf(ballId: BallId): CollisionEvent {
   };
 }
 
-function makeRig(): Rig {
+/** A spy ball snapshot: only the id is read. */
+function spyBall(id: BallId): BallState {
+  return { id, x: 0, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 };
+}
+
+/**
+ * The spy world: addBall hands out increasing ids from FIRST_ID, getBalls
+ * reports every live ball plus `extraBallIds` (untracked balls on the table),
+ * and applyImpulse is recorded.
+ */
+function makeRig(extraBallIds: readonly BallId[] = []): Rig {
   const calls: Call[] = [];
+  const impulses: Impulse[] = [];
   const live = new Set<BallId>();
   let nextId: BallId = FIRST_ID;
   const world: GameSessionWorld = {
@@ -109,8 +134,10 @@ function makeRig(): Rig {
       calls.push({ op: "remove", id });
       live.delete(id);
     },
-    getBalls: () => [],
-    applyImpulse: () => {},
+    getBalls: () => [...live, ...extraBallIds].map(spyBall),
+    applyImpulse: (id, ix, iy) => {
+      impulses.push({ id, ix, iy });
+    },
   };
   let batch: CollisionEvent[] = [];
   const router = new CollisionRouter({ drainEvents: () => batch });
@@ -123,6 +150,10 @@ function makeRig(): Rig {
   return {
     session,
     calls,
+    impulses,
+    tick: (n) => {
+      for (let i = 0; i < n; i++) session.tick();
+    },
     liveCount: () => live.size,
     dispatchOnly,
     step: (...events) => {
@@ -269,5 +300,147 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
       { op: "add", spec: SPAWN },
     ]);
     expect(r.session.getBall()).toBe(2);
+  });
+});
+
+/** Nudge, then tick through the cooldown, `n` times: `n` accepted nudges. */
+function nudgeTimes(r: Rig, n: number): void {
+  for (let i = 0; i < n; i++) {
+    if (i > 0) r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("left");
+  }
+}
+
+describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
+  it("direction table: left gives +x, right gives -x, up gives -y, to every ball", () => {
+    const r = makeRig([77]);
+    r.session.onStart();
+    r.session.onNudge("left");
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("right");
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("up");
+    expect(r.impulses).toEqual([
+      { id: FIRST_ID, ix: NUDGE_IMPULSE, iy: 0 },
+      { id: 77, ix: NUDGE_IMPULSE, iy: 0 },
+      { id: FIRST_ID, ix: -NUDGE_IMPULSE, iy: 0 },
+      { id: 77, ix: -NUDGE_IMPULSE, iy: 0 },
+      { id: FIRST_ID, ix: 0, iy: -NUDGE_IMPULSE },
+      { id: 77, ix: 0, iy: -NUDGE_IMPULSE },
+    ]);
+  });
+
+  it("onNudge in game-over applies nothing", () => {
+    const r = makeRig([77]);
+    r.session.onNudge("left");
+    r.session.onNudge("up");
+    expect(r.impulses).toEqual([]);
+  });
+
+  it("the third rapid nudge warns: isWarning() is true for exactly WARNING_FLASH_STEPS ticks", () => {
+    const r = makeRig();
+    r.session.onStart();
+    nudgeTimes(r, 2);
+    expect(r.session.isWarning()).toBe(false);
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("left");
+    expect(r.session.isWarning()).toBe(true);
+    expect(r.session.getTiltLevel()).toBeCloseTo(2.75, 9);
+    r.tick(WARNING_FLASH_STEPS - 1);
+    expect(r.session.isWarning()).toBe(true);
+    r.tick(1);
+    expect(r.session.isWarning()).toBe(false);
+    expect(r.session.getState()).toBe("playing");
+  });
+
+  it("the fourth rapid nudge tilts: state tilted, not live, awards ignored, no warning shown", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.award(3000);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.session.getTiltLevel()).toBeCloseTo(3.625, 9);
+    expect(r.session.isLive()).toBe(false);
+    expect(r.session.isWarning()).toBe(false);
+    r.session.award(1000);
+    expect(r.session.getScore()).toBe(3000);
+    expect(r.session.onStart()).toBe(false);
+  });
+
+  it("while tilted, onNudge applies no impulse and does not move the meter", () => {
+    const r = makeRig();
+    r.session.onStart();
+    nudgeTimes(r, 4);
+    const impulsesAtTilt = r.impulses.length;
+    const levelAtTilt = r.session.getTiltLevel();
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    const levelBefore = r.session.getTiltLevel();
+    expect(levelBefore).toBeLessThan(levelAtTilt); // the meter still decays
+    r.session.onNudge("left");
+    r.session.onNudge("up");
+    expect(r.impulses).toHaveLength(impulsesAtTilt);
+    expect(r.session.getTiltLevel()).toBe(levelBefore);
+  });
+
+  it("a drain while tilted on ball 1 serves ball 2 playing, with a reset meter and the score kept", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.award(2500);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    const tilted = r.session.activeBallId;
+    r.step(drainOf(tilted));
+    expect(r.calls.slice(-2)).toEqual([
+      { op: "remove", id: tilted },
+      { op: "add", spec: SPAWN },
+    ]);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.isLive()).toBe(true);
+    expect(r.session.getTiltLevel()).toBe(0);
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("left");
+    expect(r.session.isWarning()).toBe(false);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getTiltLevel()).toBe(1);
+    expect(r.session.getScore()).toBe(2500);
+  });
+
+  it("a serve clears a live warning window", () => {
+    const r = makeRig();
+    r.session.onStart();
+    nudgeTimes(r, 3);
+    expect(r.session.isWarning()).toBe(true);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.isWarning()).toBe(false);
+    expect(r.session.getTiltLevel()).toBe(0);
+  });
+
+  it("a tilt on ball 3 followed by its drain ends the game with the score kept", () => {
+    const r = makeRig();
+    startAndDrain(r, BALLS_PER_GAME - 1);
+    r.session.award(9000);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.activeBallId).toBe(-1);
+    expect(r.liveCount()).toBe(0);
+    expect(r.session.getScore()).toBe(9000);
+  });
+
+  it("onStart() after a tilted game over resets the meter: the first nudge of the new game does not warn", () => {
+    const r = makeRig();
+    startAndDrain(r, BALLS_PER_GAME - 1);
+    nudgeTimes(r, 4);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.onStart()).toBe(true);
+    expect(r.session.getTiltLevel()).toBe(0);
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("left");
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.isWarning()).toBe(false);
+    expect(r.session.getTiltLevel()).toBe(1);
   });
 });

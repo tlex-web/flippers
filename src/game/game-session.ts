@@ -51,7 +51,7 @@ import { NUDGE_COOLDOWN_STEPS, NUDGE_DIRS, NUDGE_IMPULSE, type NudgeDir } from "
 export const BALLS_PER_GAME = 3;
 
 /** Game states. 04-06 adds `"tilted"`. */
-export type GameState = "game-over" | "playing";
+export type GameState = "game-over" | "playing" | "tilted";
 
 /** The world slice the session needs. */
 export type GameSessionWorld = Pick<
@@ -103,6 +103,7 @@ export class GameSession implements RulesGate {
         this.active = this.world.addBall(this.spawn);
         return true;
       case "playing":
+      case "tilted":
         return false;
     }
   }
@@ -148,6 +149,16 @@ export class GameSession implements RulesGate {
   /** Advance the session clock by one fixed step. Call once per fixed step. */
   tick(): void {
     this.step++;
+  }
+
+  /** RED stub (04-06 Task 2). */
+  isWarning(): boolean {
+    return false;
+  }
+
+  /** RED stub (04-06 Task 2). */
+  getTiltLevel(): number {
+    return 0;
   }
 
   /** The ball in play (the one the plunger launches), or -1. */
