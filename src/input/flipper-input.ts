@@ -21,6 +21,21 @@
  *    (hidden) and window `focus` regain the held set is force-cleared and release
  *    edges are emitted so a tab-blur, or a keyup an OS dialog took while the page
  *    was blurred, can never strand a key "down" (threats T-02-03, T-04-27).
+ *  - Modifier reconciliation (G-04-11): any later NON-Shift key event whose
+ *    `shiftKey` is strictly `false` drops a held `ShiftLeft`/`ShiftRight`. The
+ *    OS's modifier state then proves no Shift is down, so a held Shift is a
+ *    stale code whose keyup the OS took. Only a strict `false` counts: an
+ *    event without the field (unknown state) never reconciles. Events of the
+ *    Shift keys themselves never reconcile, because platforms differ in how
+ *    they report the REMAINING Shift on one Shift's keyup, and the D-09
+ *    both-Shift cradle must never lose a held bat to that. Edges come from each
+ *    event's NET per-side transition, so dropping a stale Shift and adding the
+ *    new key in one event (Z over a stale ShiftLeft) is edge-free: the bat does
+ *    not drop under the player's finger. Residual: with Windows Sticky Keys
+ *    turned ON, the OS keeps Shift logically down, reports `shiftKey` true and
+ *    withholds the keyup until the next non-modifier key, so no browser check
+ *    can release it earlier. Whether Shift stays a default binding is a user
+ *    decision; the bindings are unchanged.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -38,6 +53,14 @@ export type FlipperSide = "left" | "right";
 export interface KeyEventLike {
   readonly code: string;
   readonly repeat: boolean;
+  /**
+   * Whether the OS reports a Shift key down for this event. A real
+   * `KeyboardEvent` always carries it. Synthetic events may omit it, and an
+   * omitted value means the modifier state is unknown, so no reconciliation
+   * happens. Optional so every existing synthetic event and the GameInput /
+   * PlungerInput signatures stay valid under `exactOptionalPropertyTypes`.
+   */
+  readonly shiftKey?: boolean;
   preventDefault(): void;
 }
 
@@ -70,6 +93,10 @@ const CODE_TO_SIDE: ReadonlyMap<string, FlipperSide> = new Map<string, FlipperSi
   ["ShiftRight", "right"],
   ["ArrowRight", "right"],
 ]);
+
+/** The two Shift codes, named once for the stale-Shift reconciliation. */
+const SHIFT_LEFT = "ShiftLeft";
+const SHIFT_RIGHT = "ShiftRight";
 
 /** The bound codes for each side (for the per-side OR held test), built once. */
 const SIDE_CODES: Readonly<Record<FlipperSide, readonly string[]>> = {
@@ -114,32 +141,43 @@ export class FlipperInput {
     this.handleVisibilityChange(document.hidden);
 
   /**
-   * Genuine keydown. Ignores OS auto-repeat, de-dupes already-held codes,
-   * `preventDefault`s bound codes only, and latches a PRESS edge when the code's
-   * side goes not-held -> held (per-side OR).
+   * Genuine keydown. Drops a stale Shift first (every event, repeat or unbound
+   * included, carries valid modifier state), then ignores OS auto-repeat,
+   * `preventDefault`s bound codes only, adds the code (the Set de-dupes) and
+   * latches the NET per-side transition: a press when a side goes not-held ->
+   * held, a release when a stale-Shift drop left it fully up.
    */
   handleKeyDown(e: KeyEventLike): void {
-    if (e.repeat) return; // auto-repeat suppression — never re-triggers a flip
-    const side = CODE_TO_SIDE.get(e.code);
-    if (!side) return; // unbound/reserved code: no preventDefault, no state change
+    const leftBefore = this.isSideHeld("left");
+    const rightBefore = this.isSideHeld("right");
+    this.dropStaleShift(e);
+    if (e.repeat) {
+      // auto-repeat suppression: never re-triggers a flip, never preventDefaults
+      this.commitTransitions(leftBefore, rightBefore);
+      return;
+    }
+    if (!CODE_TO_SIDE.has(e.code)) {
+      // unbound/reserved code: no preventDefault, no held-set change
+      this.commitTransitions(leftBefore, rightBefore);
+      return;
+    }
     e.preventDefault(); // bound codes only (Firefox quick-find, arrow scroll)
-    if (this.held.has(e.code)) return; // de-dupe: this physical key is already down
-    const wasHeld = this.isSideHeld(side);
-    this.held.add(e.code);
-    if (!wasHeld) this.latchPress(side); // side newly held -> exactly one press edge
+    this.held.add(e.code); // de-dupe: an already-held code is a no-op
+    this.commitTransitions(leftBefore, rightBefore);
   }
 
   /**
-   * Keyup. Latches a RELEASE edge only when the side becomes fully up (ALL of its
-   * codes released). A keyup for a code that was never tracked (e.g. its keydown
-   * was an ignored auto-repeat) emits no phantom edge.
+   * Keyup. Drops a stale Shift, removes the code if it is bound, and latches the
+   * NET per-side transition: a RELEASE only when a side becomes fully up (ALL of
+   * its codes released). A keyup for a code that was never tracked (e.g. its
+   * keydown was an ignored auto-repeat) emits no phantom edge.
    */
   handleKeyUp(e: KeyEventLike): void {
-    const side = CODE_TO_SIDE.get(e.code);
-    if (!side) return;
-    if (!this.held.has(e.code)) return; // was not down here — nothing to release
-    this.held.delete(e.code);
-    if (!this.isSideHeld(side)) this.latchRelease(side); // ALL codes up -> release
+    const leftBefore = this.isSideHeld("left");
+    const rightBefore = this.isSideHeld("right");
+    this.dropStaleShift(e);
+    if (CODE_TO_SIDE.has(e.code)) this.held.delete(e.code);
+    this.commitTransitions(leftBefore, rightBefore);
   }
 
   /** Window blur: force-clear and emit release for every still-held side. */
@@ -233,12 +271,42 @@ export class FlipperInput {
   }
 
   /**
-   * Idempotent, allocation-free force-clear: emit a release for each held side,
-   * then empty the set. Safe to call when nothing is held (no edges emitted).
+   * Stale-Shift reconciliation (G-04-11): when a NON-Shift key event reports
+   * `shiftKey === false`, no Shift is down, so a held ShiftLeft/ShiftRight is a
+   * code whose keyup the OS took; drop it. No-op for an absent `shiftKey`
+   * (unknown state), for `true`, and for the Shift keys' own events (the D-09
+   * cradle). Latches no edge itself: the caller commits the net transition.
+   */
+  private dropStaleShift(e: KeyEventLike): void {
+    if (e.shiftKey !== false || e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT) return;
+    this.held.delete(SHIFT_LEFT);
+    this.held.delete(SHIFT_RIGHT);
+  }
+
+  /**
+   * Latch each side's NET transition across one event: a press for not-held ->
+   * held, a release for held -> not-held. One event never latches both edges
+   * for a side, because main.ts applies a side's press BEFORE its release in a
+   * drain window; a separate drop-then-add would net to a release and drop the
+   * bat under the player's finger.
+   */
+  private commitTransitions(leftBefore: boolean, rightBefore: boolean): void {
+    const leftAfter = this.isSideHeld("left");
+    const rightAfter = this.isSideHeld("right");
+    if (!leftBefore && leftAfter) this.latchPress("left");
+    else if (leftBefore && !leftAfter) this.latchRelease("left");
+    if (!rightBefore && rightAfter) this.latchPress("right");
+    else if (rightBefore && !rightAfter) this.latchRelease("right");
+  }
+
+  /**
+   * Idempotent, allocation-free force-clear: empty the set and emit a release for
+   * each side that was held. Safe to call when nothing is held (no edges emitted).
    */
   private forceClear(): void {
-    if (this.isSideHeld("left")) this.latchRelease("left");
-    if (this.isSideHeld("right")) this.latchRelease("right");
+    const leftBefore = this.isSideHeld("left");
+    const rightBefore = this.isSideHeld("right");
     this.held.clear();
+    this.commitTransitions(leftBefore, rightBefore);
   }
 }

@@ -91,7 +91,7 @@ function main(): void {
   const world = new PlanckWorld({ table: TABLE_SPEC });
 
   // Keyboard input + flipper FSM (D-10). Constructed ONCE here (never inside
-  // frame()). `attach()` registers the window keydown/keyup/blur + document
+  // frame()). `attach()` registers the window keydown/keyup/blur/focus + document
   // visibilitychange listeners. Neither module imports an engine — only this
   // file's `new PlanckWorld()` above is engine-specific; both talk through the
   // `PhysicsWorld` interface / synthetic-friendly handlers.
@@ -137,7 +137,9 @@ function main(): void {
   // off at boot, on a tilt and at game over, and on with every serve. Turning
   // it on re-presses any side whose key is held right now, so a key held
   // through a drain raises its bat on the next ball with no new press. Built
-  // once; called only on a start, a tilt, a drain or game over.
+  // once; called only on a start, a tilt, a drain or game over. isHeld reads a
+  // held set that heals on a window focus regain and on any non-Shift key event
+  // that reports Shift up (G-04-11), so a lost keyup no longer survives a serve.
   const flipperGate: FlipperGate = {
     setEnabled(on: boolean): void {
       controller.setEnabled(on);
