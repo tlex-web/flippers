@@ -24,7 +24,7 @@ updated: "2026-11-20"
 | **Config file** | `vitest.config.ts` (excludes `**/*.gate.test.ts`), `vitest.gate.config.ts` (soak gates) |
 | **Quick run command** | `npx vitest run src/game src/input src/control src/ui` |
 | **Full suite command** | `npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak` |
-| **Estimated runtime** | ~4 s fast suite (33 files, 392 tests after the 04-09/04-10 gap closure; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
+| **Estimated runtime** | ~4 s fast suite (33 files, 416 tests after the 04-11 gap closure; 392 after 04-09/04-10; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
 
 ---
 
@@ -66,12 +66,16 @@ updated: "2026-11-20"
 | 04-09-02 | 09 | G1 ² | FLIP-01 | T-04-21 | the FSM enters resting (motor 0) only after 2 settled updates within REST_ANGLE_TOL of `restLimitAngle`; a bat drifting short of rest keeps motor -1 (both mirrors); 0 of 192 quick taps stuck on the six bindings, with the resting invariant checked on every step | unit (TDD) + e2e | `npx vitest run src/control/flipper-controller.test.ts src/sandbox/flipper-e2e.test.ts src/sandbox/game-e2e.test.ts src/sandbox/game.determinism.test.ts && npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak` | ✅ | ✅ green |
 | 04-10-01 | 10 | G1 ² | GAME-01 | T-04-24/25/26 | the FPS / PHYS / KE readout is DOM text written through `textContent` only when one of its three throttled numbers changes; the canvas paints no text; `#hud-diag` is aria-hidden | tracer (unit) + build | `npx vitest run src/ui/hud.test.ts && npx tsc --noEmit && npx eslint src && npx vitest run && npm run build` | ✅ | ✅ green |
 | 04-10-02 | 10 | G1 ² | GAME-01 | — | the controls hint is a five-row `dl` with 11 `kbd` key caps, Slash as its own cap, no stray slash or middle-dot separators, each row nowrap | structural grep + build + human-check | `npm run build && npx vitest run` (plus the plan's index.html structure greps: 5 dt, 11 kbd, `<kbd>/</kbd>`, 0 stray separators) | ✅ | ✅ green |
+| 04-11-01 | 11 | G2 ³ | FLIP-01 | T-04-27 | a window focus regain clears the held set: a keydown whose keyup an OS dialog took (focus-ordering race) lets the bat fall within 2 fixed steps, and the same key raises it again afterwards; blur/visibility clears unchanged | tracer (unit + keyboard-to-Planck e2e) | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npx tsc --noEmit && npx eslint src && npx vitest run` | ✅ | ✅ green |
+| 04-11-02 | 11 | G2 ³ | FLIP-01, GAME-02 | T-04-27/28/30 | a non-Shift key event with `shiftKey === false` drops a stale ShiftLeft/ShiftRight (Z, arrows, Space, Enter); Shift-key events and events without the field never reconcile (both-Shift cradle safe); net per-side edges, so Z over a stale Shift latches nothing; the serve no longer re-raises a stale bat; preventDefault scope unchanged | unit (TDD) + e2e + game e2e | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts src/sandbox/game-e2e.test.ts src/sandbox/game.determinism.test.ts && npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 ¹ The plan's original verify also named `src/sandbox/ball-feed.test.ts`, which 04-05 deleted after porting its CR-01 cases into `src/sandbox/game-e2e.test.ts`; the command above is the current equivalent.
 
 ² G1 = gap-closure run, wave 1 (04-09 closes UAT gap G-04-10, 04-10 closes G-04-6). Both plans ran in parallel after 04-08.
+
+³ G2 = second gap-closure run, wave 1 (04-11 closes UAT gap G-04-11, a lost Shift keyup pinning a bat).
 
 ### Requirement Coverage
 
@@ -81,10 +85,11 @@ updated: "2026-11-20"
 | ELEM-02 | COVERED | `reactive-elements.test.ts` sling face + filter (6), `reactive-table.test.ts` sling 300/301 strikes, rules-live soak + CCD-off RED |
 | ELEM-03 | COVERED | `reactive-elements.test.ts` rollovers and inlanes (6), `reactive-table.test.ts` rollover 401 scores and lights |
 | GAME-01 | COVERED | `game-session.test.ts` score cases, `hud.test.ts` (34, incl. `diagText` and `DiagView` write-on-change, G-04-6), `game-e2e.test.ts` HUD walk-through |
-| GAME-02 | COVERED | `game-session.test.ts` 3-ball FSM, `game-input.test.ts` start latch, `game-e2e.test.ts` full game + ported CR-01 cases, `plunger-controller.test.ts` rest gate / applyEdges |
+| GAME-02 | COVERED | `game-session.test.ts` 3-ball FSM, `game-input.test.ts` start latch, `game-e2e.test.ts` full game + ported CR-01 cases + stale-Shift serve case (G-04-11), `plunger-controller.test.ts` rest gate / applyEdges |
 | GAME-03 | COVERED | `tilt-meter.test.ts` (7), `game-session.test.ts` nudge/tilt + flipper relay, `game-input.test.ts` nudge latch, `flipper-controller.test.ts` enable gate, `game-e2e.test.ts` nudge + tilt-drops-bats, `game.determinism.test.ts`, `flipper-e2e.test.ts` TILT drop within 2 steps (G-04-10) |
 | (carry IN-01) | COVERED | `plunger-controller.test.ts` rest gate (3), `plunger-e2e.test.ts` falling-back release |
 | (carry FLIP-01, G-04-10) | COVERED | `flipper-response.test.ts` adapter pin (TABLE_SPEC + PROOF_BOX_SPEC, both ids: release, press, held cradle), `flipper-e2e.test.ts` G-04-10 block (release/press latency, 192-tap sweep with per-step resting invariant), `flipper-controller.test.ts` rest-limit guard (4), `flipper-feel.test.ts` FLIP-02 on OPEN_PROOF_BOX |
+| (carry FLIP-01, G-04-11) | COVERED | `flipper-input.test.ts` "focus regain (G-04-11)" block + stale-Shift B1-B7, `flipper-e2e.test.ts` "a lost keyup never strands a bat (G-04-11)" block (focus-regain release per binding, stale-Shift release per side) + both-Shift cradle guard, `game-e2e.test.ts` serve does not re-raise a stale bat |
 
 ---
 
@@ -111,6 +116,7 @@ updated: "2026-11-20"
 | Live score visible and legible while playing; HUD panels do not overlap the plunger meter | GAME-01 | Perceptual (legibility, placement) | `npm run dev`, play a ball, confirm the HUD score updates on every scoring hit and the ball/status/controls lines read clearly at any window size |
 | Diagnostics readout and controls list legible (G-04-6) | GAME-01 | Perceptual layout (UAT test 6); structure is machine-checked | 1280x684 window at 150% scaling: the bottom-left FPS / PHYS / KE line reads clearly; the controls list shows five non-wrapping rows, Slash is visibly a key cap; neither panel overlaps the table or plunger meter |
 | Flippers feel instant after long cradles; no tap leaves a bat raised; TILT drop has no pause (G-04-10) | FLIP-01, GAME-03 | Core-value feel verdict (UAT tests 10 and 5); latencies are machine-proven | `npm run dev`, Enter; on all six bindings make quick taps of varied length, hold a long cradle and release, over-nudge once while holding a bat up |
+| Each bat answers its key on all six bindings after the Windows Sticky Keys prompt (G-04-11) | FLIP-01, GAME-02 | The real OS Sticky Keys dialog cannot be raised by synthetic events (UAT test 11); the self-heal logic is machine-proven. Residual T-04-29 (Sticky Keys turned ON) is accepted | On Windows, `npm run dev`, Enter; tap Left Shift five times to raise the Sticky Keys prompt, dismiss it, then confirm Z and Left Arrow raise and drop the left bat, no bat stays raised, and the next serve leaves both bats down |
 | Kick liveliness, nudge size, tilt fairness | ELEM-01/02, GAME-03 | Tuning is by feel (research A2–A5) | `npm run dev`, play a full 3-ball game, nudge to WARNING and to TILT |
 | Lit rollovers read clearly on the table | ELEM-03 | Visual (light readability; drawing is not asserted) | `npm run dev`, roll through each top rollover, confirm it lights and the bank of three clears after the bonus |
 | TILT drops both bats visibly; flippers dead before Enter and after GAME OVER; a held flipper rises on the next serve | GAME-03 | By-feel confirmation of behavior already pinned headlessly in `game-e2e.test.ts` | `npm run dev`, press Z before Enter, over-nudge while holding Z, hold through the drain, finish the game and press Z again |
@@ -144,3 +150,12 @@ updated: "2026-11-20"
 | Resolved | 0 |
 | Escalated | 0 |
 | Tasks audited (gap closure 04-09/04-10) | 4 |
+
+## Validation Audit 2026-11-20
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Tasks audited (gap closure 04-11) | 2 |
