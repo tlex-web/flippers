@@ -166,7 +166,9 @@ function main(): void {
   // 120 Hz STEP (before that step's `world.step()`): drain the input latch, feed
   // each per-side edge to the FSM, then tick it — so a key press applies on the
   // very next 120 Hz step (<= ~8.3 ms, sub-frame vs a 60 fps render), NOT once
-  // per render frame.
+  // per render frame. drainEdges resolves a same-window press and release from
+  // the held state at drain time, so applying press before release is always
+  // correct (WR-01).
   function onFixedStep(): void {
     const edges = input.drainEdges();
     if (edges.leftPress) controller.onPressEdge(leftFlipperId);

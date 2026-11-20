@@ -82,7 +82,13 @@ export interface KeyEventLike {
   preventDefault(): void;
 }
 
-/** Latched per-side press/release edges for one drain window (read-only view). */
+/**
+ * Latched per-side press/release edges for one drain window (read-only view).
+ * Consumers apply a side's press BEFORE its release. A side carries both only
+ * when it is not held at drain time (a tap inside one window). When it is held,
+ * drainEdges drops a same-window release, because the window's last edge was a
+ * press (WR-01).
+ */
 export interface InputEdges {
   readonly leftPress: boolean;
   readonly leftRelease: boolean;
@@ -265,15 +271,22 @@ export class FlipperInput {
 
   /**
    * Copy the latched edges into the reused view, reset the latch, and return the
-   * view. The consumer drains this at the top of each fixed step. No allocation:
+   * view. The consumer drains this at the top of each fixed step. A side that is
+   * held at drain time ended its window on a press, so a release latched in the
+   * same window is superseded and only the press is reported: the bat ends up,
+   * as release-then-press would leave it (WR-01, the IN-02 held-state rule of
+   * PlungerController.applyEdges). A side that is not held keeps both edges,
+   * and press-then-release is the true order. No allocation:
    * both `pending` and `view` are long-lived, and the SAME `view` object is
    * returned every call.
    */
   drainEdges(): InputEdges {
+    const leftHeld = this.isSideHeld("left");
+    const rightHeld = this.isSideHeld("right");
     this.view.leftPress = this.pending.leftPress;
-    this.view.leftRelease = this.pending.leftRelease;
+    this.view.leftRelease = this.pending.leftRelease && !(this.pending.leftPress && leftHeld);
     this.view.rightPress = this.pending.rightPress;
-    this.view.rightRelease = this.pending.rightRelease;
+    this.view.rightRelease = this.pending.rightRelease && !(this.pending.rightPress && rightHeld);
     resetEdges(this.pending);
     return this.view;
   }
@@ -362,10 +375,11 @@ export class FlipperInput {
 
   /**
    * Latch each side's NET transition across one event: a press for not-held ->
-   * held, a release for held -> not-held. One event never latches both edges
-   * for a side, because main.ts applies a side's press BEFORE its release in a
-   * drain window; a separate drop-then-add would net to a release and drop the
-   * bat under the player's finger.
+   * held, a release for held -> not-held. The net transition prevents a
+   * drop-then-add flicker within ONE event (Z over a stale ShiftLeft is
+   * edge-free). Across events in one drain window the latch can hold both edges
+   * for a side; drainEdges resolves their order from the held state at drain
+   * time (WR-01).
    */
   private commitTransitions(leftBefore: boolean, rightBefore: boolean): void {
     const leftAfter = this.isSideHeld("left");
