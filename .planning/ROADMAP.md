@@ -140,7 +140,7 @@ Plans:
   4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
   5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
 
-**Plans**: 10/10 plans executed (6 waves) + 3 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11)
+**Plans**: 11/11 plans executed (6 waves) + 3 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11)
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: bumpers kick and score through the bus (record-then-service), GameSession score, DOM score HUD, BALL_DENSITY/ballMass [wave 1]
@@ -167,7 +167,7 @@ Plans:
 - [x] 04-10-PLAN.md — HUD legibility (G-04-6): diagnostics readout moved from canvas to DOM, controls hint as a key-cap action list [wave 1]
 
 **Gap closure 2** *(UAT 04 test 11 diagnosis)*
-- [ ] 04-11-PLAN.md — Lost Shift keyup pins a bat (G-04-11): FlipperInput clears its held set on window focus regain and drops a stale Shift on any non-Shift key with Shift up; bindings unchanged; unit, keyboard-to-Planck and serve regressions [wave 1]
+- [x] 04-11-PLAN.md — Lost Shift keyup pins a bat (G-04-11): FlipperInput clears its held set on window focus regain and drops a stale Shift on any non-Shift key with Shift up; bindings unchanged; unit, keyboard-to-Planck and serve regressions [wave 1]
 
 ### Phase 5: Rendering & Audio
 
@@ -212,6 +212,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
-| 4. Reactive Elements & Game Rules | 10/10 | In Progress | - |
+| 4. Reactive Elements & Game Rules | 11/11 | In Progress | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |

@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: verifying
-stopped_at: Completed 04-10-PLAN.md
-last_updated: "2026-11-20T20:02:14.130Z"
+stopped_at: Completed 04-11-PLAN.md
+last_updated: "2026-11-20T22:34:48.614Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: 4beab23033b6b08cffc0ee7c21fe534551382dca
+state_head: 98d1b3c1b1f789ab7cdf33c88c6093f707839537
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 30
+  completed_plans: 30
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 10 of 10
+Plan: 11 of 11
 Status: Phase complete — ready for verification
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -89,6 +89,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P08 | 9min | 3 tasks | 10 files |
 | Phase 04 P09 | 9 min | 2 tasks | 7 files |
 | Phase 04 P10 | 4 min | 2 tasks | 5 files |
+| Phase 04 P11 | 7 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,10 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-09: FLIP-02 launch proof runs on OPEN_PROOF_BOX (PROOF_BOX_SPEC minus wall 3), secondary floor 1.3x per user sign-off; VR_RATIO_TOL 0.35 unchanged
 - [Phase 04]: 04-10: diagnosis readout moved to a DOM panel (#hud-diag, DiagView write-on-change); the canvas paints no text
 - [Phase 04]: 04-10: controls hint is a five-row dl key/action list with kbd key caps; NumpadEnter stays an unlisted Enter alias
+- [Phase 04]: 04-11: FlipperInput clears its held set on window focus regain (handleFocus + window focus listener); pageshow not wired since bfcache goes hidden first
+- [Phase 04]: 04-11: a non-Shift key event with shiftKey strictly false drops a held ShiftLeft/ShiftRight; Shift-key events and events without shiftKey never reconcile (D-09 cradle safe)
+- [Phase 04]: 04-11: FlipperInput latches edges from each event's net per-side transition, so Z over a stale ShiftLeft is edge-free and its keyup releases the bat
+- [Phase 04]: 04-11: Sticky-Keys-ON residual accepted (T-04-29); keeping Shift as a default flipper binding is a pending user decision, bindings unchanged
 
 ### Pending Todos
 
@@ -191,6 +196,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T20:02:13.062Z
-Stopped at: Completed 04-10-PLAN.md
+Last session: 2026-11-20T22:34:47.147Z
+Stopped at: Completed 04-11-PLAN.md
 Resume file: None
