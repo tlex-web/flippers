@@ -8,7 +8,14 @@ import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
-import { FIXED_DT, PLUNGER_CHARGE_RATE, PLUNGER_MAX_CHARGE } from "../physics/constants";
+import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE } from "../game/tuning";
+import {
+  BALL_LINEAR_DAMPING,
+  FIXED_DT,
+  PLUNGER_CHARGE_RATE,
+  PLUNGER_MAX_CHARGE,
+  ballMass,
+} from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
@@ -74,6 +81,8 @@ interface Game {
   readonly chuteTopY: number;
   /** Every drain event seen on the bus, in order. */
   readonly drainedIds: BallId[];
+  /** Every ball id that appeared in any bus event. */
+  readonly touchedIds: Set<BallId>;
   /** One render frame of `deltaMs`; returns the fixed steps it ran. */
   frame(deltaMs: number): number;
   /** The ball in play; throws if it is not on the table. */
@@ -106,8 +115,10 @@ function makeGame(): Game {
   const rightFlipperId = flippersByX[1]?.id ?? leftFlipperId;
 
   const drainedIds: BallId[] = [];
+  const touchedIds = new Set<BallId>();
   router.register((e) => {
     if (e.elementKind === "drain") drainedIds.push(e.ballId);
+    touchedIds.add(e.ballId);
   });
 
   function onFixedStep(): void {
@@ -124,6 +135,10 @@ function makeGame(): Game {
 
     const ge = gameInput.drainEdges();
     if (ge.start && session.onStart()) reactive.resetLights();
+    if (ge.nudgeLeft) session.onNudge("left");
+    if (ge.nudgeRight) session.onNudge("right");
+    if (ge.nudgeUp) session.onNudge("up");
+    session.tick();
   }
   function onPostStep(): void {
     router.dispatch();
@@ -144,6 +159,7 @@ function makeGame(): Game {
     gameInput,
     chuteTopY,
     drainedIds,
+    touchedIds,
     frame: (deltaMs) => loop.advance(deltaMs, onFixedStep, onPostStep),
     ball: () => {
       const id = session.activeBallId;
@@ -352,5 +368,147 @@ describe("IN-02 live: a release and re-press inside one fixed-step window", () =
     expect(g.session.activeBallId).toBe(id);
     expect(g.plunger.getPhase()).toBe("charging");
     expect(g.plunger.getCharge()).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Nudge (plan 04-06 Task 1, GAME-03, R9): two identical games, A and B, run in
+ * lockstep; only A gets the nudge key. An untracked free ball in open field
+ * (below the bumper cluster, clear of every element) shows the nudge as a pure
+ * velocity change: A minus B is one NUDGE_IMPULSE / m along +x, and the
+ * positions differ only by that change integrated over one step, never a jump.
+ */
+
+/**
+ * A free ball in open field below the bumper cluster. Every case asserts it
+ * touches nothing in either world, so the point is proven clear, not assumed
+ * (the plan point 1.45, 2.2 reached the upper-right bumper within the cooldown).
+ */
+const FREE_BALL = { x: 1.0, y: 3.8 } as const;
+const KEY_X = key("KeyX");
+
+/**
+ * Per-step decay of a velocity difference between the twins: both feel the same
+ * gravity, so their difference changes only by the ball's linear damping, which
+ * Box2D applies as v *= 1 / (1 + dt * k) each step.
+ */
+const DAMP_PER_STEP = 1 / (1 + FIXED_DT * BALL_LINEAR_DAMPING);
+
+/** Exactly one fixed step (a FIXED_DT frame on a drained accumulator). */
+function stepOnce(g: Game): void {
+  expect(g.frame(FRAME_120_HZ)).toBe(1);
+}
+
+function ballById(g: Game, id: BallId): BallState {
+  const b = g.world.getBalls().find((x) => x.id === id);
+  if (!b) throw new Error(`ball ${id} missing`);
+  return b;
+}
+
+interface Twins {
+  readonly a: Game;
+  readonly b: Game;
+  readonly freeA: BallId;
+  readonly freeB: BallId;
+}
+
+/** Two lockstep games, started (or not), each with the same free ball added. */
+function makeTwins(started: boolean): Twins {
+  const a = makeGame();
+  const b = makeGame();
+  if (started) {
+    pressEnter(a);
+    pressEnter(b);
+    runSteps(a, FRAME_120_HZ, SETTLE_STEPS);
+    runSteps(b, FRAME_120_HZ, SETTLE_STEPS);
+  }
+  const freeA = a.world.addBall(FREE_BALL);
+  const freeB = b.world.addBall(FREE_BALL);
+  stepOnce(a);
+  stepOnce(b);
+  return { a, b, freeA, freeB };
+}
+
+/** Step both twins once. */
+function stepBoth(t: Twins): void {
+  stepOnce(t.a);
+  stepOnce(t.b);
+}
+
+/** The free ball in A minus the free ball in B: velocity and position differences. */
+function diff(t: Twins): { dvx: number; dvy: number; dx: number; dy: number } {
+  const pa = ballById(t.a, t.freeA);
+  const pb = ballById(t.b, t.freeB);
+  return { dvx: pa.vx - pb.vx, dvy: pa.vy - pb.vy, dx: pa.x - pb.x, dy: pa.y - pb.y };
+}
+
+/** Press KeyX in A only (a genuine edge: keyup first, so it always latches). */
+function nudgeA(t: Twins): void {
+  t.a.gameInput.handleKeyUp(KEY_X);
+  t.a.gameInput.handleKeyDown(KEY_X);
+}
+
+describe("nudge (GAME-03, R9): a velocity impulse, never a teleport", () => {
+  it("KeyX changes the free ball velocity by NUDGE_IMPULSE / m along +x, and its position only by the integrated change", () => {
+    const t = makeTwins(true);
+    const dvExpected = NUDGE_IMPULSE / ballMass(ballById(t.a, t.freeA).radius);
+
+    nudgeA(t);
+    stepBoth(t);
+
+    const d = diff(t);
+    expect(Math.abs(d.dvx - dvExpected)).toBeLessThanOrEqual(0.03 * dvExpected);
+    expect(Math.abs(d.dvy)).toBeLessThanOrEqual(0.03 * dvExpected);
+    const dvMag = Math.hypot(d.dvx, d.dvy);
+    const dpMag = Math.hypot(d.dx, d.dy);
+    expect(dpMag).toBeGreaterThan(0);
+    expect(dpMag).toBeLessThanOrEqual(1.05 * dvMag * FIXED_DT);
+    // Open field: the free ball touched nothing in either world.
+    expect(t.a.touchedIds.has(t.freeA)).toBe(false);
+    expect(t.b.touchedIds.has(t.freeB)).toBe(false);
+  });
+
+  it("a second nudge inside NUDGE_COOLDOWN_STEPS does nothing; one at the cooldown adds another impulse", () => {
+    const t = makeTwins(true);
+    const dvExpected = NUDGE_IMPULSE / ballMass(ballById(t.a, t.freeA).radius);
+
+    nudgeA(t);
+    stepBoth(t); // the step of the first edge: accepted
+    const once = diff(t).dvx;
+    expect(Math.abs(once - dvExpected)).toBeLessThanOrEqual(0.03 * dvExpected);
+
+    // Steps 1 .. COOLDOWN-1 after it: a fresh edge is refused (tried at 10 and
+    // at the last one), so the difference only decays by the damping.
+    let prev = once;
+    for (let k = 1; k < NUDGE_COOLDOWN_STEPS; k++) {
+      if (k === 10 || k === NUDGE_COOLDOWN_STEPS - 1) nudgeA(t);
+      stepBoth(t);
+      const now = diff(t).dvx;
+      expect(Math.abs(now - prev * DAMP_PER_STEP)).toBeLessThan(1e-9);
+      prev = now;
+    }
+
+    // Exactly NUDGE_COOLDOWN_STEPS after the first: accepted again, so the
+    // difference grows by another impulse on top of the damped carry-over.
+    nudgeA(t);
+    stepBoth(t);
+    const grown = diff(t).dvx - prev * DAMP_PER_STEP;
+    expect(Math.abs(grown - dvExpected)).toBeLessThanOrEqual(0.03 * dvExpected);
+    expect(t.a.touchedIds.has(t.freeA)).toBe(false);
+    expect(t.b.touchedIds.has(t.freeB)).toBe(false);
+  });
+
+  it("before Enter (attract), KeyX leaves the free ball bit-identical to its un-nudged twin", () => {
+    const t = makeTwins(false);
+    expect(t.a.session.getState()).toBe("game-over");
+    nudgeA(t);
+    stepBoth(t);
+    stepBoth(t);
+    const pa = ballById(t.a, t.freeA);
+    const pb = ballById(t.b, t.freeB);
+    expect(pa.x).toBe(pb.x);
+    expect(pa.y).toBe(pb.y);
+    expect(pa.vx).toBe(pb.vx);
+    expect(pa.vy).toBe(pb.vy);
   });
 });

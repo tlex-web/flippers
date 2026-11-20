@@ -28,7 +28,8 @@
  * Fixed-step order:
  * - `onFixedStep` (top of each step): flipper edges then the flipper FSM; the
  *   plunger edges through `applyEdges` (same-window order from the held state)
- *   then the charge; then the start edge (a started game resets the lights).
+ *   then the charge; then the start edge (a started game resets the lights);
+ *   then the nudge edges (`session.onNudge`); then `session.tick()`.
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve).
  *
@@ -104,7 +105,8 @@ function main(): void {
   plungerInput.attach();
   const plunger = new PlungerController(world);
 
-  // Game controls (R6): Enter / NumpadEnter latch a start edge.
+  // Game controls: Enter / NumpadEnter latch a start edge (R6); KeyX, Period
+  // and ArrowUp latch nudge edges (R9).
   const gameInput = new GameInput();
   gameInput.attach();
 
@@ -159,8 +161,15 @@ function main(): void {
 
     // Game: a start edge starts a game only from game-over (Enter mid-game is
     // ignored by the session); a new game turns every rollover light off (R12).
+    // Then each latched nudge (R9): the session applies it only while playing
+    // and outside the cooldown, as a velocity impulse at the top of this step.
+    // Then the session clock advances one fixed step.
     const ge = gameInput.drainEdges();
     if (ge.start && session.onStart()) reactive.resetLights();
+    if (ge.nudgeLeft) session.onNudge("left");
+    if (ge.nudgeRight) session.onNudge("right");
+    if (ge.nudgeUp) session.onNudge("up");
+    session.tick();
   }
 
   // Built ONCE and passed by reference, like onFixedStep: runs right after each

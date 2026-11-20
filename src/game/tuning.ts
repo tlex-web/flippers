@@ -8,6 +8,8 @@
  * documented with where it came from.
  */
 
+import type { Vec2 } from "../physics/types";
+
 /**
  * Bumper kick target (m/s): on the trigger step the ball's outward speed along
  * bumper-center -> ball-center is raised to this value; the tangential velocity
@@ -91,3 +93,39 @@ export const ROLLOVER_BANK_BONUS = 10000;
  * Points per inlane pass. Inlanes score but do not light (assumption A1/A7).
  */
 export const INLANE_POINTS = 2000;
+
+// ---------------------------------------------------------------------------
+// Nudge (R9, GAME-03)
+// ---------------------------------------------------------------------------
+
+/** A nudge direction, one per nudge key (KeyX, Period, ArrowUp). */
+export type NudgeDir = "left" | "right" | "up";
+
+/**
+ * Nudge impulse (kg·m/s) applied to every live ball on an accepted nudge,
+ * through `applyImpulse` (velocity only, never a position write, so a nudge can
+ * never teleport the ball or carry it through a wall). On the 0.1257 kg ball
+ * that is a velocity change of about 1.19 m/s: enough to save an outlane drift,
+ * small enough not to become free ball control (R9, assumption A3, by-feel).
+ */
+export const NUDGE_IMPULSE = 0.15;
+
+/**
+ * Minimum gap between accepted nudges, in FIXED steps (30 steps = 0.25 s at
+ * 120 Hz), never wall-clock. A nudge inside the window does nothing (spam guard,
+ * T-04-14); the accumulating tilt meter punishes sustained shaking.
+ */
+export const NUDGE_COOLDOWN_STEPS = 30;
+
+/**
+ * Unit direction of the impulse each nudge key gives the ball, in playfield
+ * coordinates (+x right, +y down-table). Reaction model (assumption A2):
+ * shoving the cabinet left throws the ball RIGHT relative to the playfield
+ * (KeyX -> +x), shoving right throws it left (Period -> -x), and a forward shove
+ * throws it up-table (ArrowUp -> -y). Flip a sign here if it feels backwards.
+ */
+export const NUDGE_DIRS: Readonly<Record<NudgeDir, Vec2>> = {
+  left: { x: 1, y: 0 },
+  right: { x: -1, y: 0 },
+  up: { x: 0, y: -1 },
+};

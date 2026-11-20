@@ -23,6 +23,8 @@ function makeSession(): GameSession {
   const world: GameSessionWorld = {
     addBall: () => nextId++,
     removeBall: () => {},
+    getBalls: () => [],
+    applyImpulse: () => {},
   };
   const router = new CollisionRouter({ drainEvents: () => [] });
   const session = new GameSession(world, router, { x: 0, y: 0 });
@@ -107,6 +109,8 @@ function makeRig(): Rig {
       calls.push({ op: "remove", id });
       live.delete(id);
     },
+    getBalls: () => [],
+    applyImpulse: () => {},
   };
   let batch: CollisionEvent[] = [];
   const router = new CollisionRouter({ drainEvents: () => batch });
