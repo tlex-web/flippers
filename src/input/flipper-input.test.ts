@@ -434,6 +434,155 @@ describe("Windows both-Shift merge (G-04-17)", () => {
     expect(input.isHeld("right")).toBe(false);
   });
 
+  /**
+   * Replay a captured both-Shift order on a heal-on input, draining after every
+   * event: the first press, the repeat-flagged second press, then the only
+   * keyup Windows delivers (shiftKey false).
+   */
+  function replayOrder(
+    first: "ShiftLeft" | "ShiftRight",
+    second: "ShiftLeft" | "ShiftRight",
+    final: "ShiftLeft" | "ShiftRight",
+  ): void {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    const pressOf = (c: string) => (c === "ShiftLeft" ? "leftPress" : "rightPress");
+
+    input.handleKeyDown(wev(first, true, false));
+    expect(input.drainEdges()[pressOf(first)]).toBe(true);
+
+    input.handleKeyDown(wev(second, true, true));
+    expect(input.drainEdges()[pressOf(second)]).toBe(true);
+
+    input.handleKeyUp(wev(final, false, false));
+    const end = input.drainEdges();
+    expect(end.leftRelease).toBe(true);
+    expect(end.rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  }
+
+  it("B: captured order B (LD RD RU LU) presses both sides and the final ShiftLeft keyup releases both", () => {
+    replayOrder("ShiftLeft", "ShiftRight", "ShiftLeft");
+  });
+
+  it("D: captured order D (RD LD LU RU) presses both sides and the final ShiftRight keyup releases both", () => {
+    replayOrder("ShiftRight", "ShiftLeft", "ShiftRight");
+  });
+
+  it("D': derived order D' (RD LD RU LU) presses both sides and the final ShiftLeft keyup releases both", () => {
+    replayOrder("ShiftRight", "ShiftLeft", "ShiftLeft");
+  });
+
+  it("F: a ShiftLeft re-tap while ShiftRight is held is a plain repeat (no edge, no preventDefault)", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("ShiftLeft", true, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+    input.handleKeyDown(wev("ShiftRight", true, true));
+    expect(input.drainEdges().rightPress).toBe(true);
+
+    const retap = wev("ShiftLeft", true, true);
+    input.handleKeyDown(retap);
+    const mid = input.drainEdges();
+    expect(mid.leftPress || mid.leftRelease || mid.rightPress || mid.rightRelease).toBe(false);
+    expect(retap.preventDefault).not.toHaveBeenCalled();
+
+    input.handleKeyUp(wev("ShiftRight", false, false));
+    const end = input.drainEdges();
+    expect(end.leftRelease).toBe(true);
+    expect(end.rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  });
+
+  it("C: a single ShiftLeft tap presses then releases the left side only", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("ShiftLeft", true, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+
+    input.handleKeyUp(wev("ShiftLeft", false, false));
+    const up = input.drainEdges();
+    expect(up.leftRelease).toBe(true);
+    expect(up.rightRelease).toBe(false);
+    expect(up.rightPress).toBe(false);
+  });
+
+  it("a held Shift's own auto-repeat never re-triggers a flip or preventDefaults", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("ShiftLeft", true, false));
+    let presses = input.drainEdges().leftPress ? 1 : 0;
+    for (let i = 0; i < 5; i++) {
+      const rep = wev("ShiftLeft", true, true);
+      input.handleKeyDown(rep);
+      if (input.drainEdges().leftPress) presses++;
+      expect(rep.preventDefault).not.toHaveBeenCalled();
+    }
+    expect(presses).toBe(1);
+
+    input.handleKeyUp(wev("ShiftLeft", false, false));
+    expect(input.drainEdges().leftRelease).toBe(true);
+  });
+
+  it("a lone Shift repeat with nothing held is not a second press: no edge, not held", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("ShiftLeft", true, true));
+    const edges = input.drainEdges();
+    expect(edges.leftPress || edges.leftRelease || edges.rightPress || edges.rightRelease).toBe(
+      false,
+    );
+    expect(input.isHeld("left")).toBe(false);
+  });
+
+  it("non-Shift repeats are untouched by the option: KeyZ then a KeyZ repeat is one press", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("KeyZ", false, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+    input.handleKeyDown(wev("KeyZ", false, true));
+    expect(input.drainEdges().leftPress).toBe(false);
+  });
+
+  it("a one-of-two Shift release reporting shiftKey true never heals: left releases, right stays held", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(wev("ShiftLeft", true, false));
+    input.handleKeyDown(wev("ShiftRight", true, true));
+    input.drainEdges();
+
+    input.handleKeyUp(wev("ShiftLeft", true, false));
+    const edges = input.drainEdges();
+    expect(edges.leftRelease).toBe(true);
+    expect(edges.rightRelease).toBe(false);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  for (const make of [
+    { label: "new FlipperInput()", build: () => new FlipperInput() },
+    {
+      label: "new FlipperInput({ windowsShiftHeal: false })",
+      build: () => new FlipperInput({ windowsShiftHeal: false }),
+    },
+  ]) {
+    it(`non-Windows guard (${make.label}): a repeat-flagged second Shift latches no press`, () => {
+      const input = make.build();
+      input.handleKeyDown(wev("ShiftLeft", true, false));
+      input.drainEdges();
+      input.handleKeyDown(wev("ShiftRight", true, true));
+      expect(input.drainEdges().rightPress).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+    });
+
+    it(`non-Windows guard (${make.label}): a ShiftRight keyup reporting shiftKey false keeps a held ShiftLeft`, () => {
+      const input = make.build();
+      input.handleKeyDown(wev("ShiftLeft", true, false));
+      input.handleKeyDown(wev("ShiftRight", true, false));
+      input.drainEdges();
+
+      input.handleKeyUp(wev("ShiftRight", false, false));
+      const edges = input.drainEdges();
+      expect(edges.rightRelease).toBe(true);
+      expect(edges.leftRelease).toBe(false);
+      expect(input.isHeld("left")).toBe(true);
+    });
+  }
+
   describe("isWindowsPlatform", () => {
     it('is true for navigator.platform "Win32"', () => {
       expect(isWindowsPlatform({ platform: "Win32" })).toBe(true);

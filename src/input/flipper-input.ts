@@ -12,7 +12,8 @@
  *  - Each side is HELD iff ANY of its bound codes is down (per-side OR); it
  *    RELEASES only when ALL of its codes are up.
  *  - `event.repeat === true` keydowns are ignored (OS auto-repeat never
- *    re-triggers a flip); an already-held code is de-duped (no duplicate press).
+ *    re-triggers a flip), except the Windows second Shift press below; an
+ *    already-held code is de-duped (no duplicate press).
  *  - `preventDefault()` fires on BOUND codes only (`/` = Firefox quick-find,
  *    arrows = page scroll) — reserved keys (Space plunger; X/./ArrowUp nudge) are
  *    never swallowed (threat T-02-03).
@@ -26,16 +27,33 @@
  *    OS's modifier state then proves no Shift is down, so a held Shift is a
  *    stale code whose keyup the OS took. Only a strict `false` counts: an
  *    event without the field (unknown state) never reconciles. Events of the
- *    Shift keys themselves never reconcile, because platforms differ in how
- *    they report the REMAINING Shift on one Shift's keyup, and the D-09
- *    both-Shift cradle must never lose a held bat to that. Edges come from each
+ *    Shift keys themselves reconcile only with `windowsShiftHeal` on (below):
+ *    platforms differ in how they report the REMAINING Shift on one Shift's
+ *    keyup, and off Windows the D-09 both-Shift cradle must never lose a held
+ *    bat to that. Edges come from each
  *    event's NET per-side transition, so dropping a stale Shift and adding the
  *    new key in one event (Z over a stale ShiftLeft) is edge-free: the bat does
  *    not drop under the player's finger. Residual: with Windows Sticky Keys
  *    turned ON, the OS keeps Shift logically down, reports `shiftKey` true and
  *    withholds the keyup until the next non-modifier key, so no browser check
- *    can release it earlier. Whether Shift stays a default binding is a user
- *    decision; the bindings are unchanged.
+ *    can release it earlier. Shift stays a default binding (UAT 18, decision
+ *    A); the bindings are unchanged.
+ *  - Windows both-Shift merge (G-04-17): Windows posts both Shift keys as ONE
+ *    virtual key, VK_SHIFT. The second Shift pressed while the other is held
+ *    arrives as a keydown flagged `repeat` (the OS previous-state bit of the
+ *    shared key), and the first Shift released while both are held sends NO
+ *    keyup; only the final release fires, reporting `shiftKey` false. Two
+ *    heals: (1) a repeat keydown for a Shift code that is not held while the
+ *    other Shift is held counts as a press; (2) a ShiftLeft/ShiftRight keyup
+ *    reporting `shiftKey` strictly false drops BOTH Shift codes, because on
+ *    Windows such a keyup only arrives once VK_SHIFT is fully up. Both are
+ *    gated to Windows: noVNC ships the same Windows-gated drop-both heal, and
+ *    Linux `shiftKey` on a one-of-two Shift release is unverified. The gate is
+ *    injected, never read here: main.ts passes `isWindowsPlatform(navigator)`
+ *    as `windowsShiftHeal`, and the default is off so tests pick a path
+ *    explicitly. Residual: on Windows, a bat whose Shift is released while the
+ *    other Shift is still held stays up until the other Shift is released,
+ *    because the browser receives no event in between.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -316,8 +334,10 @@ export class FlipperInput {
    * Stale-Shift reconciliation (G-04-11): when a NON-Shift key event reports
    * `shiftKey === false`, no Shift is down, so a held ShiftLeft/ShiftRight is a
    * code whose keyup the OS took; drop it. No-op for an absent `shiftKey`
-   * (unknown state), for `true`, and for the Shift keys' own events (the D-09
-   * cradle). Latches no edge itself: the caller commits the net transition.
+   * (unknown state) and for `true`. The Shift keys' own events reconcile only
+   * with `windowsShiftHeal` on (G-04-17: on Windows a Shift keyup reporting
+   * Shift up means VK_SHIFT is fully up); off, they never do (the D-09 cradle).
+   * Latches no edge itself: the caller commits the net transition.
    */
   private dropStaleShift(e: KeyEventLike): void {
     if (e.shiftKey !== false) return;

@@ -511,31 +511,48 @@ describe("Windows both-Shift hold (G-04-17)", () => {
     preventDefault: () => {},
   });
 
-  it("order A (LD RD LU RU): both bats rise, and both drop on the final ShiftRight keyup", () => {
+  type ShiftCode = "ShiftLeft" | "ShiftRight";
+
+  /**
+   * One both-Shift order on a heal-on rig, as the browser sees it on Windows:
+   * the first press, `gapSteps` later the repeat-flagged second press, a 30-step
+   * window in which the first physical release sends nothing (optionally
+   * carrying `windowEvent`), then the only keyup, `finalCode` with Shift up.
+   */
+  function runOrder(
+    firstCode: ShiftCode,
+    secondCode: ShiftCode,
+    finalCode: ShiftCode,
+    gapSteps = 20,
+    windowEvent?: KeyEventLike,
+  ): void {
     const rig = makeRig(true);
     const ids = [rig.leftId, rig.rightId] as const;
+    const idOf = (c: ShiftCode): number => (c === "ShiftLeft" ? rig.leftId : rig.rightId);
     for (let i = 0; i < 20; i++) rig.step();
     const restTip = ids.map((id) => rig.tipY(id));
 
-    rig.input.handleKeyDown(wkey("ShiftLeft", true, false));
-    for (let i = 0; i < 20; i++) rig.step();
-    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    rig.input.handleKeyDown(wkey(firstCode, true, false));
+    for (let i = 0; i < gapSteps; i++) rig.step();
+    expect(rig.controller.getPhase(idOf(firstCode))).toBe("held-up");
 
     // The second Shift arrives flagged repeat (second-press recovery).
-    rig.input.handleKeyDown(wkey("ShiftRight", true, true));
+    rig.input.handleKeyDown(wkey(secondCode, true, true));
     for (let i = 0; i < 20; i++) rig.step();
     expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
     expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
 
-    // Physical LU: the browser receives nothing, so both bats stay up (residual).
+    // The first physical release: the browser receives nothing, so both bats
+    // stay up (the residual window).
+    if (windowEvent) rig.input.handleKeyDown(windowEvent);
     for (let i = 0; i < 30; i++) {
       rig.step();
       expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
       expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
     }
 
-    // Physical RU: the only keyup, ShiftRight with Shift up, drops both.
-    rig.input.handleKeyUp(wkey("ShiftRight", false, false));
+    // The final physical release: the only keyup, Shift up, drops both.
+    rig.input.handleKeyUp(wkey(finalCode, false, false));
     const fall = stepsUntilEachMoved(rig, ids, 40);
     for (const n of fall) {
       expect(n).toBeGreaterThanOrEqual(1);
@@ -548,5 +565,71 @@ describe("Windows both-Shift hold (G-04-17)", () => {
     });
     expect(rig.input.isHeld("left")).toBe(false);
     expect(rig.input.isHeld("right")).toBe(false);
+  }
+
+  it("order A (LD RD LU RU): both bats rise, and both drop on the final ShiftRight keyup", () => {
+    runOrder("ShiftLeft", "ShiftRight", "ShiftRight");
+  });
+
+  it("order B (LD RD RU LU): both bats rise, and both drop on the final ShiftLeft keyup", () => {
+    runOrder("ShiftLeft", "ShiftRight", "ShiftLeft");
+  });
+
+  it("order D (RD LD LU RU): both bats rise, and both drop on the final ShiftRight keyup", () => {
+    runOrder("ShiftRight", "ShiftLeft", "ShiftRight");
+  });
+
+  it("order D' (RD LD RU LU): both bats rise, and both drop on the final ShiftLeft keyup", () => {
+    runOrder("ShiftRight", "ShiftLeft", "ShiftLeft");
+  });
+
+  it("order E (LD, 2600 ms, RD LU RU): a 312-step gap still recovers the second press", () => {
+    runOrder("ShiftLeft", "ShiftRight", "ShiftRight", 312);
+  });
+
+  it("order F (LD RD LU LD LU RU): a ShiftLeft re-tap repeat in the no-event window changes nothing", () => {
+    runOrder("ShiftLeft", "ShiftRight", "ShiftRight", 20, wkey("ShiftLeft", true, true));
+  });
+
+  it("a single Shift tap on the Windows path raises and drops the left bat only", () => {
+    const rig = makeRig(true);
+    for (let i = 0; i < 20; i++) rig.step();
+    const restTip = rig.tipY(rig.leftId);
+
+    rig.input.handleKeyDown(wkey("ShiftLeft", true, false));
+    for (let i = 0; i < 20; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+    }
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+
+    rig.input.handleKeyUp(wkey("ShiftLeft", false, false));
+    const fall = stepsUntilMoved(rig, rig.leftId, 40);
+    expect(fall).toBeGreaterThanOrEqual(1);
+    expect(fall).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 90; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+    }
+    expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+    expect(Math.abs(rig.tipY(rig.leftId) - restTip)).toBeLessThan(0.02);
+  });
+
+  it("the cradle with a shiftKey-true one-of-two release drops only the released bat", () => {
+    const rig = makeRig(true);
+    rig.input.handleKeyDown(wkey("ShiftLeft", true, false));
+    rig.input.handleKeyDown(wkey("ShiftRight", true, true));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    rig.input.handleKeyUp(wkey("ShiftLeft", true, false));
+    const fall = stepsUntilMoved(rig, rig.leftId, 40);
+    expect(fall).toBeGreaterThanOrEqual(1);
+    expect(fall).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 30; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+    }
   });
 });
