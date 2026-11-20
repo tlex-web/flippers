@@ -38,6 +38,14 @@ export interface HudData {
   kineticEnergy: number;
 }
 
+/**
+ * Read-only light state the renderer draws from (the rules side, e.g.
+ * `ReactiveElements`). The renderer never writes it.
+ */
+export interface LightState {
+  isLit(elementId: number): boolean;
+}
+
 /** Padding (CSS px) around the world box so strokes/HUD are not clipped. */
 const PAD = 24;
 
@@ -62,6 +70,10 @@ const COL_METER_TICK = "rgba(159, 179, 200, 0.45)";
 const COL_METER_FILL = "#f4a261";
 const COL_METER_FULL = "#ef476f";
 const COL_PLUNGER = "#c9d6e3";
+/** A lit top rollover: solid, bright and wide. Real glow is Phase 6 (PLSH-04). */
+const COL_ROLLOVER_LIT = "#d9ff66";
+/** Line width (px) of a lit rollover; every other element strokes at 3. */
+const LIT_ROLLOVER_WIDTH = 6;
 
 /*
  * Plunger charge meter + pullback (D-10). The meter is an outlined vertical bar
@@ -205,7 +217,9 @@ export class DebugRenderer {
   }
 
   /**
-   * Render one frame from interface state. `balls` are the drawn (interpolated)
+   * Render one frame from interface state.
+   * `lights` is read-only light state (the rules' `ReactiveElements`); a lit
+   * rollover is drawn solid and bright. Omitted, every sensor draws dashed. `balls` are the drawn (interpolated)
    * positions computed by the caller from the loop's previous/current pair.
    * `plungerCharge` is the controller's normalized charge in [0, 1], the same
    * value the launch impulse is computed from (D-10).
@@ -215,6 +229,7 @@ export class DebugRenderer {
     balls: readonly InterpolatedBall[],
     hud: HudData,
     plungerCharge: number,
+    lights?: LightState,
   ): void {
     const ctx = this.ctx;
     const dpr = this.dpr;
@@ -229,7 +244,7 @@ export class DebugRenderer {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(this.offX, this.offY);
 
-    this.drawElements(world.getElements());
+    this.drawElements(world.getElements(), lights);
     this.drawFlippers(world.getFlippers());
     this.drawChargeMeter(plungerCharge);
     this.drawBalls(balls);
@@ -248,7 +263,7 @@ export class DebugRenderer {
    * styles and dash arrays are module-level and the geometry is read straight
    * off the resolve.
    */
-  private drawElements(elements: readonly ResolvedElement[]): void {
+  private drawElements(elements: readonly ResolvedElement[], lights?: LightState): void {
     const ctx = this.ctx;
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
@@ -256,8 +271,15 @@ export class DebugRenderer {
     for (const el of elements) {
       if (el.mount) continue;
       const style = KIND_STYLE[el.kind];
-      ctx.strokeStyle = style.stroke;
-      ctx.setLineDash(el.sensor ? SENSOR_DASH : SOLID_DASH);
+      if (el.kind === "rollover" && lights?.isLit(el.id) === true) {
+        ctx.strokeStyle = COL_ROLLOVER_LIT;
+        ctx.setLineDash(SOLID_DASH);
+        ctx.lineWidth = LIT_ROLLOVER_WIDTH;
+      } else {
+        ctx.strokeStyle = style.stroke;
+        ctx.setLineDash(el.sensor ? SENSOR_DASH : SOLID_DASH);
+        ctx.lineWidth = 3;
+      }
       if (el.circle) {
         const c = el.circle;
         ctx.beginPath();
@@ -286,6 +308,7 @@ export class DebugRenderer {
       ctx.stroke();
     }
     ctx.setLineDash(SOLID_DASH);
+    ctx.lineWidth = 3;
   }
 
   private drawFlippers(flippers: readonly FlipperState[]): void {

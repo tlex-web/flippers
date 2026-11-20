@@ -2,11 +2,19 @@ import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
-import { FIXED_DT } from "../physics/constants";
+import { mulberry32 } from "../harness/prng";
+import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, CollisionPartnerKind } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
-import { deriveKickFace, ReactiveElements, type KickFace, type RulesGate } from "./reactive-elements";
+import { OPEN_FIELD_REGION } from "../table/spec";
+import {
+  deriveKickFace,
+  ReactiveElements,
+  type KickFace,
+  type ReactiveWorld,
+  type RulesGate,
+} from "./reactive-elements";
 import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
@@ -292,5 +300,115 @@ describe("rollover rule on the real table (ELEM-03)", () => {
     expect(found).toBe(true);
     expect(rig.gate.score - before).toBe(ROLLOVER_POINTS);
     expect(rig.reactive?.isLit(401)).toBe(true);
+  });
+});
+
+/** Seed of the energy-bound drop stream (phase 04, plan 03). */
+const ENERGY_SEED = 0x0403;
+const ENERGY_DROPS = 12;
+const ENERGY_MAX_DRAWS = 64;
+/** Origin clearance beyond the ball radius (m). */
+const ENERGY_CLEARANCE = BALL_RADIUS_M + 0.05;
+const SIXTY_SECONDS = Math.round(60 / FIXED_DT);
+/** Speed bound (m/s): well above the probed 7.47 m/s peak, far below a runaway. */
+const ENERGY_MAX_SPEED = 15;
+
+function pointSegmentDistance(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/**
+ * Draw ENERGY_DROPS seeded origins from OPEN_FIELD_REGION, rejecting any within
+ * ENERGY_CLEARANCE of a solid segment or a bumper rim (the 03-03 soak idea).
+ */
+function energyOrigins(): { x: number; y: number }[] {
+  const probe = new PlanckWorld();
+  const segments = probe.getBoundarySegments();
+  const circles = probe
+    .getElements()
+    .map((el) => el.circle)
+    .filter((c): c is NonNullable<typeof c> => c !== null);
+  const rand = mulberry32(ENERGY_SEED);
+  const r = OPEN_FIELD_REGION;
+  const out: { x: number; y: number }[] = [];
+  for (let draw = 0; draw < ENERGY_MAX_DRAWS && out.length < ENERGY_DROPS; draw++) {
+    const x = r.minX + rand() * (r.maxX - r.minX);
+    const y = r.minY + rand() * (r.maxY - r.minY);
+    const nearWall = segments.some(
+      (sg) => pointSegmentDistance(x, y, sg.a.x, sg.a.y, sg.b.x, sg.b.y) < ENERGY_CLEARANCE,
+    );
+    const nearBumper = circles.some(
+      (c) => Math.hypot(x - c.center.x, y - c.center.y) < c.radius + ENERGY_CLEARANCE,
+    );
+    if (!nearWall && !nearBumper) out.push({ x, y });
+  }
+  if (out.length < ENERGY_DROPS) {
+    throw new Error(
+      `seed 0x${ENERGY_SEED.toString(16)}: only ${out.length} clear origins in ${ENERGY_MAX_DRAWS} draws`,
+    );
+  }
+  return out;
+}
+
+interface DropResult {
+  readonly drained: boolean;
+  readonly maxSpeed: number;
+  readonly kicks: number;
+}
+
+/** One dead-flipper drop with every kick live: run to the drain or 60 s. */
+function dropToDrain(origin: { x: number; y: number }): DropResult {
+  const world = new PlanckWorld();
+  // Dead, drooped bats: motor 0 from construction, never driven.
+  new FlipperController(world);
+  const router = new CollisionRouter(world);
+  let kicks = 0;
+  const counted: ReactiveWorld = {
+    getElements: () => world.getElements(),
+    getBalls: () => world.getBalls(),
+    applyImpulse: (ballId, ix, iy) => {
+      kicks++;
+      world.applyImpulse(ballId, ix, iy);
+    },
+  };
+  const reactive = new ReactiveElements(counted, router, new SumGate(() => 0));
+  let drained = false;
+  router.register((e) => {
+    if (e.elementKind === "drain" && e.elementId === 600) drained = true;
+  });
+  const loop = new FixedStepLoop(world);
+  const onPostStep = (): void => {
+    router.dispatch();
+    reactive.service();
+  };
+  world.addBall(origin);
+  let maxSpeed = 0;
+  for (let i = 0; i < SIXTY_SECONDS && !drained; i++) {
+    loop.advance(FIXED_DT * 1000, undefined, onPostStep);
+    for (const b of world.getBalls()) maxSpeed = Math.max(maxSpeed, Math.hypot(b.vx, b.vy));
+  }
+  return { drained, maxSpeed, kicks };
+}
+
+describe("energy bound with every kick live (ELEM-01/02)", () => {
+  it("12 seeded dead-flipper drops all drain within 60 s, never exceed 15 m/s, and kicks fire", () => {
+    const results = energyOrigins().map(dropToDrain);
+    const drained = results.filter((r) => r.drained).length;
+    const maxSpeed = Math.max(...results.map((r) => r.maxSpeed));
+    const kicks = results.reduce((sum, r) => sum + r.kicks, 0);
+    expect(drained).toBe(ENERGY_DROPS);
+    expect(maxSpeed).toBeLessThanOrEqual(ENERGY_MAX_SPEED);
+    expect(kicks).toBeGreaterThan(0);
   });
 });

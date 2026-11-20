@@ -280,7 +280,7 @@ function main(): void {
 
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
-    renderer.draw(world, interpolated, hud, plunger.getCharge());
+    renderer.draw(world, interpolated, hud, plunger.getCharge(), reactive);
     // The score lands in the frame the hit lands (write only on change).
     hudView.update(session);
   }
