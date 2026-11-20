@@ -54,6 +54,8 @@ function makeRig(): {
   angleOf: (id: number) => number;
   /** True WORLD tip height (m): pivotY + length·sin(angle). Smaller = higher up. */
   tipY: (id: number) => number;
+  /** Static world-frame rest-limit angle the world reports for a bat. */
+  restLimitAngleOf: (id: number) => number;
   /** Drain the latch, feed the FSM, tick it, then run ONE fixed 120 Hz step. */
   step: () => void;
 } {
@@ -82,6 +84,7 @@ function makeRig(): {
     const f = stateOf(id);
     return f.pivotY + f.length * Math.sin(f.angle);
   };
+  const restLimitAngleOf = (id: number): number => stateOf(id).restLimitAngle;
 
   const step = (): void => {
     // Top of the fixed step (D-10): drain the input latch, feed per-side edges to
@@ -96,7 +99,7 @@ function makeRig(): {
     if (n !== 1) throw new Error(`expected exactly 1 fixed step, got ${n}`);
   };
 
-  return { input, controller, leftId, rightId, angleOf, tipY, step };
+  return { input, controller, leftId, rightId, angleOf, tipY, restLimitAngleOf, step };
 }
 
 /** Drive one side's flipper fully DOWN to its rest limit and let it settle. */
@@ -295,23 +298,41 @@ describe("flipper response after any hold or rest (G-04-10)", () => {
 
   it("no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised", () => {
     const stuck: string[] = [];
+    // Resting invariant, checked after EVERY step of every tap: the FSM may only
+    // report "resting" while the bat is within 0.1 rad of its rest limit.
+    const restingAway: string[] = [];
     for (const b of ALL_BINDINGS) {
       for (let hold = 3; hold <= 10; hold++) {
         for (const pre of [20, 57, 94, 131]) {
           const rig = makeRig();
           const id = sideId(rig, b.side);
-          for (let i = 0; i < pre; i++) rig.step();
+          const restLimit = rig.restLimitAngleOf(id);
+          const label = `${b.code} hold=${hold} pre=${pre}`;
+          let violated = false;
+          const stepChecked = (): void => {
+            rig.step();
+            if (
+              !violated &&
+              rig.controller.getPhase(id) === "resting" &&
+              Math.abs(rig.angleOf(id) - restLimit) > 0.1
+            ) {
+              violated = true;
+              restingAway.push(label);
+            }
+          };
+          for (let i = 0; i < pre; i++) stepChecked();
           const restTip = rig.tipY(id);
           rig.input.handleKeyDown(key(b.code));
-          for (let i = 0; i < hold; i++) rig.step();
+          for (let i = 0; i < hold; i++) stepChecked();
           rig.input.handleKeyUp(key(b.code));
-          for (let i = 0; i < 90; i++) rig.step();
+          for (let i = 0; i < 90; i++) stepChecked();
           const resting = rig.controller.getPhase(id) === "resting";
           const atRest = Math.abs(rig.tipY(id) - restTip) < 0.02;
-          if (!resting || !atRest) stuck.push(`${b.code} hold=${hold} pre=${pre}`);
+          if (!resting || !atRest) stuck.push(label);
         }
       }
     }
     expect(stuck).toEqual([]);
+    expect(restingAway).toEqual([]);
   });
 });

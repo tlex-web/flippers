@@ -84,6 +84,14 @@ export interface FlipperState {
    * variant only has to split `halfWidth` — this field stays meaningful.
    */
   readonly tipRadius: number;
+  /**
+   * World-frame body angle of this bat's rest (droop) joint limit, in the same
+   * frame as `angle` (left bat ≈ 0.39, mirrored right bat ≈ 2.75 on TABLE_SPEC).
+   * Static geometry: never changes after construction. The engine may settle a
+   * resting bat slightly past it (Planck's angular slop is ≈ 0.035 rad). The
+   * flipper FSM reads it to enter `resting` only at the real rest limit (G-04-10).
+   */
+  readonly restLimitAngle: number;
 }
 
 /**

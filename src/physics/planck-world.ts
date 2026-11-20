@@ -154,6 +154,7 @@ interface MutableFlipperState {
   length: number;
   halfWidth: number;
   tipRadius: number;
+  restLimitAngle: number;
 }
 
 /**
@@ -601,11 +602,13 @@ export class PlanckWorld implements PhysicsWorld {
     );
     this.world.createJoint(joint);
 
+    // Droop limit = the limit opposite the raise direction (joint angle is body
+    // angle minus the level referenceAngle `restAngle`). Its body angle is the
+    // static rest-limit angle every spec reports (FlipperState.restLimitAngle).
+    const droop = raiseSign < 0 ? FLIPPER_UPPER_ANGLE : FLIPPER_LOWER_ANGLE;
+    const restLimitAngle = restAngle + droop;
     if (restPose) {
-      // Droop limit = the limit opposite the raise direction (joint angle is
-      // body angle minus the level referenceAngle `restAngle`).
-      const droop = raiseSign < 0 ? FLIPPER_UPPER_ANGLE : FLIPPER_LOWER_ANGLE;
-      bat.setTransform(Vec2(px, py), restAngle + droop);
+      bat.setTransform(Vec2(px, py), restLimitAngle);
     }
 
     // lastDirection NaN: the construction motor speed is not a commanded
@@ -619,6 +622,7 @@ export class PlanckWorld implements PhysicsWorld {
       length: FLIPPER_LENGTH_M,
       halfWidth: FLIPPER_HALF_WIDTH_M,
       tipRadius: FLIPPER_TIP_RADIUS_M,
+      restLimitAngle,
     });
   }
 
