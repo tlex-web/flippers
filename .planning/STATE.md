@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
-status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-11-20T19:56:30.445Z"
+status: verifying
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-11-20T20:02:14.130Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: 80e33dd6360cbf0c93971934c61d49577eb34d74
+state_head: 4beab23033b6b08cffc0ee7c21fe534551382dca
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 29
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-20 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -88,6 +88,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P07 | 6min | 2 tasks | 5 files |
 | Phase 04 P08 | 9min | 3 tasks | 10 files |
 | Phase 04 P09 | 9 min | 2 tasks | 7 files |
+| Phase 04 P10 | 4 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-09: Flipper reversal dead time (G-04-10) fixed in PlanckWorld.setFlipperMotor by toggling RevoluteJoint.enableLimit off/on on each commanded sign change (public API, clears warm-started limit impulse); torque 500 and feel constants unchanged
 - [Phase 04]: 04-09: FlipperController enters resting only after 2 consecutive settled updates within 0.1 rad of FlipperState.restLimitAngle; resting == motor 0 invariant kept
 - [Phase 04]: 04-09: FLIP-02 launch proof runs on OPEN_PROOF_BOX (PROOF_BOX_SPEC minus wall 3), secondary floor 1.3x per user sign-off; VR_RATIO_TOL 0.35 unchanged
+- [Phase 04]: 04-10: diagnosis readout moved to a DOM panel (#hud-diag, DiagView write-on-change); the canvas paints no text
+- [Phase 04]: 04-10: controls hint is a five-row dl key/action list with kbd key caps; NumpadEnter stays an unlisted Enter alias
 
 ### Pending Todos
 
@@ -166,7 +169,7 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 3 → 5]: The 03-UI-REVIEW carry-forwards apply to the real renderer:
-  - The HUD ignores the display fit and renders at about 3.4 px.
+  - ~~The HUD ignores the display fit and renders at about 3.4 px.~~ Resolved in 04-10: the readout is DOM text (#hud-diag); the canvas paints no text.
   - `#ef476f` is used for the drain, the velocity arrow and the full meter.
   - There is no on-screen controls hint and no `aria-label` on the canvas.
 - [Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display. The headless ball-feed tests cover those rates.
@@ -188,6 +191,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T19:56:29.428Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-11-20T20:02:13.062Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None
