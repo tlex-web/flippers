@@ -612,3 +612,84 @@ describe("Windows both-Shift merge (G-04-17)", () => {
     });
   });
 });
+
+describe("same-window release and press (WR-01)", () => {
+  /** A synthetic key event with an explicit modifier state. */
+  function kev(code: string, shiftKey: boolean, repeat = false) {
+    return { code, shiftKey, repeat, preventDefault: vi.fn() };
+  }
+
+  /** A Shift keydown reporting Shift down, drained, whose keyup never arrives. */
+  function staleShift(code: "ShiftLeft" | "ShiftRight"): FlipperInput {
+    const input = new FlipperInput();
+    input.handleKeyDown(kev(code, true));
+    input.drainEdges();
+    return input;
+  }
+
+  it("W1: a stale ShiftLeft healed by KeyX plus a KeyZ press in one window keeps the left bat up", () => {
+    const input = staleShift("ShiftLeft");
+    input.handleKeyDown(kev("KeyX", false));
+    input.handleKeyDown(kev("KeyZ", false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.leftRelease).toBe(false);
+    expect(input.isHeld("left")).toBe(true);
+  });
+
+  it("W2: mirror, a stale ShiftRight healed by KeyX plus a Slash press in one window keeps the right bat up", () => {
+    const input = staleShift("ShiftRight");
+    input.handleKeyDown(kev("KeyX", false));
+    input.handleKeyDown(kev("Slash", false));
+    const edges = input.drainEdges();
+    expect(edges.rightPress).toBe(true);
+    expect(edges.rightRelease).toBe(false);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("W3: a finger roll (ShiftLeft up, KeyZ down) inside one window keeps the left bat up", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(kev("ShiftLeft", true));
+    input.drainEdges();
+    input.handleKeyUp(kev("ShiftLeft", false));
+    input.handleKeyDown(kev("KeyZ", false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.leftRelease).toBe(false);
+  });
+
+  it("W4: a KeyZ tap inside one window still delivers both edges", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(kev("KeyZ", false));
+    input.handleKeyUp(kev("KeyZ", false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.leftRelease).toBe(true);
+  });
+
+  it("W5: release, press, release inside one window delivers both edges (not held at drain time)", () => {
+    const input = new FlipperInput();
+    input.handleKeyDown(kev("KeyZ", false));
+    input.drainEdges();
+    input.handleKeyUp(kev("KeyZ", false));
+    input.handleKeyDown(kev("KeyZ", false));
+    input.handleKeyUp(kev("KeyZ", false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.leftRelease).toBe(true);
+  });
+
+  it("W6: the Windows final-keyup heal plus a KeyZ press in one window keeps the left bat up and drops the right", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(kev("ShiftLeft", true, false));
+    input.handleKeyDown(kev("ShiftRight", true, true));
+    input.drainEdges();
+
+    input.handleKeyUp(kev("ShiftRight", false));
+    input.handleKeyDown(kev("KeyZ", false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.leftRelease).toBe(false);
+    expect(edges.rightRelease).toBe(true);
+  });
+});

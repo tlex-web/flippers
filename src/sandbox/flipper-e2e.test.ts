@@ -633,3 +633,83 @@ describe("Windows both-Shift hold (G-04-17)", () => {
     }
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * WR-01: a release and a same-side press in one drain window.
+ * ------------------------------------------------------------------------- */
+
+describe("same-window release and press (WR-01)", () => {
+  /** A synthetic key event carrying an explicit Shift modifier state. */
+  const ekey = (code: string, shiftKey: boolean, repeat = false): KeyEventLike => ({
+    code,
+    shiftKey,
+    repeat,
+    preventDefault: () => {},
+  });
+
+  it("a stale ShiftLeft healed by KeyX plus a KeyZ press in one window never drops the held left bat", () => {
+    const rig = makeRig();
+    for (let i = 0; i < 20; i++) rig.step();
+    const restTip = rig.tipY(rig.leftId);
+
+    rig.input.handleKeyDown(ekey("ShiftLeft", true));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+
+    // Nudge and flip in the same frame: no step between the two keydowns.
+    rig.input.handleKeyDown(ekey("KeyX", false));
+    rig.input.handleKeyDown(ekey("KeyZ", false));
+    for (let i = 0; i < 10; i++) {
+      rig.step();
+      expect(["flipping-up", "held-up"]).toContain(rig.controller.getPhase(rig.leftId));
+    }
+
+    rig.input.handleKeyUp(ekey("KeyZ", false));
+    const fall = stepsUntilMoved(rig, rig.leftId, 40);
+    expect(fall).toBeGreaterThanOrEqual(1);
+    expect(fall).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 90; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+    expect(Math.abs(rig.tipY(rig.leftId) - restTip)).toBeLessThan(0.02);
+  });
+
+  it("the Windows final-keyup heal plus a KeyZ press in one window drops the right bat and keeps the left up", () => {
+    const rig = makeRig(true);
+    rig.input.handleKeyDown(ekey("ShiftLeft", true, false));
+    rig.input.handleKeyDown(ekey("ShiftRight", true, true));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    rig.input.handleKeyUp(ekey("ShiftRight", false));
+    rig.input.handleKeyDown(ekey("KeyZ", false));
+    const rightStart = rig.angleOf(rig.rightId);
+    let rightFall = -1;
+    for (let i = 1; i <= 10; i++) {
+      rig.step();
+      if (rightFall === -1 && Math.abs(rig.angleOf(rig.rightId) - rightStart) > MOVE_EPS_RAD) {
+        rightFall = i;
+      }
+      expect(["flipping-up", "held-up"]).toContain(rig.controller.getPhase(rig.leftId));
+    }
+    expect(rightFall).toBeGreaterThanOrEqual(1);
+    expect(rightFall).toBeLessThanOrEqual(2);
+
+    rig.input.handleKeyUp(ekey("KeyZ", false));
+    const leftFall = stepsUntilMoved(rig, rig.leftId, 40);
+    expect(leftFall).toBeGreaterThanOrEqual(1);
+    expect(leftFall).toBeLessThanOrEqual(2);
+  });
+
+  it("a KeyZ tap inside one window flips and drops the left bat back to rest", () => {
+    const rig = makeRig();
+    for (let i = 0; i < 20; i++) rig.step();
+    const restTip = rig.tipY(rig.leftId);
+
+    rig.input.handleKeyDown(ekey("KeyZ", false));
+    rig.input.handleKeyUp(ekey("KeyZ", false));
+    for (let i = 0; i < 90; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+    expect(Math.abs(rig.tipY(rig.leftId) - restTip)).toBeLessThan(0.02);
+  });
+});
