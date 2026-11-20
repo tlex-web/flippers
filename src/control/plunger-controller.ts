@@ -112,6 +112,10 @@ export class PlungerController {
     this.reset();
   }
 
+  /** Skeleton (RED): not implemented yet. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  applyEdges(press: boolean, release: boolean, cancel: boolean, heldNow: boolean, ballId: BallId): void {}
+
   /**
    * Advance one fixed step: while charging, raise the charge up to the cap. The
    * charge is the integer step count times `PLUNGER_CHARGE_RATE * FIXED_DT`, not

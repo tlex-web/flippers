@@ -100,6 +100,11 @@ export class PlungerInput {
     return this.view;
   }
 
+  /** Skeleton (RED): not implemented yet. */
+  isHeld(): boolean {
+    return false;
+  }
+
   /** Wire the handlers to the real browser globals (browser only; not in tests). */
   attach(): void {
     window.addEventListener("keydown", this.onWindowKeyDown);

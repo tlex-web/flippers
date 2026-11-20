@@ -228,6 +228,85 @@ describe("PlungerController: rest gate (IN-01)", () => {
   });
 });
 
+describe("PlungerController: applyEdges orders same-window edges by held state (IN-02)", () => {
+  /** A rig already charging for `k` steps. */
+  function charging(k = 10): { world: SpyWorld; plunger: PlungerController } {
+    const r = rig();
+    r.plunger.onPressEdge();
+    for (let i = 0; i < k; i++) r.plunger.update();
+    return r;
+  }
+
+  it("charging, then release and re-press in one window (held at drain): launches once and starts a new charge", () => {
+    const { world, plunger } = charging();
+    plunger.applyEdges(true, true, false, true, BALL);
+    expect(world.calls.length).toBe(1);
+    expect(plunger.getPhase()).toBe("charging");
+    expect(plunger.getCharge()).toBe(0);
+    for (let i = 0; i < 7; i++) plunger.update();
+    expect(plunger.getCharge()).toBeCloseTo(7 * STEP, 12);
+  });
+
+  it("idle, then a tap shorter than one window (not held at drain): one PLUNGER_MIN_IMPULSE launch, ending idle", () => {
+    const { world, plunger } = rig();
+    plunger.applyEdges(true, true, false, false, BALL);
+    expect(world.calls.length).toBe(1);
+    const call = world.calls[0];
+    expect(call && Math.hypot(call.ix, call.iy)).toBe(PLUNGER_MIN_IMPULSE);
+    expect(plunger.getPhase()).toBe("idle");
+    expect(plunger.getCharge()).toBe(0);
+  });
+
+  it("charging, then cancel and re-press in one window (held at drain): no impulse, a fresh charge", () => {
+    const { world, plunger } = charging();
+    plunger.applyEdges(true, false, true, true, BALL);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getPhase()).toBe("charging");
+    expect(plunger.getCharge()).toBe(0);
+  });
+
+  it("idle, then press and cancel in one window (not held at drain): no impulse, ending idle", () => {
+    const { world, plunger } = rig();
+    plunger.applyEdges(true, false, true, false, BALL);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getPhase()).toBe("idle");
+    expect(plunger.getCharge()).toBe(0);
+  });
+
+  it("each single edge alone matches the direct onPressEdge / onReleaseEdge / onCancelEdge call", () => {
+    type Edge = "press" | "release" | "cancel";
+    const direct = (p: PlungerController, e: Edge): void => {
+      if (e === "press") p.onPressEdge();
+      else if (e === "release") p.onReleaseEdge(BALL);
+      else p.onCancelEdge();
+    };
+    for (const e of ["press", "release", "cancel"] as const) {
+      for (const start of [0, -1, 10]) {
+        for (const heldNow of [true, false]) {
+          // start: 0 = idle, -1 = charging with no updates, k > 0 = charging k steps.
+          const via = start === 0 ? rig() : charging(Math.max(start, 0));
+          const ref = start === 0 ? rig() : charging(Math.max(start, 0));
+          via.plunger.applyEdges(e === "press", e === "release", e === "cancel", heldNow, BALL);
+          direct(ref.plunger, e);
+          const label = `${e} from ${start} held=${String(heldNow)}`;
+          expect(via.world.calls, label).toEqual(ref.world.calls);
+          expect(via.plunger.getPhase(), label).toBe(ref.plunger.getPhase());
+          expect(via.plunger.getCharge(), label).toBe(ref.plunger.getCharge());
+        }
+      }
+    }
+  });
+
+  it("no edges is a no-op", () => {
+    const { world, plunger } = charging(5);
+    const c = plunger.getCharge();
+    plunger.applyEdges(false, false, false, true, BALL);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getPhase()).toBe("charging");
+    expect(plunger.getCharge()).toBe(c);
+  });
+});
+
 describe("PlungerController: determinism and meter honesty (T-03-11, D-10)", () => {
   it("two fresh controllers fed the same edge script produce identical impulse calls", () => {
     const script = (plunger: PlungerController): void => {

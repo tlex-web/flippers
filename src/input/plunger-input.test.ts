@@ -125,6 +125,53 @@ describe("PlungerInput: Space press/release/cancel latch (D-08)", () => {
     expect(b).toBe(a);
   });
 
+  it("isHeld() is false before any key", () => {
+    expect(new PlungerInput().isHeld()).toBe(false);
+  });
+
+  it("isHeld() is true after a genuine Space keydown", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("Space"));
+    expect(input.isHeld()).toBe(true);
+  });
+
+  it("isHeld() stays true through an auto-repeat keydown", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("Space"));
+    input.handleKeyDown(ev("Space", true));
+    expect(input.isHeld()).toBe(true);
+  });
+
+  it("isHeld() is false after Space keyup", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("Space"));
+    input.handleKeyUp(ev("Space"));
+    expect(input.isHeld()).toBe(false);
+  });
+
+  it("isHeld() is false after a blur while held", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("Space"));
+    input.handleBlur();
+    expect(input.isHeld()).toBe(false);
+  });
+
+  it("isHeld() is false after the tab goes hidden while held", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("Space"));
+    input.handleVisibilityChange(true);
+    expect(input.isHeld()).toBe(false);
+  });
+
+  it("isHeld() ignores other codes", () => {
+    const input = new PlungerInput();
+    input.handleKeyDown(ev("KeyZ"));
+    expect(input.isHeld()).toBe(false);
+    input.handleKeyDown(ev("Space"));
+    input.handleKeyUp(ev("KeyZ"));
+    expect(input.isHeld()).toBe(true);
+  });
+
   it("preventDefaults Space only, never KeyZ or any other code", () => {
     const input = new PlungerInput();
     const space = ev("Space");
