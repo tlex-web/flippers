@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
