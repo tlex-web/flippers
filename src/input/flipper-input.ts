@@ -17,9 +17,10 @@
  *    arrows = page scroll) — reserved keys (Space plunger; X/./ArrowUp nudge) are
  *    never swallowed (threat T-02-03).
  *  - Press/release edges latch immediately and are drained by the consumer at the
- *    top of each fixed step; on window `blur` and `document` `visibilitychange`
- *    (hidden) the held set is force-cleared and release edges are emitted so a
- *    tab-blur can never strand a key "down" (threat T-02-03).
+ *    top of each fixed step; on window `blur`, `document` `visibilitychange`
+ *    (hidden) and window `focus` regain the held set is force-cleared and release
+ *    edges are emitted so a tab-blur, or a keyup an OS dialog took while the page
+ *    was blurred, can never strand a key "down" (threats T-02-03, T-04-27).
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -108,6 +109,7 @@ export class FlipperInput {
   private readonly onWindowKeyDown = (e: KeyboardEvent): void => this.handleKeyDown(e);
   private readonly onWindowKeyUp = (e: KeyboardEvent): void => this.handleKeyUp(e);
   private readonly onWindowBlur = (): void => this.handleBlur();
+  private readonly onWindowFocus = (): void => this.handleFocus();
   private readonly onVisibilityChange = (): void =>
     this.handleVisibilityChange(document.hidden);
 
@@ -145,6 +147,19 @@ export class FlipperInput {
     this.forceClear();
   }
 
+  /**
+   * Window focus regain (G-04-11): force-clear and emit release for every
+   * still-held side. Any key whose keydown the page handled while blurred is
+   * cleared: that keydown came after an OS dialog (e.g. the Windows Sticky Keys
+   * prompt) took focus, and its keyup went to the dialog, never to the page.
+   * The clear is strictly safe: window focus only follows a blur, and the blur
+   * already cleared every key held before it. A key physically held across the
+   * focus regain needs a fresh press, the same as after a blur.
+   */
+  handleFocus(): void {
+    this.forceClear();
+  }
+
   /** `document` visibilitychange: force-clear only when the tab became hidden. */
   handleVisibilityChange(hidden: boolean): void {
     if (hidden) this.forceClear();
@@ -168,17 +183,23 @@ export class FlipperInput {
   /**
    * Whether a side is held right now (any of its bound codes is down). Read on
    * a serve to re-press a bat whose key was held through the flipper drop
-   * (Pitfall 5); false after a blur or a hidden tab, which clear the held set.
+   * (Pitfall 5); false after a blur, a hidden tab or a focus regain, which
+   * clear the held set.
    */
   isHeld(side: FlipperSide): boolean {
     return this.isSideHeld(side);
   }
 
-  /** Wire the handlers to the real browser globals (browser only; not in tests). */
+  /**
+   * Wire the handlers to the real browser globals (browser only; not in tests).
+   * No `pageshow` listener: a page entering the back/forward cache goes hidden
+   * first (visibilitychange clears there) and a frozen page gets no key events.
+   */
   attach(): void {
     window.addEventListener("keydown", this.onWindowKeyDown);
     window.addEventListener("keyup", this.onWindowKeyUp);
     window.addEventListener("blur", this.onWindowBlur);
+    window.addEventListener("focus", this.onWindowFocus);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
@@ -187,6 +208,7 @@ export class FlipperInput {
     window.removeEventListener("keydown", this.onWindowKeyDown);
     window.removeEventListener("keyup", this.onWindowKeyUp);
     window.removeEventListener("blur", this.onWindowBlur);
+    window.removeEventListener("focus", this.onWindowFocus);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
   }
 
