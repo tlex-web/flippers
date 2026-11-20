@@ -33,25 +33,25 @@ findings:
     title: "The real-table containment gate cannot see bumpers"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The plunger launches any ball in the zone, not only a resting one"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Edges latched in the same drain window are applied press-first, which can drop a new press"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Stale and contradictory documentation after the table switch"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: deferred
     title: "The real-table soak only sweeps flipper 0, so the right bat is never driven"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`drainEvents()` exposes the adapter's internal reused array as mutable"
-open: 5
+open: 0
 total: 12
 recorded: 2026-11-19T23:02:20.531Z
 ---
@@ -62,16 +62,16 @@ recorded: 2026-11-19T23:02:20.531Z
 |---------|----------|-------------|--------|
 | CR-01 | critical | fixed | 03-REVIEW-FIX.md |
 | CR-02 | critical | fixed | 03-REVIEW-FIX.md |
-| WR-01 | warning | fixed | 03-REVIEW-FIX.md |
+| WR-01 | warning | fixed | 03-REVIEW-FIX.md; residual priming step accepted in 04-08 (deterministic; serves run at fixed-step boundaries; game.determinism.test.ts proves cadence-identical games; removing it would move the FLIP-04 calibration) |
 | WR-02 | warning | fixed | 03-REVIEW-FIX.md |
 | WR-03 | warning | fixed | 03-REVIEW-FIX.md |
 | WR-04 | warning | fixed | 03-REVIEW-FIX.md |
 | WR-05 | warning | fixed | 03-REVIEW-FIX.md |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
+| IN-01 | info | fixed | 04-02 (PLUNGER_REST_SPEED_EPS rest gate) |
+| IN-02 | info | fixed | 04-02 applyEdges, ordered by held state, so a sub-window tap is not stranded; made live in main.ts by 04-05 |
+| IN-03 | info | fixed | 04-01 (main.ts idle comment) and 04-04 (types.ts, constants.ts, spec.ts docs) |
+| IN-04 | info | deferred | rotational coverage of both bats comes from the PROOF_BOX_SPEC FLIP-04 gate; a per-seed bat sweep would mean editing soak.ts, which stays locked; noted in reactive-table-soak.gate.test.ts |
+| IN-05 | info | fixed | 04-04 (readonly drainEvents) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
