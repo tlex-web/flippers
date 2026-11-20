@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
-status: verifying
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-11-20T18:21:35.857Z"
+status: executing
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-11-20T19:56:30.445Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: ab26532ea9b6d460dc4e42d6bec495b9bf056694
+state_head: 80e33dd6360cbf0c93971934c61d49577eb34d74
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 27
-  completed_plans: 27
+  total_plans: 29
+  completed_plans: 28
 milestone_name: milestone
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
+Plan: 10 of 10
+Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -87,6 +87,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P06 | 18min | 3 tasks | 9 files |
 | Phase 04 P07 | 6min | 2 tasks | 5 files |
 | Phase 04 P08 | 9min | 3 tasks | 10 files |
+| Phase 04 P09 | 9 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,9 @@ Recent decisions affecting current work:
 - [Phase 04]: HUD is three DOM lines (score, BALL n / 3, status) each written only when its own inputs change; status is the only aria-live line; TILT wins over WARNING; the ball line is keyed on state or ball so a tilt rewrites it once
 - [Phase 04]: TILT and attract drop the bats via FlipperController.setEnabled(false) (returning, motor -1, presses ignored); GameSession switches a FlipperGate off at boot, on tilt and at game over, on with every serve; main.ts adapter re-presses held sides (Pitfall 5)
 - [Phase 04]: Full game replays bit-identically at 60/120/144 Hz (game.determinism.test.ts); WR-01 residual priming step accepted; 03-REVIEW-DISPOSITION open: 0 (IN-04 deferred)
+- [Phase 04]: 04-09: Flipper reversal dead time (G-04-10) fixed in PlanckWorld.setFlipperMotor by toggling RevoluteJoint.enableLimit off/on on each commanded sign change (public API, clears warm-started limit impulse); torque 500 and feel constants unchanged
+- [Phase 04]: 04-09: FlipperController enters resting only after 2 consecutive settled updates within 0.1 rad of FlipperState.restLimitAngle; resting == motor 0 invariant kept
+- [Phase 04]: 04-09: FLIP-02 launch proof runs on OPEN_PROOF_BOX (PROOF_BOX_SPEC minus wall 3), secondary floor 1.3x per user sign-off; VR_RATIO_TOL 0.35 unchanged
 
 ### Pending Todos
 
@@ -184,6 +188,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T18:21:34.964Z
-Stopped at: Completed 04-08-PLAN.md
+Last session: 2026-11-20T19:56:29.428Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None
