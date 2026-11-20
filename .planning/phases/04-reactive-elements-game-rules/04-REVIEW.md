@@ -1,185 +1,157 @@
 ---
 phase: 04-reactive-elements-game-rules
-reviewed: 2026-11-20T00:00:00Z
+reviewed: 2026-11-20T20:18:18Z
 depth: standard
-files_reviewed: 34
+files_reviewed: 12
 files_reviewed_list:
   - index.html
-  - src/app/collision-router.test.ts
   - src/control/flipper-controller.test.ts
   - src/control/flipper-controller.ts
-  - src/control/plunger-controller.test.ts
-  - src/control/plunger-controller.ts
-  - src/game/game-session.test.ts
-  - src/game/game-session.ts
-  - src/game/reactive-elements.test.ts
-  - src/game/reactive-elements.ts
-  - src/game/reactive-table.test.ts
-  - src/game/tilt-meter.test.ts
-  - src/game/tilt-meter.ts
-  - src/game/tuning.ts
-  - src/harness/reactive-soak.test.ts
-  - src/harness/reactive-table-soak.gate.test.ts
-  - src/harness/reactive-world.ts
-  - src/input/flipper-input.test.ts
-  - src/input/flipper-input.ts
-  - src/input/game-input.test.ts
-  - src/input/game-input.ts
-  - src/input/plunger-input.test.ts
-  - src/input/plunger-input.ts
-  - src/physics/constants.ts
+  - src/harness/flipper-feel.test.ts
+  - src/physics/flipper-response.test.ts
   - src/physics/planck-world.ts
   - src/physics/types.ts
   - src/sandbox/debug-draw.ts
-  - src/sandbox/game-e2e.test.ts
-  - src/sandbox/game.determinism.test.ts
+  - src/sandbox/flipper-e2e.test.ts
   - src/sandbox/main.ts
-  - src/sandbox/plunger-e2e.test.ts
-  - src/table/spec.ts
   - src/ui/hud.test.ts
   - src/ui/hud.ts
 findings:
   critical: 0
   warning: 2
-  info: 5
-  total: 7
+  info: 4
+  total: 6
   necessity: 0
 status: issues_found
 ---
 
-# Phase 4: Code Review Report
+# Phase 04: Code Review Report (gap closure 04-09 / 04-10)
 
-**Reviewed:** 2026-11-20
+**Reviewed:** 2026-11-20T20:18:18Z
 **Depth:** standard
-**Files Reviewed:** 34
+**Files Reviewed:** 12
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the Phase-4 rules stack: `GameSession` (the 3-ball FSM, nudge, tilt and flipper relay), `ReactiveElements` (bumper and sling kicks, rollovers, inlanes), `TiltMeter`, `tuning.ts`, the `GameInput` latch, the flipper enable gate, the plunger `applyEdges` and rest gate, the HUD, and the `main.ts` composition. I also read the loop (`src/sim/loop.ts`) and the router (`src/app/collision-router.ts`) because the session and the rules depend on how they order things.
+This is an incremental re-review of the two gap-closure plans, scoped to `git diff 6590dce..HEAD`:
 
-Baseline: `npx vitest run` gives 32 files and 338 tests passing, and `tsc --noEmit` is clean.
+- **04-09 (G-04-10):** limit-impulse reset in `PlanckWorld.setFlipperMotor`, `FlipperState.restLimitAngle`, and the FSM rest guard.
+- **04-10 (G-04-6):** `DiagView` DOM readout, canvas text removed, and the controls hint rewritten as a `<dl>`.
 
-The core logic holds up when traced by hand:
-- Drain is recorded during dispatch and acted on in service, with remove before add.
-- Tilt behaves correctly when it happens on the same step as a drain.
-- A held key is pressed again on every serve.
-- Score saturation is correct.
-- The tilt worked numbers (1.0, 1.875, 2.75 warn, 3.625 tilt) check out.
-- The cooldowns are counted in fixed steps.
+Earlier findings WR-01, WR-02 and IN-01..IN-05 stay tracked in `04-REVIEW-DISPOSITION.md`, so the numbering here continues after them.
 
-One suspected FSM defect turned out not to be real. A press followed by a drop in the same step (a tap inside one window, or a tilt on the step a flipper key is pressed) could have left a bat stuck in `returning`. I ran a scratch probe against the real `PlanckWorld`: the bat moves about 0.035 rad and settles to `resting`, and the next real press works normally. So that is not a finding.
+**Verified correct:**
 
-No blockers. The two warnings:
-1. The tests that claim to prove "the main.ts composition" actually prove two hand-made copies of it.
-2. The flipper input lets OS auto-repeat keydowns through without `preventDefault`. On Firefox that very likely lets a held `/` (the right flipper) open quick-find in the middle of a cradle.
+- **The limit-impulse reset works on planck 1.5.0.** In `node_modules/planck/dist/planck.mjs:8128-8135`, `RevoluteJoint.enableLimit(flag)` zeroes `m_impulse.z` when the flag changes. The 2.3-style limit row (`:8262-8292`) only clamps the accumulated sign, so a stale positive reserve does hold a reversing bat until it is used up. The comment block's root-cause analysis is accurate. Resets fire only when the commanded sign changes, so a held cradle keeps its impulse.
+- **The FSM guard holds.** In a scratch sweep of taps (holds 1-12 steps, both bats, three pre-rests), the worst angle at `resting` was 0.0350 rad from `restLimitAngle`, inside `REST_ANGLE_TOL`.
+- **`restLimitAngle` matches the geometry.** It is computed from the same `droop` that poses the bat, so left is π/8 and right is π − π/8.
+- **The 04-10 changes are clean.** `debug-draw.ts` no longer references `HudData` anywhere, `main.ts` calls the new `draw(...)` signature, and the `DiagView` write-on-change logic is correct. `tsc --noEmit` and ESLint are clean on the changed files.
+- **The `<dl>` lists the right keys.** They match `flipper-input.ts:65-70` and `game-input.ts:55-59`.
 
-Necessity was assessed using `necessity-review.md`; there are no necessity findings. The kind cross-checks in `ReactiveElements` guard against a router and a world that were injected separately and do not match, so they are defensible.
+**Concerns:**
+
+- **Pinch ejection (WR-03).** The faster response exposed a ball-pinch over-speed. The fix took the wall out of the FLIP-02 rig and relaxed the assertion, but the same pinch geometry exists on `TABLE_SPEC` and nothing covers it.
+- **Flaky new test (WR-04).** The new 192-rig quick-tap sweep runs in one `it` under the default 5 s timeout, and it timed out in both full-suite runs on this machine.
+
+## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01: The e2e and determinism proofs test a hand-copied composition, not `main.ts`
+### WR-03: 04-09 hid a bat-to-wall pinch ejection by changing the test rig; the same pinch exists on TABLE_SPEC and got worse
 
-**Files:** `src/sandbox/main.ts:103-205`, `src/sandbox/game-e2e.test.ts:103-173`, `src/sandbox/game.determinism.test.ts:109-171`
+**File:** `src/harness/flipper-feel.test.ts:16-27, 238-243` (behavior from `src/physics/planck-world.ts:878-895`)
 
-**Issue:** The shipped wiring exists three times, written out by hand each time: the flipper gate with its re-press on enable, the `onFixedStep` ordering, `if (ge.start && session.onStart()) reactive.resetLights()`, and the `onPostStep` order of dispatch, then reactive service, then session service. `main.ts` calls `main()` at module scope, so neither test can import it.
+**Issue:**
 
-`game-e2e.test.ts:244` is titled "plays a full 3-ball game through the main.ts composition", and the determinism test says it builds "the exact `main.ts` composition". Both actually exercise their own copies.
+The 04-09 summary and the new comment at `flipper-feel.test.ts:16-27` both say what happened. Once the dead time was gone, a rising bat squeezed the ball against the proof box's interior wall and ejected it at about 16 m/s, a 256% v = ω·r mismatch. The response was to filter that wall out (`OPEN_PROOF_BOX`) and lower the FLIP-02 floor from 1.5x to 1.3x. The comment calls this a "rig artifact, not flipper physics". The real table has the same geometry:
 
-Any change to the order in `main.ts` would leave all 338 tests green while the real game behaves differently. Examples: moving `session.service()` before `reactive.service()`, dropping `resetLights()`, or removing the re-press from the gate. That ordering is where the subtle game behavior lives, such as a kick landing before a drained ball is removed (Pitfall 5).
+- **The gap is smaller than the ball.** The left sling's lower edge, `LEFT_SLING` (0.86, 4.95) to (1.16, 5.1) at `src/table/spec.ts:268-272`, sits about 0.29 m above the raised bat's top face near x ≈ 0.94. The bat pivot is `LEFT_PIVOT` (0.69, 5.45). The ball is 0.40 m across, so this breaks the spec's own clearance rule: a gap the ball must pass needs to be at least 2·r + 0.05.
+- **Measured on `TABLE_SPEC` with no reactive layer.** The rig matches `launchAtRadius`: the bat is drooped with −1 for 30 steps, the ball starts 0.01 m off the bat face, and the bat is raised with +1. Base-position (rFrac 0.3) flips gave these speeds:
+  - **HEAD, left bat:** peaked at 19.4 m/s, then held 16.4 m/s for 9 steps.
+  - **HEAD, right bat:** 16.8 m/s.
+  - **6590dce (before 04-09):** 15.0 / 12.6 m/s on the left and 15.4 m/s on the right.
+  - **Control:** the same placement under −1 never exceeded 0.34 m/s. The ball was not resting on a collider; the speed comes from the raise.
+- **What that means for feel:**
+  - A base hit now launches faster than a tip hit on the real table (rFrac 0.7 held about 8.7 m/s after its transient). That reverses the FLIP-02 Core Value property.
+  - The soak's 15 m/s ceiling only exercises dead flippers, so it would not catch this.
 
-**Fix:** Move the composition into an importable factory that `main.ts` and both tests share:
+The underlying geometry predates this phase. The defect in this change set is the response: 04-09 made the pinch harder and then took it out of the only test that would have seen it, rather than adding coverage on the table the player actually plays.
+
+**Fix:** Add a `TABLE_SPEC` launch case for both bats at rFrac 0.3 / 0.5 / 0.7, with a sustained-speed ceiling (for example ≤ 1.35 × ω_peak·r_contact) and the tip > base ordering. Then fix whichever side fails: either move or reshape the sling's lower edge so the raised-bat-to-sling gap is at least 2·`BALL_RADIUS_M` + 0.05, or accept the tolerance and record it in the disposition ledger. Do not just keep the rig filtered.
+
 ```ts
-// src/app/game.ts
-export function createGame(world: PhysicsWorld, io: {
-  flipperInput: FlipperInput; plungerInput: PlungerInput; gameInput: GameInput;
-}) {
-  const controller = new FlipperController(world);
-  const plunger = new PlungerController(world);
-  const router = new CollisionRouter(world);
-  /* flippersByX, flipperGate, session, reactive ... exactly as main.ts today */
-  function onFixedStep(): void { /* ... */ }
-  function onPostStep(): void { router.dispatch(); reactive.service(); session.service(); }
-  return { controller, plunger, router, session, reactive, onFixedStep, onPostStep };
+for (const id of [0, 1]) for (const rFrac of [0.3, 0.5, 0.7]) {
+  it(`TABLE_SPEC flipper ${id} rFrac ${rFrac}: no pinch over-speed`, () => {
+    const r = launchOnTable(id, rFrac); // launchAtRadius twin on new PlanckWorld()
+    expect(r.launch).toBeLessThanOrEqual(r.peakOmega * r.contactRadius * 1.35);
+  });
 }
 ```
-`main.ts` keeps only the DOM, the loop and rendering. `makeGame()` and `play()` call `createGame(new PlanckWorld(), ...)`.
 
-### WR-02: Auto-repeat keydowns on the flipper keys are not `preventDefault`ed (Firefox quick-find on a held `/`)
+### WR-04: The new quick-tap sweep exceeds Vitest's default 5 s timeout under full-suite load
 
-**File:** `src/input/flipper-input.ts:119-123` (locked in by `src/input/flipper-input.test.ts:36-42`)
+**File:** `src/sandbox/flipper-e2e.test.ts:299`
 
-**Issue:** `handleKeyDown` returns on `e.repeat` before it calls `preventDefault()`. Only the first keydown of a hold is suppressed; every OS auto-repeat keydown for `Slash`, `ArrowLeft` and `ArrowRight` reaches the browser's default handling.
+**Issue:** The test builds 192 rigs (6 bindings × 8 holds × 4 pre-rests), each a full `PlanckWorld` stepped about 115-230 times, inside a single `it` with no timeout. `vitest.config.ts` sets no `testTimeout`, so the default of 5000 ms applies.
 
-On Firefox, `/` opens quick-find. Holding the right flipper on `/` to cradle (any hold past the roughly 500 ms repeat delay) lets a repeat through. That very likely opens the find bar, which takes focus. The `blur` handler then force-releases the bat while the key is still physically down, and later keystrokes go into the find bar.
+- **Alone:** about 0.8 s.
+- **In `npx vitest run`:** 6427 ms and 6666 ms in two consecutive runs, failing with "Test timed out in 5000ms".
 
-The repeat arrows would also scroll the page if it ever overflows.
+The pre-existing soak tests (`soak.test.ts`, `table-soak.test.ts`, `reactive-soak.test.ts`, `game.determinism.test.ts`) timed out in the same runs, so the machine was contended. Even so, this plan added one more heavy single-`it` test without a budget. As written, `npm test` passing depends on host load. The 04-09 summary's "385 tests" pass was observed in a quieter environment.
 
-The two latches written in this phase already use the correct order: `game-input.ts:91-93` and `plunger-input.ts:63-64` call `preventDefault()` first and then check `repeat`. The flipper test (`flipper-input.test.ts:42`) asserts the defective behavior.
+**Fix:** Give the test an explicit budget, or split it so each case stays small. Separately, consider a suite-wide `testTimeout` in `vitest.config.ts` for the soak-class tests.
 
-I could not run a real browser here, so the Firefox focus steal is reasoned from documented quick-find behavior, not observed.
-
-**Fix:**
 ```ts
-handleKeyDown(e: KeyEventLike): void {
-  const side = CODE_TO_SIDE.get(e.code);
-  if (!side) return;
-  e.preventDefault();          // bound codes, including auto-repeats
-  if (e.repeat) return;
-  if (this.held.has(e.code)) return;
+it("no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised", () => {
   ...
-}
+}, 30_000);
+// or: it.each(ALL_BINDINGS)("no quick tap on %s leaves a bat raised", ...)
 ```
-Change the test to expect `preventDefault` to be called once on a repeat `KeyZ`, with no edge latched.
 
 ## Info
 
-### IN-01: A second kick on the same ball in one `service()` reads a stale velocity snapshot
+### IN-06: `resting` has no position guard, and the entry tolerance allows about 3x the measured slop
 
-**File:** `src/game/reactive-elements.ts:282-301`
+**File:** `src/control/flipper-controller.ts:75, 217-229`
 
-**Issue:** `kick()` reads `b.vx` and `b.vy` from `world.getBalls()`. `PlanckWorld` refreshes that pooled snapshot only at the end of `step()` (`planck-world.ts:762-775`), and `applyImpulse` does not update it (`planck-world.ts:845-859`). If two kickers queue the same ball in one step, the second impulse is computed from the velocity before the first kick. The ball then leaves faster than either target, which breaks the "raised to the target" law.
+**Issue:**
 
-This cannot happen on `TABLE_SPEC` today. Bumper rim gaps are at least 0.46 m, more than the 0.40 m ball, and the slings sit far from the bumpers. But the module is table-agnostic, and no test covers one ball with two kickers.
+- **Entry tolerance is loose.** `REST_ANGLE_TOL = 0.1` rad, while the measured worst resting offset is about 0.035 rad (confirmed: 0.0350 in a scratch tap sweep). A bat that stalls inside the 0.035-0.1 band can therefore enter `resting`. That takes two consecutive sub-1e-3 deltas, for example a ball wedged under the bat. The bat then gets motor 0 up to about 5 cm off its rest pose at the tip (0.1 rad × 0.5 m).
+- **Nothing corrects it once resting.** The `resting` case issues no command, and a motor 0 with `FLIPPER_MAX_MOTOR_TORQUE = 500` brake-locks the bat at whatever angle it is at. Nothing drives it home until the next press.
+- **The original reason for motor 0 at rest is gone.** The constructor comment explains it: the Phase-2 limit jam on startup. The 04-09 limit-impulse reset removes that jam.
 
-**Fix:** In `service()`, track the velocity change already applied to each ball in this pass and add it to `vx`/`vy` before computing `vn`. Or collect the queued normals per ball and resolve them in one impulse.
+**Fix:** Tighten `REST_ANGLE_TOL` to about 0.05. In `case "resting"`, drop back to `returning` with −1 if `|angle - restLimitAngle| > REST_ANGLE_TOL`.
 
-### IN-02: For one render frame after a drain or serve, the drained ball still shows and the new ball is missing
+### IN-07: Dead `moved` writes on the returning path
 
-**Files:** `src/sim/loop.ts` (`advance`: `snapshotInto(current)` runs before `onPostStep`), `src/sandbox/main.ts:201-205, 249-268`
+**File:** `src/control/flipper-controller.ts:219, 243`
 
-**Issue:** `session.service()` removes the drained ball and adds the next one inside `onPostStep`, after the loop has already taken `current`. When the drain step is the last fixed step of a frame (about half the time at 60 fps), the renderer draws the removed ball frozen at the drain line, and nothing on the plunger, for one frame. After the last ball, the drained ball likewise lingers for one frame. Kick velocities are also missing from `current.vx/vy` (the velocity vector drawing) until the next step.
+**Issue:** Since G-04-10, `returning` never reads `fsm.moved`; only `flipping-up` does, at line 203. `onPressEdge` (line 173) already resets `moved = false` on entry to `flipping-up`. The writes in `drop()` (line 243) and in the returning-to-resting transition (line 219) are dead stores that suggest a dependency that no longer exists. The field doc at line 90 already says "held-up detector".
 
-The effect is small, but this project treats visual defects as bugs.
+**Fix:** Remove both writes.
 
-**Fix:** Have `FixedStepLoop` take the `current` snapshot again after `onPostStep` returns. Keep the snapshot taken before the hook so a hook that throws still leaves a valid state.
+### IN-08: Stale "upper/lower limit" wording contradicts the mirrored-limit model
 
-### IN-03: `applyEdges` loses a press-release-press tap that lands inside one fixed-step window from idle
+**File:** `src/control/flipper-controller.ts:5, 227-228`
 
-**File:** `src/control/plunger-controller.ts:139-143`
+**Issue:** The header says "+1 = toward the upper limit, -1 = toward the lower", and the `resting` comment says "the lower limit holds the bat". For the left bat (`raiseSign = -1`), the rest limit is the joint's UPPER limit (`droop = FLIPPER_UPPER_ANGLE`, `planck-world.ts:608`). The rewritten paragraph at lines 19-31 is correct, so the file now contradicts itself.
 
-**Issue:** With `heldNow` true and both `press` and `release` latched, the order applied is release (a no-op while idle) and then press. If the real sequence was press, release, press while the plunger was idle, the tap launch is lost and a fresh charge starts instead. A human cannot do this inside 8.3 ms, but switch bounce could.
+**Fix:** Say "raise / up limit" and "return / rest limit" throughout, matching `planck-world.ts`.
 
-**Fix:** Use `this.phase` to break the tie. When `heldNow && press && release && this.phase === "idle"`, apply press, then release, then press.
+### IN-09: The controls list does not say which nudge key goes which way, and key alternatives have no separator
 
-### IN-04: A ball that never reaches the drain sensor soft-locks the game
+**File:** `index.html:122-133`
 
-**File:** `src/game/game-session.ts:142-158, 283-285`
+**Issue:**
 
-**Issue:** A ball can only end through the drain sensor event, and `onStart()` is refused while `"playing"` or `"tilted"`. A ball that comes to rest somewhere unreachable, or escapes containment (the soaks guard against this but do not rule it out by construction), leaves no way to continue or restart without reloading the page. Real machines run a ball search. I found no stuck spot on `TABLE_SPEC`, so this rests on judgment.
+- **Nudge directions are missing.** The "Nudge" row lists `X . ↑`, but `game-input.ts:57-59` binds them to left, right and up respectively. A player cannot tell which is which.
+- **Alternatives run together for assistive tech.** Adjacent `<kbd>` elements have no separator text, so a screen reader reads "Z leftwards arrow Left Shift" with no "or". The panel is not `aria-hidden`.
 
-**Fix:** Add a timeout in fixed steps: if the active ball has stayed below a speed threshold outside `PLUNGER_ZONE` for N steps, treat it as drained, or let a long-held Start force game-over.
-
-### IN-05: The controls hint uses "/" both as a separator and as the Slash key
-
-**File:** `index.html:82-85`
-
-**Issue:** "Z / ← / Left Shift left flipper · / / → / Right Shift right flipper" reads as an ambiguous run of slashes, and players cannot tell that `/` is one of the right-flipper keys.
-
-**Fix:** Use a different separator, for example `Z · ← · L-Shift — left flipper | / · → · R-Shift — right flipper`, or show each key as a styled key cap.
+**Fix:** Label the nudge keys, for example `<kbd>X</kbd> left <kbd>.</kbd> right <kbd>↑</kbd> up`. Put a visually hidden " or " between alternatives, or give each `<dd>` an `aria-label`.
 
 ---
 
-_Reviewed: 2026-11-20_
+_Reviewed: 2026-11-20T20:18:18Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
