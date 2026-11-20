@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-11-20T17:37:53.605Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-11-20T18:00:10.247Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: da67148b5852d33f8144ff5bf6fa9059916776a5
+state_head: e77153c10612126fa12c7bb63bc179171acc97db
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 24
+  completed_plans: 25
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -84,6 +84,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P03 | 14min | 3 tasks | 6 files |
 | Phase 04 P04 | 3min | 2 tasks | 8 files |
 | Phase 04 P05 | 11min | 3 tasks | 8 files |
+| Phase 04 P06 | 18min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,8 @@ Recent decisions affecting current work:
 - [Phase 04]: drainEvents() returns readonly CollisionEvent[] in the interface and all implementations (IN-05); adapter ball density imports BALL_DENSITY; IN-03 docs fixed; IN-04 deferred with reason in the gate docstring
 - [Phase 04]: GameSession is the 3-ball FSM (game-over/playing, BALLS_PER_GAME 3): boots into attract with no ball, onStart() only from game-over, the third drain ends the game with the score kept; drain read from the bus for the active id only (CR-01); BallFeed retired
 - [Phase 04]: main.ts drives the plunger through applyEdges(..., isHeld(), session.activeBallId) (IN-02 live); Enter/NumpadEnter start latch in GameInput; a started game calls reactive.resetLights()
+- [Phase 04]: Nudge is velocity-only applyImpulse to every ball (NUDGE_IMPULSE 0.15, X +x / Period -x / ArrowUp -y), accepted only while playing and >= 30 fixed steps after the last; GameSession.tick() is the step clock
+- [Phase 04]: TiltMeter is pure and step-driven (cost 1, decay 0.5/s per step, rising-edge WARNING at >= 2, TILT at >= 3); tilted makes isLive() false; every serve and onStart clear meter and warning; a tilt costs only the current ball
 
 ### Pending Todos
 
@@ -177,6 +180,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T17:37:52.222Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-11-20T18:00:08.831Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None

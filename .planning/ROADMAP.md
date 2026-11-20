@@ -140,7 +140,7 @@ Plans:
   4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
   5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
 
-**Plans**: 5/8 plans executed (6 waves)
+**Plans**: 6/8 plans executed (6 waves)
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: bumpers kick and score through the bus (record-then-service), GameSession score, DOM score HUD, BALL_DENSITY/ballMass [wave 1]
@@ -154,7 +154,7 @@ Plans:
 - [x] 04-05-PLAN.md — 3-ball game loop: GameSession FSM, Enter start, serve on drain, game over; BallFeed retired; applyEdges live [wave 3]
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-06-PLAN.md — Nudge (impulse-only, cooldown), TiltMeter WARNING/TILT, dead-while-tilted, nudge-key latch contract [wave 4]
+- [x] 04-06-PLAN.md — Nudge (impulse-only, cooldown), TiltMeter WARNING/TILT, dead-while-tilted, nudge-key latch contract [wave 4]
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 04-07-PLAN.md — Full HUD: ball counter, start/game-over prompts, WARNING/TILT (aria-live status), controls hint, real-game HUD walk-through, nudge/tilt by-feel check [wave 5]
@@ -205,6 +205,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
-| 4. Reactive Elements & Game Rules | 5/8 | In Progress | - |
+| 4. Reactive Elements & Game Rules | 6/8 | In Progress | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |
