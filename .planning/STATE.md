@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-11-20T15:25:28.151Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-11-20T15:32:38.733Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 04 execution started
-state_head: 74e4592edbf3544b2ac3a1b9e7ca349cdae5a3b3
+state_head: ecba38dcef4cbc2ec4eb6c449acc083b8a78f36c
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 27
-  completed_plans: 20
+  completed_plans: 21
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 ## Current Position
 
 Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 04 execution started
 
@@ -80,6 +80,7 @@ Progress: [█████░░░░░] 50%
 | Phase 03 P05 | 14min | 3 tasks | 10 files |
 | Phase 03 P06 | 10min | 3 tasks | 9 files |
 | Phase 04 P01 | 10min | 3 tasks | 11 files |
+| Phase 04 P02 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,8 @@ Recent decisions affecting current work:
 - [Phase 04]: KICKER_REARM_STEPS = 6 fixed steps per bumper collapses post-solve bursts and the next-step TOI duplicate; a not-live contact arms nothing
 - [Phase 04]: GameSession implements RulesGate with an exact saturating integer score; isLive() always true until the 04-05 FSM
 - [Phase 04]: Score HUD is a DOM overlay (#hud-score) written only on change via textContent; canvas HUD stays diagnosis-only
+- [Phase 04]: Plunger release requires speed < PLUNGER_REST_SPEED_EPS 0.05 m/s (strict) beside the zone test; a refused release resets to idle (IN-01)
+- [Phase 04]: applyEdges orders same-window plunger edges by held state at drain time (held: release, cancel, press; not held: press, release, cancel), not the review's fixed order which strands a sub-window tap (IN-02)
 
 ### Pending Todos
 
@@ -164,6 +167,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-20T15:25:26.664Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-11-20T15:32:37.548Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
