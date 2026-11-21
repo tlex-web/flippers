@@ -9,6 +9,7 @@ import {
   type FlashSink,
 } from "../app/cue-queue";
 import { AudioEngine, ENV_FLOOR } from "../audio/audio-engine";
+import { AudioUnlock } from "../audio/audio-unlock";
 import {
   FakeAudioContext,
   FakeGain,
@@ -248,5 +249,68 @@ describe("cue pipeline on the real table (AUD-01 tracer)", () => {
     fake.state = "running";
     expect(engine.flush(rig.cues)).toBe(0);
     expect(fake.nodes.length).toBe(before);
+  });
+});
+
+/** A real engine behind AudioUnlock, over a fake context factory that counts calls. */
+function gestureRig(): {
+  fake: FakeAudioContext;
+  engine: AudioEngine;
+  unlock: AudioUnlock;
+  factoryCalls: () => number;
+} {
+  const fake = new FakeAudioContext();
+  let calls = 0;
+  const engine = new AudioEngine(() => {
+    calls++;
+    return fake;
+  }, mulberry32(0x0502));
+  return { fake, engine, unlock: new AudioUnlock(engine), factoryCalls: () => calls };
+}
+
+/** Drop on bumper 202 and step until its cue is queued. */
+function bumperCues(): CueQueue {
+  const rig = makeRig(true);
+  dropOnBumper202(rig);
+  if (!runToBumperCue(rig)) throw new Error("no bumper-202 cue within 2 s");
+  return rig.cues;
+}
+
+describe("gesture gate on the real table (AUD-01, Pattern 5)", () => {
+  it("(g) no context before a gesture; a trusted Enter creates exactly one and the drop is voiced", () => {
+    const g = gestureRig();
+    expect(g.engine.context).toBeNull();
+    expect(g.factoryCalls()).toBe(0);
+    g.unlock.handleGesture({ isTrusted: true, type: "keydown", key: "Enter" });
+    expect(g.factoryCalls()).toBe(1);
+    expect(g.engine.context).toBe(g.fake);
+    const before = g.fake.nodes.length;
+    expect(g.engine.flush(bumperCues())).toBeGreaterThanOrEqual(1);
+    const started = g.fake.sources().filter((s) => s.startTime !== null);
+    expect(started.length).toBeGreaterThan(0);
+    expect(g.fake.nodes.length).toBeGreaterThan(before);
+  });
+
+  it("(h) an untrusted keydown and a trusted Escape never create a context; cues are dropped", () => {
+    const g = gestureRig();
+    g.unlock.handleGesture({ isTrusted: false, type: "keydown", key: "Enter" });
+    g.unlock.handleGesture({ isTrusted: true, type: "keydown", key: "Escape" });
+    expect(g.factoryCalls()).toBe(0);
+    expect(g.engine.context).toBeNull();
+    const cues = bumperCues();
+    expect(cues.size).toBeGreaterThan(0);
+    expect(g.engine.flush(cues)).toBe(0);
+    expect(cues.size).toBe(0);
+    expect(g.fake.nodes.length).toBe(0);
+  });
+
+  it("(i) after unlock, a trusted pointerdown on a suspended context resumes it once", () => {
+    const g = gestureRig();
+    g.unlock.handleGesture({ isTrusted: true, type: "keydown", key: "Enter" });
+    expect(g.factoryCalls()).toBe(1);
+    g.fake.state = "suspended";
+    g.unlock.handleGesture({ isTrusted: true, type: "pointerdown" });
+    expect(g.fake.resumeCalls).toBe(1);
+    expect(g.factoryCalls()).toBe(1);
   });
 });

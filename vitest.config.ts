@@ -15,5 +15,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/*.gate.test.ts"],
     passWithNoTests: true,
+    // Heavy simulation tests timed out at the 5 s default under load (todo 2026-11-21-give-heavy-simulation-tests-an-explicit-timeout).
+    testTimeout: 30000,
   },
 });

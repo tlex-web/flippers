@@ -39,6 +39,14 @@
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve).
  *
+ * Presentation (Phase 5, AUD-01): the rules report every registered kick and
+ * sensor pass through `ReactiveFeedback`; `CueFeedback` records each one as a
+ * scalar cue into a fixed `CueQueue` on the step path, and the render frame
+ * calls `audio.flush(cues)` right after `loop.advance`, the only place audio
+ * nodes are created. The `AudioContext` does not exist until the player's first
+ * trusted keydown or pointerdown (`AudioUnlock`); a cue recorded before that,
+ * or while the context is not running, is dropped, never replayed.
+ *
  * The diagnosis readout (FPS, physics Hz, KE) is DOM text in `#hud-diag`
  * (`DiagView`, written only when a throttled number changes); with the canvas
  * contact markers it is a DIAGNOSIS tool only:
@@ -48,6 +56,9 @@
 
 import { PlanckWorld } from "../physics/planck-world";
 import { CollisionRouter } from "../app/collision-router";
+import { CueFeedback, CueQueue } from "../app/cue-queue";
+import { AudioEngine } from "../audio/audio-engine";
+import { AudioUnlock } from "../audio/audio-unlock";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { GameSession, type FlipperGate } from "../game/game-session";
@@ -158,7 +169,20 @@ function main(): void {
   // load-bearing: both listeners only record or award, and the world is mutated
   // only in the two service() calls, in the fixed order of onPostStep.
   const session = new GameSession(world, router, BALL_SPAWN, flipperGate);
-  const reactive = new ReactiveElements(world, router, session);
+  // Phase-5 cues (AUD-01): registered hits are recorded as scalar cues on the
+  // step path (no allocation) and flushed to audio once per render frame.
+  const cues = new CueQueue();
+  const cueFeedback = new CueFeedback(cues);
+  const reactive = new ReactiveElements(world, router, session, cueFeedback);
+
+  // Audio: the factory runs only inside the first trusted gesture (a context
+  // built here at boot would start suspended). The DOM factory is handed to a
+  // `() => AudioContextLike` parameter with no cast: tsc is the A5 proof.
+  const audio = new AudioEngine(
+    () => new AudioContext({ latencyHint: "interactive" }),
+    Math.random,
+  );
+  new AudioUnlock(audio).attach();
 
   const loop = new FixedStepLoop(world);
 
@@ -185,7 +209,13 @@ function main(): void {
     // Release launches the ball in play only if it rests on the plunger; cancel
     // (focus loss) drops the charge with no launch. Then advance the charge.
     const pe = plungerInput.drainEdges();
-    plunger.applyEdges(pe.press, pe.release, pe.cancel, plungerInput.isHeld(), session.activeBallId);
+    plunger.applyEdges(
+      pe.press,
+      pe.release,
+      pe.cancel,
+      plungerInput.isHeld(),
+      session.activeBallId,
+    );
     plunger.update();
 
     // Game: a start edge starts a game only from game-over (Enter mid-game is
@@ -259,6 +289,8 @@ function main(): void {
     // fixed step (D-10), and `onPostStep` dispatches that step's events on the
     // bus (D-11) — both passed by reference, so no per-frame allocation.
     const steps = loop.advance(deltaMs, onFixedStep, onPostStep);
+    // Play the cues those fixed steps recorded, in this same frame.
+    audio.flush(cues);
 
     // Interpolate each ball between the loop's previous and current fixed states
     // (smooth motion independent of the render rate). The two buffers are
