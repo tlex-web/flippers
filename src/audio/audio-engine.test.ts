@@ -374,6 +374,23 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(engine.flush(q)).toBe(0);
   });
 
+  it("a starting context whose clock already advances counts as rendering, before state flips (IN-05)", () => {
+    const { fake, engine, clock, chain } = stuckRig();
+    const q = new CueQueue();
+    for (let i = 0; i < RECIPES.bumper.cap; i++) q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(RECIPES.bumper.cap);
+    // Rendering has begun (the clock moves) but `state` still reads
+    // "suspended", and the wall-clock window has passed.
+    fake.currentTime = 0.02;
+    clock.ms += STARTING_WINDOW_MS + 10;
+    expect(fake.state).toBe("suspended");
+    q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(1); // not dropped, nothing discarded
+    expect(engine.activeVoices("bumper")).toBe(RECIPES.bumper.cap);
+    // The stolen voice keeps its nodes until its onended: the fade plays.
+    expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
+  });
+
   it("a context that starts inside the window keeps the voices scheduled while starting", () => {
     const { fake, engine, clock, chain } = stuckRig();
     const q = new CueQueue();

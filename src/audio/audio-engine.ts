@@ -156,6 +156,13 @@ export class AudioEngine {
    * `resume()` can really start the context (05-REVIEW WR-01).
    */
   private startingUntilMs = 0;
+  /**
+   * The audio clock (`currentTime`) when the starting window opened. Once it
+   * has moved, the context is rendering even if `state` still reads
+   * "suspended": the spec flips `state` in a task queued after rendering
+   * starts (05-REVIEW IN-05).
+   */
+  private startAudioT = 0;
   /** Set once a closed context has been reported; later gestures stay quiet. */
   private closedReported = false;
   private muted = false;
@@ -289,6 +296,7 @@ export class AudioEngine {
         // Voices from an expired window must not ride into the new one.
         if (this.resumePending) this.pool.discardAll(ctx.currentTime);
         this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
+        this.startAudioT = ctx.currentTime;
       }
       this.resumePending = true;
       ctx.resume().then(
@@ -351,7 +359,7 @@ export class AudioEngine {
       cues.clear();
       return 0;
     }
-    const rendering = ctx.state === "running";
+    const rendering = this.isRendering(ctx);
     if (!rendering && !this.isStarting(ctx)) {
       this.pool.discardAll(ctx.currentTime);
       cues.clear();
@@ -376,6 +384,16 @@ export class AudioEngine {
     return started;
   }
 
+  /**
+   * Running, or starting with its audio clock already advancing: `state`
+   * lags real rendering, and treating such a context as not rendering would
+   * tear down (steal) or discard voices that are audibly playing (IN-05).
+   */
+  private isRendering(ctx: AudioContextLike): boolean {
+    if (ctx.state === "running") return true;
+    return this.resumePending && ctx.state === "suspended" && ctx.currentTime > this.startAudioT;
+  }
+
   /** Suspended with a resume in flight, inside the bounded starting window. */
   private isStarting(ctx: AudioContextLike): boolean {
     return this.resumePending && ctx.state === "suspended" && this.clock() < this.startingUntilMs;
@@ -383,8 +401,9 @@ export class AudioEngine {
 
   /**
    * Build one cue's voice from its recipe. Returns true when it started.
-   * `rendering` is false on a starting context, where a stolen voice must be
-   * torn down by the pool because its `onended` cannot fire.
+   * `rendering` is false on a starting context whose audio clock has not
+   * moved yet, where a stolen voice must be torn down by the pool because its
+   * `onended` cannot fire.
    */
   private play(
     ctx: AudioContextLike,
