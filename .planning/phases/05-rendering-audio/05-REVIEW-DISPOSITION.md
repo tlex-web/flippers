@@ -5,19 +5,19 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Mute ramp and Firefox voice-steal fade start from a stale event, so the 50 ms fade is effectively an instant cut"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Cues recorded before a new context reports \"running\" are dropped, so the first \"start\" jingle can be lost"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The flash clock runs one step ahead of the interpolated scene, and the first rendered frame of every flash is already past its hold"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`FixedStepLoop.advance` does not floor a negative delta, so `alpha` can go below 0 and interpolation extrapolates"
   - id: IN-03
     severity: info
@@ -33,30 +33,30 @@ findings:
     title: "Per-element pitch offsets hard-code `TABLE_SPEC` ids inside the recipes"
   - id: IN-06
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`AudioEngine.unlock` edge cases: leaked context on a `build()` failure, and an error logged on every key with a closed context"
   - id: IN-07
     severity: info
-    disposition: open
+    disposition: fixed
     title: "A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites"
-open: 6
+open: 0
 total: 9
-recorded: 2026-11-21T21:36:44.406Z
+recorded: 2026-11-21T21:37:11.441Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
+| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 05-REVIEW-FIX.md |
+| IN-01 | info | fixed | 05-REVIEW-FIX.md |
+| IN-02 | info | fixed | 05-REVIEW-FIX.md |
 | IN-03 | info | fixed | 05-REVIEW-FIX.md |
 | IN-04 | info | fixed | 05-REVIEW-FIX.md |
 | IN-05 | info | fixed | 05-REVIEW-FIX.md |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
+| IN-06 | info | fixed | 05-REVIEW-FIX.md |
+| IN-07 | info | fixed | 05-REVIEW-FIX.md |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
