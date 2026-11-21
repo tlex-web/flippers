@@ -56,8 +56,11 @@
  * nodes are created. The `AudioContext` does not exist until the player's first
  * trusted keydown or pointerdown (`AudioUnlock`); a cue recorded before that,
  * or while the context is neither running nor starting (suspended with a
- * resume in flight, at most STARTING_WINDOW_MS), is dropped, never replayed;
- * cues on a starting context are scheduled and sound when it runs.
+ * resume in flight, at most STARTING_WINDOW_MS from the window's (re)opening;
+ * an activating re-gesture can reopen an expired window once), is dropped,
+ * never replayed; cues on a starting context are scheduled and sound when it
+ * runs. A suspended context whose audio clock is already advancing counts as
+ * running.
  *
  * The diagnosis readout (FPS, physics Hz, KE) is DOM text in `#hud-diag`
  * (`DiagView`, written only when a throttled number changes); with the canvas

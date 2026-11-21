@@ -9,21 +9,25 @@
  *   it reports "suspended" until the audio device is up (tens of ms on some
  *   engines), so `unlock()` calls `resume()` and the context counts as starting
  *   until that settles or STARTING_WINDOW_MS has passed, whichever is first;
- * - a later gesture while the context is not running calls `resume()`; one
- *   with transient user activation also reopens an expired starting window,
- *   since its `resume()` can start a context an earlier non-activating
- *   gesture (a modifier-only keydown) left stuck;
+ * - a later gesture while the context is not running calls `resume()`; the
+ *   first one with transient user activation after the starting window
+ *   expired also reopens it, once per stuck resume, since its `resume()` can
+ *   start a context an earlier non-activating gesture (a modifier-only
+ *   keydown) left stuck; a context already rendering is never reopened;
  * - a creation failure is reported once and never retried; a rejected
  *   `resume()` is reported and the game keeps running (T-05-04).
  *
  * Pull-then-play, the collision-router split: the step path only records cues
  * into the `CueQueue`; `flush()` runs once per render frame and is the only
  * place audio nodes are created. A starting context (suspended with a resume in
- * flight) is playable for at most STARTING_WINDOW_MS after the first `resume()`
- * call (wall clock, from the injected `clock`): nodes scheduled on it at the
- * frozen `currentTime` sound as soon as it runs, so the first "start" figure is
- * not lost. A `resume()` can stay pending forever (no output device, or a
- * gesture the browser does not count as activation), so the window is bounded.
+ * flight) is playable for at most STARTING_WINDOW_MS from the window's
+ * (re)opening (wall clock, from the injected `clock`); an activating re-gesture
+ * can reopen an expired window once. Nodes scheduled on it at the frozen
+ * `currentTime` sound as soon as it runs, so the first "start" figure is not
+ * lost. A `resume()` can stay pending forever (no output device, or a gesture
+ * the browser does not count as activation), so the window is bounded. A
+ * suspended context whose audio clock is already advancing counts as running,
+ * with no time limit: it is rendering and `state` only lags (IN-05).
  * Otherwise, without a running context, `flush()` drops the queued cues and
  * discards every voice still held (stopped and disconnected at once), so the
  * voices of an expired window never burst out on a late start: a stale cue is
@@ -87,7 +91,7 @@ export const SOURCE_TAIL_S = 0.01;
 
 /**
  * Longest a suspended context with a resume in flight counts as starting and
- * playable (wall-clock ms, from the first `resume()` call). Normal start-up
+ * playable (wall-clock ms, from the window's (re)opening). Normal start-up
  * takes tens of ms; past this, cues are dropped until the context runs.
  */
 export const STARTING_WINDOW_MS = 250;
@@ -373,11 +377,13 @@ export class AudioEngine {
   /**
    * Play every queued cue in FIFO order, all at the same t0, then empty the
    * queue. Returns the number of voices started. Muted or without a playable
-   * context (running, or starting: suspended with a resume in flight, within
-   * STARTING_WINDOW_MS) it creates nothing, empties the queue and returns 0
-   * (a cue is never replayed later). A context that is neither running nor
-   * starting also has every voice it still holds discarded: it cannot fire
-   * their `onended`, and they must not burst out if it starts late.
+   * context (running, or suspended with a resume in flight and either its
+   * audio clock already advancing, which counts as running, or within
+   * STARTING_WINDOW_MS of the window's (re)opening) it creates nothing,
+   * empties the queue and returns 0 (a cue is never replayed later). A
+   * context that is not playable also has every voice it still holds
+   * discarded: it cannot fire their `onended`, and they must not burst out if
+   * it starts late.
    * Call once per render frame.
    */
   flush(cues: CueQueue): number {
