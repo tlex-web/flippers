@@ -8,6 +8,7 @@ import {
   formatScore,
   HudView,
   MuteView,
+  muteAnnouncement,
   muteText,
   statusText,
   type DiagData,
@@ -282,5 +283,23 @@ describe("MuteView write-on-change (05-REVIEW IN-03)", () => {
     view.update(false);
     expect(sink.writes).toBe(3);
     expect(sink.textContent).toBe("");
+  });
+
+  it("announces both mute and unmute, never the initial state (05-REVIEW IN-02)", () => {
+    expect(muteAnnouncement(true)).toBe("Muted");
+    expect(muteAnnouncement(false)).toBe("Sound on");
+    const sink = new CountingSink();
+    const live = new CountingSink();
+    const view = new MuteView(sink, live);
+    view.update(false);
+    expect(live.writes).toBe(0);
+    view.update(true);
+    expect(live.writes).toBe(1);
+    expect(live.textContent).toBe("Muted");
+    view.update(true);
+    expect(live.writes).toBe(1);
+    view.update(false);
+    expect(live.writes).toBe(2);
+    expect(live.textContent).toBe("Sound on");
   });
 });

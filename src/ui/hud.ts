@@ -12,8 +12,9 @@
  * - ball: "BALL n / 3" while a ball is in play or tilted, empty in game-over
  *   (`ballText`);
  * - status: the attract and game-over prompts, WARNING and TILT, empty in plain
- *   play (`statusText`). It is the only line announced to assistive tech; the
- *   score changes too often to announce.
+ *   play (`statusText`). It is the only HUD line announced to assistive tech;
+ *   the score changes too often to announce. The mute announcer (`MuteView`'s
+ *   second sink, a visually hidden live region) is the page's other one.
  *
  * Write-on-change, per line: `HudView.update()` runs every render frame but
  * caches the inputs of each line and rebuilds and writes a line only when its
@@ -186,25 +187,40 @@ export function muteText(muted: boolean): string {
   return muted ? "MUTED" : "";
 }
 
+/** What the mute announcer reads out on a toggle: both states have words. */
+export function muteAnnouncement(muted: boolean): string {
+  return muted ? "Muted" : "Sound on";
+}
+
 /**
  * The mute marker (05-REVIEW IN-03): shows that M silenced the game, including
  * a mute armed before the first gesture unlocked audio. Write-on-change like
  * the other lines: a steady frame costs no DOM write. Text-only.
+ *
+ * The visible marker is empty while the sound is on, and clearing a live
+ * region announces nothing, so announcements go to a separate `announce` sink
+ * (a visually hidden live region, 05-REVIEW IN-02): "Muted" or "Sound on" on
+ * each change. The initial state is not announced.
  */
 export class MuteView {
   private readonly sink: TextSink;
+  private readonly announce: TextSink | null;
   /** False so the first update writes. */
   private written = false;
   private lastMuted = false;
 
-  constructor(sink: TextSink) {
+  constructor(sink: TextSink, announce: TextSink | null = null) {
     this.sink = sink;
+    this.announce = announce;
   }
 
   /** Rewrite the marker only when the mute state changed since the last write. */
   update(muted: boolean): void {
     if (this.written && muted === this.lastMuted) return;
     this.sink.textContent = muteText(muted);
+    if (this.written && this.announce !== null) {
+      this.announce.textContent = muteAnnouncement(muted);
+    }
     this.written = true;
     this.lastMuted = muted;
   }

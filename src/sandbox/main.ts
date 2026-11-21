@@ -353,8 +353,9 @@ function main(): void {
   // throttled number changes.
   const diagView = new DiagView(requireTextSink("hud-diag"));
   // Mute marker (05-REVIEW IN-03): "MUTED" beside the M key cap while the
-  // sound is off, written only on change.
-  const muteView = new MuteView(requireTextSink("hud-mute"));
+  // sound is off, written only on change; each toggle is announced through the
+  // hidden live region (05-REVIEW IN-02).
+  const muteView = new MuteView(requireTextSink("hud-mute"), requireTextSink("hud-mute-live"));
   // The key caps show the player's layout (G-04-17, UAT 18 decision A); the
   // markup labels stay where the Keyboard Map API is missing.
   void initKeyLabels(

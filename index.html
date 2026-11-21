@@ -76,8 +76,9 @@
         font-size: 16px;
         color: var(--text-soft);
       }
-      /* Game status (GAME-02/03): the one announced line; min-height keeps the
-         panel from jumping when it empties. */
+      /* Game status (GAME-02/03): the announced game line (the mute announcer
+         below is the only other live region); min-height keeps the panel from
+         jumping when it empties. */
       .hud-status {
         min-height: 1.2em;
         font-size: 16px;
@@ -130,6 +131,20 @@
       }
       .hud-mute:empty {
         display: none;
+      }
+      /* Mute announcer (05-REVIEW IN-02): a visually hidden live region that
+         reads "Muted" / "Sound on" on each toggle, so unmuting is announced
+         too (clearing a live region announces nothing). */
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
       }
       /* Windows reliability note (G-04-17, UAT 18 decision A). contain:
          inline-size drops it from the panel's intrinsic width, so it wraps at
@@ -186,9 +201,10 @@
           <dt>Mute</dt>
           <dd>
             <kbd data-code="KeyM">M</kbd>
-            <span id="hud-mute" class="hud-mute" role="status" aria-live="polite"></span>
+            <span id="hud-mute" class="hud-mute"></span>
           </dd>
         </dl>
+        <span id="hud-mute-live" class="visually-hidden" role="status" aria-live="polite"></span>
         <p class="hud-controls-note">
           On Windows, <kbd>←</kbd> <kbd>→</kbd
           ><span data-layout-only hidden>
