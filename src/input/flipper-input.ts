@@ -303,10 +303,6 @@ export class FlipperInput {
     const rightBefore = this.isSideHeld("right");
     this.dropStaleShift(e, true);
     if (CODE_TO_SIDE.has(e.code)) this.held.delete(e.code);
-    if ((e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT) && e.shiftKey === false) {
-      // On Windows VK_SHIFT is now fully up, so no Shift is repeating (G-04-21).
-      this.repeatingShift = null;
-    }
     this.commitTransitions(leftBefore, rightBefore);
   }
 
@@ -429,6 +425,8 @@ export class FlipperInput {
     if (isShiftCode && !(this.windowsShiftHeal && isKeyUp)) return;
     this.held.delete(SHIFT_LEFT);
     this.held.delete(SHIFT_RIGHT);
+    this.repeatingShift = null;
+    this.lastShiftRepeatAt = null;
   }
 
   /**
