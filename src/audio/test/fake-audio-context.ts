@@ -217,6 +217,33 @@ export class FakeAudioContext implements AudioContextLike {
     }
   }
 
+  /**
+   * A plain, comparable record of everything created so far: per node (in
+   * creation order) its kind, wave or filter type, outgoing edges as node
+   * indices, start/stop times and every parameter's automation events. Two
+   * runs that built the same graph with the same schedule give deep-equal logs.
+   */
+  log(): unknown[] {
+    const index = (n: FakeNode): number => (n === this.destination ? -1 : this.nodes.indexOf(n));
+    return this.nodes.map((n) => {
+      const entry: Record<string, unknown> = {
+        kind: n.kind,
+        to: n.connections.map(index),
+        disconnected: n.disconnected,
+      };
+      if (n instanceof FakeOscillator || n instanceof FakeBiquad) entry.type = n.type;
+      if (n instanceof FakeSource) {
+        entry.start = n.startTime;
+        entry.offset = n.startOffset;
+        entry.stop = n.stopTime;
+      }
+      for (const [key, value] of Object.entries(n)) {
+        if (value instanceof FakeParam) entry[key] = value.events.slice();
+      }
+      return entry;
+    });
+  }
+
   private track<T extends FakeNode>(node: T): T {
     this.nodes.push(node);
     return node;

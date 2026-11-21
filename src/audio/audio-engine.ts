@@ -22,12 +22,14 @@
  * strictly positive values (Pitfall 5); every source is started and stopped
  * once and its voice disconnects itself on `onended` (Pattern 6).
  *
- * This plan voices the bumper only, at its recipe peak and base pitch; the
- * other cue kinds are consumed without creating nodes. Velocity and pitch
- * variation and the other recipes arrive in plan 05-03.
+ * The bumper voice follows the hit: its peak is scaled by `strengthToGain`
+ * and its pitch by `semitoneRatio(playbackSemitones(...))`, with the jitter
+ * drawn from the constructor's `rng` (never a sim stream). The other cue kinds
+ * are consumed without creating nodes until their recipes land (plan 05-03).
  */
 
 import type { Cue, CueQueue } from "../app/cue-queue";
+import { playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 import type {
   AudioBufferLike,
   AudioContextLike,
@@ -74,6 +76,10 @@ export const BUMPER_VOICE = {
   noisePeak: 0.5,
   noiseAttack: 0.001,
   noiseLength: 0.025,
+  /** Harder hits rise up to this many semitones (research bumper row). */
+  maxSemitones: 3,
+  /** Per-hit random detune bound, plus or minus (cents). */
+  jitterCents: 25,
 } as const;
 
 /** Default error report: one line, keep the game running. */
@@ -183,32 +189,39 @@ export class AudioEngine {
   private play(ctx: AudioContextLike, master: AudioNodeLike, cue: Cue, t0: number): boolean {
     switch (cue.kind) {
       case "bumper":
-        this.playBumper(ctx, master, t0);
+        this.playBumper(ctx, master, cue, t0);
         return true;
       default:
         return false;
     }
   }
 
-  /** Bumper: triangle 620 -> 300 Hz plus a 2.2 kHz noise click (A2 values). */
-  private playBumper(ctx: AudioContextLike, master: AudioNodeLike, t0: number): void {
+  /**
+   * Bumper: triangle 620 -> 300 Hz plus a 2.2 kHz noise click (A2 values),
+   * louder and higher for a harder hit, slightly detuned every time.
+   */
+  private playBumper(ctx: AudioContextLike, master: AudioNodeLike, cue: Cue, t0: number): void {
     const v = BUMPER_VOICE;
     const noise = this.noise;
+    const peak = v.peak * strengthToGain(cue.strength);
+    const ratio = semitoneRatio(
+      playbackSemitones(cue.strength, this.rng, v.maxSemitones, v.jitterCents),
+    );
     const end = t0 + v.attack + v.decay + v.tail;
     const nodes: AudioNodeLike[] = [];
     try {
       const env = ctx.createGain();
       nodes.push(env);
       env.gain.setValueAtTime(ENV_FLOOR, t0);
-      env.gain.exponentialRampToValueAtTime(v.peak, t0 + v.attack);
+      env.gain.exponentialRampToValueAtTime(peak, t0 + v.attack);
       env.gain.exponentialRampToValueAtTime(ENV_FLOOR, t0 + v.attack + v.decay);
       env.connect(master);
 
       const osc = ctx.createOscillator();
       nodes.push(osc);
       osc.type = "triangle";
-      osc.frequency.setValueAtTime(v.f0, t0);
-      osc.frequency.exponentialRampToValueAtTime(v.f1, t0 + v.sweep);
+      osc.frequency.setValueAtTime(v.f0 * ratio, t0);
+      osc.frequency.exponentialRampToValueAtTime(v.f1 * ratio, t0 + v.sweep);
       osc.connect(env);
 
       const noiseEnv = ctx.createGain();
