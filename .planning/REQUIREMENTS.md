@@ -31,15 +31,15 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Reactive Elements (ELEM)
 
-- [x] **ELEM-01**: Bumpers pop the ball back with added energy and award points on contact
-- [x] **ELEM-02**: Slingshots/kickers near the flippers kick the ball on contact to keep it lively
-- [x] **ELEM-03**: Lanes and rollovers trigger lights and award points as the ball passes over them
+- [ ] **ELEM-01**: Bumpers pop the ball back with added energy and award points on contact
+- [ ] **ELEM-02**: Slingshots/kickers near the flippers kick the ball on contact to keep it lively
+- [ ] **ELEM-03**: Lanes and rollovers trigger lights and award points as the ball passes over them
 
 ### Game Rules (GAME)
 
-- [x] **GAME-01**: Player sees a live running score in an on-screen HUD
-- [x] **GAME-02**: A 3-ball game loop — draining serves the next ball to the plunger; game over after the last ball
-- [x] **GAME-03**: Player can nudge the table (small impulse); over-nudging triggers TILT — elements go dead and the flippers drop
+- [ ] **GAME-01**: Player sees a live running score in an on-screen HUD
+- [ ] **GAME-02**: A 3-ball game loop — draining serves the next ball to the plunger; game over after the last ball
+- [ ] **GAME-03**: Player can nudge the table (small impulse); over-nudging triggers TILT — elements go dead and the flippers drop
 
 ### Audio (AUD)
 
@@ -107,12 +107,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | LNCH-01 | Phase 3 | Complete |
 | LNCH-02 | Phase 3 | Complete |
 | TBL-01 | Phase 3 | Complete |
-| ELEM-01 | Phase 4 | Complete |
-| ELEM-02 | Phase 4 | Complete |
-| ELEM-03 | Phase 4 | Complete |
-| GAME-01 | Phase 4 | Complete |
-| GAME-02 | Phase 4 | Complete |
-| GAME-03 | Phase 4 | Complete |
+| ELEM-01 | Phase 4 | Gaps Found |
+| ELEM-02 | Phase 4 | Gaps Found |
+| ELEM-03 | Phase 4 | Gaps Found |
+| GAME-01 | Phase 4 | Gaps Found |
+| GAME-02 | Phase 4 | Gaps Found |
+| GAME-03 | Phase 4 | Gaps Found |
 | RND-01 | Phase 5 | Pending |
 | RND-02 | Phase 5 | Pending |
 | RND-03 | Phase 5 | Pending |
