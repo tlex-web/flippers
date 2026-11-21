@@ -192,14 +192,14 @@ Plans:
   3. Every element flashes on contact to confirm the hit registered.
   4. Each element (bumper, flipper, slingshot, drain, launch, tilt) produces a distinct runtime-synthesized sound with velocity/pitch variation and no audio files, played through a shared, gesture-resumed audio context with enveloped one-shots.
 
-**Plans**: 2/8 plans executed (5 waves)
+**Plans**: 3/8 plans executed (5 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
 - [x] 05-01-PLAN.md — Tracer: a bumper hit is heard in the live game. ReactiveFeedback hook, CueQueue/CueFeedback, Web Audio seam, AudioEngine (bumper voice), fake AudioContext, gesture unlock + live wiring (A5 at the composition root), testTimeout fix [wave 1]
 - [x] 05-08-PLAN.md — Smooth-motion groundwork: loop flipper-angle snapshots and interpolation helpers (real-table 144 Hz proof), RND-01 asset gate [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion; three plans run in parallel)*
-- [ ] 05-02-PLAN.md — The real table on screen: display-sized backing store, static bake, TableRenderer wired with interpolated balls and bats, ?debug=1 escape hatch, canvas recorder + bake/frame contract tests (D-01 interpretation recorded) [wave 2]
+- [x] 05-02-PLAN.md — The real table on screen: display-sized backing store, static bake, TableRenderer wired with interpolated balls and bats, ?debug=1 escape hatch, canvas recorder + bake/frame contract tests (D-01 interpretation recorded) [wave 2]
 - [ ] 05-03-PLAN.md — Every element's voice: velocity/pitch mapping, envelopes, 13 distinct recipes, voice pool, ramped master mute (D-02 engine, D-03 no wall voice) [wave 2]
 - [ ] 05-07-PLAN.md — Presentation seams hold every edge: throwing-sink real-table proof, hook/ring contract cases, unlock rules + A5 guard, closes the load-timeout todo [wave 2]
 
@@ -242,5 +242,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
-| 5. Rendering & Audio | 2/8 | In Progress | - |
+| 5. Rendering & Audio | 3/8 | In Progress | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |

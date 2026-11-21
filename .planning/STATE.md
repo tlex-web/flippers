@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-11-21T13:55:43.225Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-11-21T14:14:50.340Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: 5753ee113f9ad1c2b7a8d9b1396a5ac15f875e04
+state_head: 238dbf796857515e345fb99df47d62ed4752a269
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 36
+  completed_plans: 37
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 05 execution started
 
@@ -97,6 +97,7 @@ Progress: [███████░░░] 67%
 | Phase 04 P15 | 37 min | 3 tasks | 3 files |
 | Phase 05 P01 | 7 min | 2 tasks | 9 files |
 | Phase 05 P08 | 7 min | 3 tasks | 5 files |
+| Phase 05 P02 | 18min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-01: bumper noise click has its own 25 ms gain envelope so every source stops at the common voice end; vitest testTimeout 30000
 - [Phase 05]: Asset gate reads sources via Vite raw imports (import.meta.glob ?raw + index.html?raw), not node:fs - no @types/node, no new dependency
 - [Phase 05]: Flipper angles are snapshotted in FixedStepLoop beside the balls and lerped shortest-arc at alpha via src/render/interpolate.ts; 05-02 wires them into the live frame
+- [Phase 05]: 05-02: backing store follows the display (CSS fit first, backing = round(css*dpr)); under a tenth of the old 400 px/m area at 1280x684 dpr 1.5
+- [Phase 05]: 05-02: D-01 holds - HUD stays DOM text, canvas paints no text (proven: no fillText/strokeText in draw)
+- [Phase 05]: 05-02: ?debug=1 (exact compare) keeps DebugRenderer; TableRenderer is the default live renderer with interpolated balls and bats
 
 ### Pending Todos
 
@@ -219,6 +223,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T13:55:42.193Z
-Stopped at: Completed 05-08-PLAN.md
+Last session: 2026-11-21T14:14:49.369Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
