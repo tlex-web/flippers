@@ -1,13 +1,12 @@
 ---
 phase: 04-reactive-elements-game-rules
-reviewed: 2026-11-21T01:33:07Z
+reviewed: 2026-11-21T04:05:00Z
 depth: standard
-files_reviewed: 4
+files_reviewed: 3
 files_reviewed_list:
   - src/input/flipper-input.test.ts
   - src/input/flipper-input.ts
   - src/sandbox/flipper-e2e.test.ts
-  - src/sandbox/main.ts
 findings:
   critical: 0
   warning: 1
@@ -17,82 +16,82 @@ findings:
 status: issues_found
 ---
 
-# Phase 4: Code Review Report (incremental: 04-14 / G-04-21)
+# Phase 4: Code Review Report (incremental: 04-15 / G-04-21 cradle)
 
-**Reviewed:** 2026-11-21T01:33:07Z
+**Reviewed:** 2026-11-21T04:05:00Z
 **Depth:** standard
-**Files Reviewed:** 4
+**Files Reviewed:** 3
 **Status:** issues_found
 
 ## Summary
 
-Incremental review of plan 04-14 (G-04-21) since `c4c8a46`. The plan fixes the previous review's WR-01 and WR-02 and closes IN-01. The four in-scope files changed: the `repeatingShift` marker and `dropStaleShift(e, isKeyUp)` in `flipper-input.ts`, the R1-R7 / K1-K6 unit block, three keyboard-to-Planck cases, and one comment in `main.ts`.
+This is an incremental review of plan 04-15 since `3ae1d4d`. The plan adds the timed re-press rule (`SHIFT_REPEAT_GAP_MS` = 450, `lastShiftRepeatAt`, optional `KeyEventLike.timeStamp`), moves the marker reset into `dropStaleShift` (IN-01), and fixes two docs (IN-02, IN-03). It also adds the C1-C11 / I1-I2 unit block and two keyboard-to-Planck cradle cases.
 
-Checks run: both test files pass (126 tests), and `tsc --noEmit` is clean. I also ran two throwaway probe tests from the scratchpad against the real `FlipperInput`. No source file was modified.
+Checks run:
 
-Status of the previous findings:
+- Both in-scope test files pass (145 tests). The full suite passes (521 tests).
+- `tsc --noEmit` is clean.
+- I ran four throwaway probes against the real `FlipperInput` from a temporary folder, then deleted it. No source file was modified.
 
-- **WR-02: resolved.** A Shift keydown can no longer reach the drop (`isShiftCode && !(heal && isKeyUp)` returns early, line 393). Shift keyups with the heal on and non-Shift events on both keydown and keyup still reconcile. K1-K6 and the e2e case pin all of this.
-- **IN-01: resolved.** The `main.ts:142-145` comment now names the G-04-17 Shift-keyup heal.
-- **WR-01: resolved only for one held Shift.** If ONE Shift is held across a force-clear, the other Shift's repeat-flagged press is accepted once the held Shift auto-repeats (R1/R2 and the e2e mirrors). If BOTH Shifts are held across the clear (the D-09 cradle), the original symptom is still there. This is a second residual, and it is not documented (WR-01 below). Plan 04-14 line 90 (UAT 21 decision A) says the only accepted residual is "a second press before the first OS auto-repeat after a clear".
+Status of the 04-14 findings:
 
-Previous IN-02..IN-04 (`key-labels.ts`, `index.html`) were out of scope for 04-14. Those files are not in this review's scope and stay open as recorded at `c4c8a46`.
+- **WR-01: resolved.** Cradle held across a clear, then the auto-repeating Shift re-pressed after a pause: this is now a press (C1/C2 for focus, blur and hidden, plus both e2e mirrors). Probe P3 also confirms that re-pressing the other Shift afterwards restores the full cradle, because the other Shift is then in `held`. The fast re-press residual is documented and pinned (C5, C6).
+- **IN-01: resolved.** `dropStaleShift` clears `repeatingShift` and `lastShiftRepeatAt` whenever both Shift codes are dropped (lines 454-457). The keyup-only block in `handleKeyUp` is gone. I1 and I2 pin this.
+- **IN-02 / IN-03: resolved.** The `handleKeyDown` doc and the `anyEdge` doc now match the code.
 
-No necessity findings. The new marker and the `isKeyUp` gate both handle states that keyboard events really produce.
+Carry-overs: of the out-of-scope findings from earlier reviews, only the old WR-04 (`f3ab8be`) is in a file reviewed here, and it is still present. It is re-reported as WR-01 below. WR-03, IN-04..IN-09 and the `key-labels.ts` / `index.html` items concern files outside this scope. They stay open as recorded.
+
+The timing logic is correct for every Windows event order I traced:
+
+- `lastShiftRepeatAt` is only written together with the marker.
+- A non-finite or missing `timeStamp` never counts.
+- A negative delta (clock skew) never counts.
+- The held check comes first, so a held Shift is never pressed twice.
+
+The remaining findings are about documentation accuracy and test-suite robustness.
+
+No necessity findings. The `Number.isFinite` guards check `timeStamp`, which comes from browser events across a trust boundary. The marker and timing state handle event orders that Windows really produces.
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01: Cradle held across a force-clear: re-pressing the auto-repeating Shift is still dropped, so both bats stay dead until every Shift is released
+### WR-01: Quick-tap sweep still has no timeout budget and now takes 4.2 s of the 5 s default under full-suite load (carry-over of `f3ab8be` WR-04)
 
-**File:** `src/input/flipper-input.ts:239-245`, `src/input/flipper-input.ts:407-413`, `src/input/flipper-input.ts:59-64`
-**Issue:** The marker records the Shift whose ignored auto-repeat arrived most recently. A repeat-flagged keydown of that same code is always treated as its own auto-repeat. Windows typematic repeats only the LAST-pressed key. So if the player is cradling (both Shifts down, ShiftRight pressed last) when a blur, focus regain or hidden tab clears the set, this happens:
-
-1. `forceClear()` -> `held = {}`, `repeatingShift = null`. Both bats drop, as designed.
-2. ShiftRight's auto-repeat arrives -> ignored, `repeatingShift = "ShiftRight"`. ShiftLeft never repeats, because typematic does not resume an earlier key.
-3. The player releases ShiftRight to re-press it. ShiftLeft is still down, so Windows sends no keyup.
-4. The player re-presses ShiftRight. Windows sends `{code:"ShiftRight", repeat:true, shiftKey:true}`. `isSecondShiftPress("ShiftRight")`: not held; other = ShiftLeft is not held and `repeatingShift !== "ShiftLeft"`, so it returns false. The keydown is dropped as auto-repeat and the marker stays ShiftRight.
-5. Every further ShiftRight press repeats step 4. ShiftLeft is physically held, so it cannot get a fresh press either. **Neither bat rises until every Shift is released.** That is exactly the symptom WR-01 described.
-
-I confirmed this with a probe against the real class: ShiftLeft down, ShiftRight down (repeat-flagged), `handleFocus()`, ShiftRight repeat, ShiftRight repeat. The result was no edges and `isHeld("right") === false`. Re-pressing ShiftLeft instead does work, because the marker names the other code, but the player has no way to know which key to use.
-
-The header residual (lines 61-64) says the remaining miss is only "a second Shift pressed before the held Shift's first OS auto-repeat". Here the miss is permanent and follows an auto-repeat. The plan's acceptance criteria accept only the documented residual. No test covers both Shifts held across a clear. The trigger is the same one that motivated G-04-11 and G-04-21: the cradle is the D-09 use case, and rapid Shift taps raise the Sticky Keys prompt, which steals focus.
-
-**Fix:** From events alone, an auto-repeat of ShiftRight and a fresh repeat-flagged ShiftRight press look identical. Only timing separates them. Choose one of these:
-
-- (A, recommended) Use timing to tell them apart. The typematic stream stops when the key is released, so a gap in it marks a fresh press:
-  ```ts
-  private lastShiftRepeatAt = -Infinity; // reset in forceClear and on the Shift-up keyup
-  // in isSecondShiftPress, after the held check:
-  //   if (this.repeatingShift === code && e.timeStamp - this.lastShiftRepeatAt > SHIFT_REPEAT_GAP_MS) return true;
-  // in the repeat-ignore branch: this.lastShiftRepeatAt = e.timeStamp;
-  ```
-  `KeyEventLike` needs an optional `timeStamp`. Pick a gap above the slowest Windows repeat interval, about 400 ms, for example 450 ms. A re-press made faster than that is still missed, and the residual paragraph must say so.
-- (B) Accept it as a second residual. This needs an explicit user decision, because it contradicts plan line 90. Extend the header residual paragraph, and add a pinning unit test like R3: cradle -> clear -> ShiftRight repeat -> ShiftRight repeat => no edge.
+**File:** `src/sandbox/flipper-e2e.test.ts:327-365`
+**Issue:** The test `no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised` still builds 192 full `PlanckWorld` rigs inside one `it` with no timeout. `vitest.config.*` sets no `testTimeout`, so the 5000 ms default applies. In this review's full `npx vitest run`, it took **4201 ms**. That leaves about 800 ms of headroom, and `f3ab8be` already measured it failing at 6427 ms and 6666 ms on a busier host. 04-15 added two more full-rig e2e cases to this same file (lines 827-940), which adds load in the same worker. Whether `npm test` passes still depends on host load.
+**Fix:** Give it an explicit budget, or split it per binding so each case stays small:
+```ts
+it("no quick tap (3-10 steps, any rest, all six bindings) leaves a bat raised", () => {
+  ...
+}, 30_000);
+// or: for (const b of ALL_BINDINGS) it(`no quick tap on ${b.code} leaves a bat raised`, () => { ... });
+```
 
 ## Info
 
-### IN-01: `repeatingShift` survives the G-04-11 non-Shift reconciliation, breaking the "lone repeat stays ignored" invariant
+### IN-01: The timed re-press also fires for a SINGLE Shift held across a clear at slow typematic, which the `handleFocus` doc and header say cannot happen
 
-**File:** `src/input/flipper-input.ts:390-396`, `src/input/flipper-input.ts:190-197`, `src/input/flipper-input.ts:405`
-**Issue:** The marker doc says it "proves that Shift is physically down". `isSecondShiftPress`'s doc says "a lone repeat stay[s] ignored". A non-Shift event reporting `shiftKey: false` proves no Shift is down, and `dropStaleShift` drops both held Shift codes, but `repeatingShift` is not reset. Probe: heal on, ShiftLeft down, ShiftLeft repeat, `KeyX` with `shiftKey:false`, then a lone repeat-flagged ShiftRight. The result is `rightPress: true`. I found no realistic Windows event order that yields a lone repeat-flagged Shift without a clear in between, which would reset the marker anyway. So this breaks a documented invariant, not a confirmed gameplay bug.
-**Fix:** In `dropStaleShift`, after the two `held.delete` calls, add `this.repeatingShift = null;`. That runs only when some event proved every Shift is up, which also covers the Shift-up keyup reset in `handleKeyUp` (lines 270-273). That block can then be removed.
+**File:** `src/input/flipper-input.ts:345-350`, `src/input/flipper-input.ts:52-58`, `src/input/flipper-input.ts:209-211`, `src/input/flipper-input.ts:480-486`
+**Issue:** The timed path in `isSecondShiftPress` only requires `repeatingShift === code`, `code` not held, and a gap above 450 ms. Nothing limits it to the both-Shift cradle. Probe P2: heal on, ShiftLeft down, `handleFocus()`, a ShiftLeft repeat at 1000 ms (ignored, marker set), then a ShiftLeft repeat at 1480 ms gives `leftPress: true`. That is a 480 ms interval, which is KeyboardSpeed 0 with the 20% deviation the constant's doc cites.
 
-### IN-02: `handleKeyDown` doc still says every event drops a stale Shift
+With one Shift held alone, a real re-press always sends a keyup first (Shift up), which clears the marker. So for a single Shift, this path can only ever fire from auto-repeat. The constant's doc (lines 209-211) mentions this in general terms. But `handleFocus` (lines 345-346) still says "A key physically held across the focus regain needs a fresh press". Both the header (line 52) and `handleFocus` (lines 348-349) describe the timed rule as applying "with both Shifts held". In practice the result is harmless: a bat rises for a key that is really held. Still, the documented contract is wrong, and no test pins the single-Shift behaviour either way.
+**Fix:** Add one sentence to the `handleFocus` doc and to the header's timed re-press paragraph: "At the slowest Windows repeat rate, a held Shift's own auto-repeat can exceed SHIFT_REPEAT_GAP_MS and then counts as a press, also for a single Shift held across a clear." Add a pinning unit test like P2 next to C4.
 
-**File:** `src/input/flipper-input.ts:228-234`
-**Issue:** "Drops a stale Shift first (every event, repeat or unbound included, carries valid modifier state)". Since G-04-21, a Shift keydown never reconciles (line 393). The doc also does not mention that the repeat branch now records `repeatingShift` (lines 241-245), which is the main G-04-21 side effect of this method.
-**Fix:** Change it to "Drops a stale Shift first on any non-Shift keydown reporting Shift up (a Shift keydown never reconciles, G-04-21), then ignores OS auto-repeat, recording a Shift auto-repeat for the Windows heal, ...".
+### IN-02: The header residual names only two ways to recover from a missed fast re-press; a slower re-press of the same Shift also works
 
-### IN-03: `anyEdge` test helper doc states the opposite of what it returns
+**File:** `src/input/flipper-input.ts:73-79`
+**Issue:** The residual says a fast re-press released before the typematic delay, or any fast re-press at the 250 ms delay setting, "stays missed until the other Shift is re-pressed or every Shift is released". A missed re-press only moves `lastShiftRepeatAt` to its own time (line 303). So a later re-press of the SAME Shift, more than 450 ms after the missed one, is a press. Probe P1: a re-press at T+200 is missed, and a re-press at T+800 gives `rightPress: true`. Probe P4 confirms the 250 ms case: a fast re-press held at 33 ms repeats never presses. The doc makes the miss sound stuck until another key is used. In fact it only lasts until the player re-presses the same Shift more slowly. No test pins that recovery. C6 covers only the held-past-delay route.
+**Fix:** Change the end of the residual to "...stays missed until that Shift is re-pressed after a pause longer than SHIFT_REPEAT_GAP_MS, the other Shift is re-pressed, or every Shift is released". Optionally add a C5b test: miss at T+200, then a press at T+200+SHIFT_REPEAT_GAP_MS+1.
 
-**File:** `src/input/flipper-input.test.ts:703`
-**Issue:** The doc says "True when a drained view carries no edge at all", but the body returns `leftPress || leftRelease || rightPress || rightRelease`, which is true when ANY edge is present. The call sites use `expect(anyEdge(...)).toBe(false)`, so the tests are correct. The comment misleads anyone adding a case.
-**Fix:** Change it to "True when a drained view carries at least one edge."
+### IN-03: The timed re-press text is spliced into heal item (1), leaving "(2) a" dangling mid-paragraph
+
+**File:** `src/input/flipper-input.ts:47-62`
+**Issue:** The two-heal list in the header opens item (1) at line 47. Lines 52-59 then insert the whole timed re-press paragraph, and item (2) starts mid-line as "never counts this way; (2) a" (lines 59-60), followed by "Both are gated to Windows" (lines 62-63). With three behaviours, "two heals" and "Both" are now ambiguous: the timed re-press is a third accept path that is also Windows-gated. The `FlipperInputOptions.windowsShiftHeal` doc (lines 138-143) already lists all three cleanly.
+**Fix:** Restructure the header to match the options doc. Use (1) second-Shift press (G-04-17, extended past a clear by G-04-21), (2) timed re-press (G-04-21 cradle), and (3) drop-both on a Shift keyup reporting Shift up. Then say "All three are gated to Windows".
 
 ---
 
-_Reviewed: 2026-11-21T01:33:07Z_
+_Reviewed: 2026-11-21T04:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
