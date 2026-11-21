@@ -693,3 +693,64 @@ describe("same-window release and press (WR-01)", () => {
     expect(edges.rightRelease).toBe(true);
   });
 });
+
+describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)", () => {
+  /** A synthetic key event with explicit Shift state and repeat flag (s = shiftKey, r = repeat). */
+  function gev(code: string, shiftKey: boolean, repeat: boolean) {
+    return { code, shiftKey, repeat, preventDefault: vi.fn() };
+  }
+
+  /** True when a drained view carries no edge at all. */
+  function anyEdge(e: {
+    leftPress: boolean;
+    leftRelease: boolean;
+    rightPress: boolean;
+    rightRelease: boolean;
+  }): boolean {
+    return e.leftPress || e.leftRelease || e.rightPress || e.rightRelease;
+  }
+
+  /**
+   * WR-01 body: ShiftLeft held across `clear`; once its OS auto-repeat reaches
+   * the page, a repeat-flagged ShiftRight keydown is a genuine press.
+   */
+  function heldLeftAcrossClear(clear: (input: FlipperInput) => void): void {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+
+    clear(input);
+    expect(input.drainEdges().leftRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+
+    // The OS auto-repeat of the Shift held across the clear: no edge, no press.
+    const rep = gev("ShiftLeft", true, true);
+    input.handleKeyDown(rep);
+    expect(anyEdge(input.drainEdges())).toBe(false);
+    expect(input.isHeld("left")).toBe(false);
+    expect(rep.preventDefault).not.toHaveBeenCalled();
+
+    // The genuine Right Shift press, which Windows flags as a repeat.
+    const second = gev("ShiftRight", true, true);
+    input.handleKeyDown(second);
+    expect(input.drainEdges().rightPress).toBe(true);
+    expect(second.preventDefault).toHaveBeenCalledTimes(1);
+    expect(input.isHeld("right")).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+
+    for (let i = 0; i < 3; i++) {
+      input.handleKeyDown(gev("ShiftRight", true, true));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+    }
+
+    // The physical Right Shift release sent nothing; this is the only keyup.
+    input.handleKeyUp(gev("ShiftLeft", false, false));
+    expect(input.drainEdges().rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  }
+
+  it("R1 (focus): ShiftLeft held across a focus regain; after its first OS auto-repeat a repeat-flagged ShiftRight is a press", () => {
+    heldLeftAcrossClear((input) => input.handleFocus());
+  });
+});

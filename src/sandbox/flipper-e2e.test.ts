@@ -713,3 +713,82 @@ describe("same-window release and press (WR-01)", () => {
     expect(Math.abs(rig.tipY(rig.leftId) - restTip)).toBeLessThan(0.02);
   });
 });
+
+/* ------------------------------------------------------------------------- *
+ * G-04-21: the Windows Shift heal after a force-clear and on Shift keydowns.
+ * ------------------------------------------------------------------------- */
+
+describe("Windows Shift after a force-clear (G-04-21)", () => {
+  /** A synthetic key event carrying explicit Shift state and repeat flag. */
+  const fkey = (code: string, shiftKey: boolean, repeat: boolean): KeyEventLike => ({
+    code,
+    shiftKey,
+    repeat,
+    preventDefault: () => {},
+  });
+
+  type ShiftCode = "ShiftLeft" | "ShiftRight";
+
+  /**
+   * WR-01 on a heal-on rig: `heldCode` is held across a focus regain, its OS
+   * auto-repeat reaches the page, then `otherCode` is pressed (Windows flags it
+   * repeat). The other bat rises; the held-across bat stays down until a fresh
+   * press; the final keyup of `heldCode` (Shift up) drops everything.
+   */
+  function heldAcrossClear(heldCode: ShiftCode, otherCode: ShiftCode): void {
+    const rig = makeRig(true);
+    const ids = [rig.leftId, rig.rightId] as const;
+    const idOf = (c: ShiftCode): number => (c === "ShiftLeft" ? rig.leftId : rig.rightId);
+    const heldId = idOf(heldCode);
+    const otherId = idOf(otherCode);
+    for (let i = 0; i < 20; i++) rig.step();
+    const restTip = ids.map((id) => rig.tipY(id));
+
+    rig.input.handleKeyDown(fkey(heldCode, true, false));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(heldId)).toBe("held-up");
+
+    rig.input.handleFocus();
+    for (let i = 0; i < 90; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+
+    // The held Shift's OS auto-repeat: it needs a fresh press, so nothing rises.
+    rig.input.handleKeyDown(fkey(heldCode, true, true));
+    for (let i = 0; i < 10; i++) rig.step();
+    expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+    expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+
+    // The genuine press of the other Shift, flagged repeat by Windows.
+    rig.input.handleKeyDown(fkey(otherCode, true, true));
+    const rise = stepsUntilMoved(rig, otherId, 40);
+    expect(rise).toBeGreaterThanOrEqual(1);
+    expect(rise).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(otherId)).toBe("held-up");
+    expect(rig.controller.getPhase(heldId)).toBe("resting");
+
+    // The physical release of the other Shift sends nothing.
+    for (let i = 0; i < 30; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(otherId)).toBe("held-up");
+    }
+
+    // The only keyup: the held-across Shift, reporting Shift up.
+    rig.input.handleKeyUp(fkey(heldCode, false, false));
+    const fall = stepsUntilMoved(rig, otherId, 40);
+    expect(fall).toBeGreaterThanOrEqual(1);
+    expect(fall).toBeLessThanOrEqual(2);
+    for (let i = 0; i < 90; i++) rig.step();
+    ids.forEach((id, k) => {
+      expect(rig.controller.getPhase(id)).toBe("resting");
+      expect(Math.abs(rig.tipY(id) - (restTip[k] ?? 0))).toBeLessThan(0.02);
+    });
+    expect(rig.input.isHeld("left")).toBe(false);
+    expect(rig.input.isHeld("right")).toBe(false);
+  }
+
+  it("ShiftLeft held across a focus regain: a Right Shift press raises the right bat and the final ShiftLeft keyup drops it", () => {
+    heldAcrossClear("ShiftLeft", "ShiftRight");
+  });
+});
