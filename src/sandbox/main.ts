@@ -269,6 +269,8 @@ function main(): void {
     if (ge.nudgeLeft) session.onNudge("left");
     if (ge.nudgeRight) session.onNudge("right");
     if (ge.nudgeUp) session.onNudge("up");
+    // M (D-02): presentation only; the master gain ramps, the sim never reads it.
+    if (ge.mute) audio.toggleMute();
     session.tick();
   }
 

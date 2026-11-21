@@ -132,10 +132,22 @@ const FOREIGN_CODES = [
 /** Every edge in the drained view, as a plain object for whole-view comparisons. */
 function snapshot(input: GameInput) {
   const e = input.drainEdges();
-  return { start: e.start, nudgeLeft: e.nudgeLeft, nudgeRight: e.nudgeRight, nudgeUp: e.nudgeUp };
+  return {
+    start: e.start,
+    nudgeLeft: e.nudgeLeft,
+    nudgeRight: e.nudgeRight,
+    nudgeUp: e.nudgeUp,
+    mute: e.mute,
+  };
 }
 
-const NONE = { start: false, nudgeLeft: false, nudgeRight: false, nudgeUp: false } as const;
+const NONE = {
+  start: false,
+  nudgeLeft: false,
+  nudgeRight: false,
+  nudgeUp: false,
+  mute: false,
+} as const;
 
 describe("GameInput: nudge latch (R9)", () => {
   for (const { code, edge } of NUDGE_KEYS) {
@@ -204,7 +216,13 @@ describe("GameInput: nudge latch (R9)", () => {
     input.handleKeyDown(ev("Period"));
     input.handleKeyDown(ev("ArrowUp"));
     input.handleKeyDown(ev("Enter"));
-    expect(snapshot(input)).toEqual({ start: true, nudgeLeft: true, nudgeRight: true, nudgeUp: true });
+    expect(snapshot(input)).toEqual({
+      ...NONE,
+      start: true,
+      nudgeLeft: true,
+      nudgeRight: true,
+      nudgeUp: true,
+    });
   });
 
   it("never calls preventDefault on, or latches, a flipper key or Space", () => {
@@ -237,5 +255,81 @@ describe("GameInput: nudge latch (R9)", () => {
     expect(drained.nudgeLeft).toBe(false);
     expect(drained.nudgeRight).toBe(false);
     expect(drained.nudgeUp).toBe(false);
+  });
+});
+
+describe("GameInput: mute latch (05-06, D-02)", () => {
+  it("a KeyM keydown latches only mute, and the next drain resets it", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyM"));
+    expect(snapshot(input)).toEqual({ ...NONE, mute: true });
+    expect(snapshot(input)).toEqual(NONE);
+  });
+
+  it("an auto-repeat KeyM keydown latches nothing", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyM", true));
+    expect(snapshot(input)).toEqual(NONE);
+  });
+
+  it("a second KeyM keydown without a keyup latches nothing; keyup then keydown latches again", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyM"));
+    input.drainEdges();
+    input.handleKeyDown(ev("KeyM"));
+    expect(snapshot(input)).toEqual(NONE);
+    input.handleKeyUp(ev("KeyM"));
+    expect(snapshot(input)).toEqual(NONE); // keyup alone latches nothing
+    input.handleKeyDown(ev("KeyM"));
+    expect(snapshot(input)).toEqual({ ...NONE, mute: true });
+  });
+
+  it("preventDefault fires for KeyM on keydown, repeat and keyup", () => {
+    const input = new GameInput();
+    const down = ev("KeyM");
+    const repeat = ev("KeyM", true);
+    const up = ev("KeyM");
+    input.handleKeyDown(down);
+    input.handleKeyDown(repeat);
+    input.handleKeyUp(up);
+    expect(down.preventDefault).toHaveBeenCalled();
+    expect(repeat.preventDefault).toHaveBeenCalled();
+    expect(up.preventDefault).toHaveBeenCalled();
+  });
+
+  it("after handleBlur() while KeyM is held, the next KeyM keydown latches", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyM"));
+    input.drainEdges();
+    input.handleBlur();
+    expect(snapshot(input)).toEqual(NONE);
+    input.handleKeyDown(ev("KeyM"));
+    expect(snapshot(input)).toEqual({ ...NONE, mute: true });
+  });
+
+  it("KeyM, Enter and the three nudge keys latch independently in one window", () => {
+    const input = new GameInput();
+    input.handleKeyDown(ev("KeyM"));
+    input.handleKeyDown(ev("Enter"));
+    input.handleKeyDown(ev("KeyX"));
+    input.handleKeyDown(ev("Period"));
+    input.handleKeyDown(ev("ArrowUp"));
+    expect(snapshot(input)).toEqual({
+      start: true,
+      nudgeLeft: true,
+      nudgeRight: true,
+      nudgeUp: true,
+      mute: true,
+    });
+  });
+
+  it("no flipper key or Space ever latches mute", () => {
+    const input = new GameInput();
+    for (const code of FOREIGN_CODES) {
+      input.handleKeyDown(ev(code));
+      input.handleKeyDown(ev(code, true));
+      input.handleKeyUp(ev(code));
+      expect(input.drainEdges().mute, code).toBe(false);
+    }
   });
 });

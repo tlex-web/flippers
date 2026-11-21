@@ -205,6 +205,7 @@ describe("index.html markup", () => {
     ["Slash", "/"],
     ["KeyX", "X"],
     ["Period", "."],
+    ["KeyM", "M"],
   ] as const;
 
   it("marks each layout-dependent cap with its code and US fallback label", () => {
@@ -213,10 +214,10 @@ describe("index.html markup", () => {
     }
   });
 
-  it("uses only the four layout-dependent codes", () => {
+  it("uses only the five layout-dependent codes (KeyZ, Slash, KeyX, Period, KeyM)", () => {
     const allowed: readonly string[] = CODES.map(([code]) => code);
     const found = [...indexHtml.matchAll(/data-code="([^"]*)"/g)].map((m) => m[1]);
-    expect(found.length).toBeGreaterThanOrEqual(4);
+    expect(found.length).toBeGreaterThanOrEqual(5);
     for (const code of found) {
       expect(allowed).toContain(code);
     }
@@ -228,8 +229,8 @@ describe("index.html markup", () => {
     }
   });
 
-  it("keeps exactly five controls rows", () => {
-    expect(indexHtml.match(/<dt>/g)?.length).toBe(5);
+  it("keeps exactly six controls rows", () => {
+    expect(indexHtml.match(/<dt>/g)?.length).toBe(6);
   });
 
   /** The note paragraph's inner markup. */
