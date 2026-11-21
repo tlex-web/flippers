@@ -1,8 +1,10 @@
 /**
  * One-shot gain envelopes (Phase 5, AUD-01, research Pattern 6 / Pitfall 5).
  *
- * Pure point math plus one thin applier, so the click-free rules are unit
- * tested without Web Audio:
+ * Pure point math plus a scheduler (`scheduleEnvelope`, used by the engine
+ * with `envelopePoints` and `envelopeEnd`) and a test-only convenience
+ * wrapper (`applyEnvelope`), so the click-free rules are unit tested without
+ * Web Audio:
  * - every envelope is anchored with a "set" at `ENV_FLOOR` at its start time
  *   (an exponential ramp starts at the previous event, so it needs an anchor;
  *   the parameter's `.value` is never written directly);
@@ -120,8 +122,10 @@ export function scheduleEnvelope(param: AudioParamLike, points: readonly EnvPoin
 }
 
 /**
- * Schedule the envelope on `param`: cancel anything pending from t0, then the
- * points. Returns the time the envelope reaches the floor.
+ * Test convenience: schedule the envelope on `param` (cancel anything pending
+ * from t0, then the points) and return the time it reaches the floor.
+ * Production code calls `scheduleEnvelope(param, envelopePoints(...))` and
+ * `envelopeEnd` directly, so it can keep the scheduled points (05-REVIEW IN-04).
  */
 export function applyEnvelope(
   param: AudioParamLike,
