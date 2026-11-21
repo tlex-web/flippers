@@ -1,128 +1,90 @@
 ---
 phase: 05-rendering-audio
-reviewed: 2026-11-21T23:30:00Z
+reviewed: 2026-11-21T23:50:00Z
 depth: standard
-files_reviewed: 38
+files_reviewed: 4
 files_reviewed_list:
-  - index.html
-  - src/audio/audio-context-like.ts
   - src/audio/audio-engine.test.ts
   - src/audio/audio-engine.ts
-  - src/audio/envelope.ts
-  - src/audio/recipes.test.ts
-  - src/audio/recipes.ts
-  - src/audio/test/fake-audio-context.ts
   - src/audio/voice-pool.test.ts
   - src/audio/voice-pool.ts
-  - src/game/reactive-table.test.ts
-  - src/harness/flipper-tunnel.test.ts
-  - src/harness/reactive-soak.test.ts
-  - src/harness/soak.test.ts
-  - src/harness/stability.test.ts
-  - src/harness/table-soak.test.ts
-  - src/input/flipper-input.ts
-  - src/input/game-input.test.ts
-  - src/input/game-input.ts
-  - src/render/asset-free.test.ts
-  - src/render/flash.test.ts
-  - src/render/flash.ts
-  - src/render/table-renderer.test.ts
-  - src/sandbox/cue-pipeline.test.ts
-  - src/sandbox/flipper-e2e.test.ts
-  - src/sandbox/game-e2e.test.ts
-  - src/sandbox/game.determinism.test.ts
-  - src/sandbox/main.ts
-  - src/sandbox/plunger-e2e.test.ts
-  - src/sandbox/presentation.determinism.test.ts
-  - src/sim/loop.determinism.test.ts
-  - src/sim/loop.flippers.test.ts
-  - src/sim/loop.tabblur.test.ts
-  - src/sim/loop.ts
-  - src/table/table-world.test.ts
-  - src/ui/hud.test.ts
-  - src/ui/hud.ts
-  - vitest.config.ts
 findings:
   critical: 0
   warning: 1
-  info: 4
-  total: 5
-  necessity: 0
+  info: 7
+  total: 8
+  necessity: 1
 status: issues_found
 ---
 
-# Phase 5: Code Review Report (incremental: review-fix commits)
+# Phase 5: Code Review Report (incremental: WR-01 fix f1b2a1e)
 
 **Reviewed:** 2026-11-21
 **Depth:** standard
-**Files Reviewed:** 38
+**Files Reviewed:** 4
 **Status:** issues_found
-**Scope:** `git diff f6b825c..HEAD`, the 9 fix commits 11ab06a, c5d02e2, 2259d2e, 6956600, c91183a, 309a1b0, 5d73335, 69129bd, 023ded9
+**Scope:** `git diff 3a0636c..HEAD -- src/audio`, the single fix commit f1b2a1e (+314/-34). Context read: `src/audio/test/fake-audio-context.ts`, `src/audio/audio-unlock.ts`, `src/audio/envelope.ts`, `src/sandbox/main.ts`.
 
 ## Summary
 
-This pass checks the fixes for the prior pass's 9 findings (WR-01, WR-02, IN-01 to IN-07). Every finding ID below is new and is about the fix code. None of them reopens a prior finding.
+This pass checks the fix for the prior pass's WR-01 ("Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph"). IN-01 to IN-04 are carried forward unchanged from the prior pass: their code was not touched, and I re-checked that each one still applies. IN-05 onward and WR-01 are new findings about the f1b2a1e fix code.
 
-**Does each fix resolve its finding?**
+**Is the prior WR-01 resolved?** Mostly, yes.
 
-| Prior | Verdict | Notes |
+| Point | Verdict | Notes |
 |---|---|---|
-| WR-01 (stale-event fades) | Resolved | **Master:** the tracked linear segment plus `cancel(now)` / `set(level, now)` / `linear(target, now + MUTE_RAMP_S)` is exact. Two toggles in one frame at the same `currentTime` also work: the second cancel removes the first anchor, which is then re-set at its tracked level. **Steal, Chrome path:** the explicit `set` after `cancelAndHoldAtTime` covers the hold-segment case, where the spec inserts nothing. **Steal, Firefox path:** the `cancel` then `exp(value, now)` exactly retraces the attack, hold and decay segments, because every envelope point is a set or an exp between positive values. `envelopeValueAt` matches the Web Audio exponential formula. |
-| WR-02 (starting context) | Resolved, with a new robustness gap (WR-01 below) | |
-| IN-01 (flash lead) | Resolved | The first frame now reads age `alpha`. A hold-0 contact flash is 0.29 to 0.35 on the first frame (exactly 0.35 only at alpha 0). The fix report says it is drawn "at its 0.35 peak", which is slightly too strong. Every `record()` caller (CueFeedback, ContactFlash, PresentationObserver) runs inside `onPostStep` before `flash.tick()`, so the +1 stamp is consistent. |
-| IN-02 (negative delta) | Resolved | `realDeltaMs > 0 ? min(...) : 0` handles negative, NaN and +Infinity deltas. |
-| IN-03 (mute modifiers, marker) | Resolved | Minor documentation and accessibility drift (IN-02 below). |
-| IN-04 (asset gate) | Resolved for the listed gaps | One gap remains (IN-03 below). |
-| IN-05 (pitch maps) | Resolved | Resolved with tests, which is the review's option (b). |
-| IN-06 (unlock edge cases) | Resolved | `ctx.close?.().catch(...)` short-circuits correctly when `close` is absent. |
-| IN-07 (test timeout) | Resolved | Each heavy file calls `vi.setConfig` at module scope, before collection. |
+| (1) Graph growth while `resume()` never settles | Resolved | Within the window, a steal with `rendering=false` disconnects the stolen voice at once. At most 16 voices stay connected. After the window, `flush()` builds nothing. The window opens only when no resume is pending, so node creation is limited to one window (about 15 frames) for each pending resume. One caveat: started sources on a context that never renders cannot finish, so the browser may keep the disconnected nodes alive. They stop costing processing, but memory is bounded by the window rather than by the pool. |
+| (2) Stale burst on a late start | Resolved | The first flush after the deadline calls `discardAll`, which stops and disconnects every held voice. A voice can sound at most about STARTING_WINDOW_MS late, apart from the state-lag race in IN-05. |
+| Regression in the scenario the window was built for | **New WR-01** | A Shift keydown creates the context, its resume never settles, and the window expires. The window then never reopens. When the player presses Enter, the context really starts, but the "start" cue arrives while the context still reports `suspended`, so it is dropped. Before the fix it played. I reproduced this against the fake context with a scratch test: `flush` returns 0. |
 
-**Other checks:**
-- **Allocation:** the hot path stays allocation-free. `MuteView.update` and the loop clamp allocate nothing. The new `envs` arrays and point arrays are allocated once per voice, not per frame.
-- **Determinism:** untouched. The mute toggle and the flash stamp are presentation-only.
-- **Security:** no issues. No new trust-boundary input was added.
-- **Necessity:** I read `necessity-review.md`. No finding meets its evidence rule. The `value > 0` branch of the exported `holdAt` is defensive for an exported helper, not provably dead.
+**Regression checks that passed:**
+- **Double teardown or release.** `steal()` and `prune()` splice the handle out of `active`. A later `onended` calls `release` (an `indexOf` miss, so a no-op) and then `teardown()` again. Calling `AudioNode.disconnect()` with no arguments never throws, so repeating it is safe. `discardAll` walks downward, so its splices do not skip anything.
+- **Release then teardown order.** This order is fine, and neither call can throw.
+- **A voice removed from the pool twice.** This is impossible: every removal path splices by its current index, and `release` tolerates a miss.
+- **`resume()` rejection.** Rejection clears `resumePending`. The next flush is then not starting and discards. The next gesture opens a fresh window. The stale `startingUntilMs` is harmless because it is only read when `resumePending` is true.
+- **Running, then suspended (with no resume pending), then running.** While suspended, `flush` discards. After resume, the stopped sources fire `onended`, and both calls in it are no-ops. The Safari `interrupted` state is never playable, which is correct. A closed context discards once, and later flushes find the pool empty.
+- **"start" on a first-gesture Enter.** This still sounds. The window opens in `unlock()`, and the cue is built at the frozen `currentTime`.
+- **Mute paths.** `setMuted`, `masterLevelAt` and `build` are unchanged, so the live-level anchoring from the earlier WR-01 fix is intact.
+- **Allocation in `flush()`.** None was added. `isStarting` reads the clock only when `resumePending && suspended`, and `discardAll` on an empty pool is a loop that never runs. The new `teardown` closure is allocated once per voice, not per frame.
+
+**Do the new tests test what they claim?** The "bounded window" engine test is meaningful:
+- Without teardown on steal, the per-frame `connected <= graphBound` assertion fails by frame 2.
+- If the re-gesture at frame 60 reopened the window, `started === 0` would fail.
+
+The "starts inside the window" test is weak, and the double-teardown path has no test at all. See IN-06.
+
+**Necessity:** I read `necessity-review.md`. One finding applies (IN-07).
 
 ## Warnings
 
-### WR-01: [new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph
+### WR-01: [new, f1b2a1e WR-01 fix code] The starting window never reopens while the first resume is pending, so the "start" cue is dropped when a real activation finally starts the context
 
-**File:** `src/audio/audio-engine.ts:266-275` (the `playable` rule), `src/audio/audio-engine.ts:214-224` (`resumePending`), `src/audio/audio-engine.ts:327-331` (teardown only in `onended`), `src/audio/voice-pool.ts:140-154` (steal only stops sources)
+**File:** `src/audio/audio-engine.ts:250-254` (window opens only when `!this.resumePending`), `src/audio/audio-engine.ts:315-320` (drop and discard), `src/audio/audio-engine.ts:341-343` (`isStarting`), `src/audio/audio-unlock.ts:41-45` (any non-Escape keydown, including a modifier, unlocks)
 
-**Issue:** `flush()` now builds voices whenever `resumePending && state === "suspended"`. This state has no time bound. It ends only when the `resume()` promise settles, and per the Web Audio spec a context that is not allowed to start (or has no device) keeps that promise pending. Two defects follow while the context is in this state:
+**Issue:** The window opens once for each pending resume, and the fix assumes a later gesture cannot help. It can. The prior review gave this case as its main example:
+1. The player presses Shift (a flipper key) first. `AudioUnlock` creates the context. Chromium does not count a modifier-only keydown as activation, so `resume()` stays pending, and the window expires 250 ms later.
+2. The player presses Enter. `unlock()` sees `resumePending === true`, so it calls `resume()` but does **not** reopen the window. This `resume()` has activation, so the context really starts, which takes tens of ms.
+3. The "start" cue is recorded on the next fixed step and flushed in the same frame (`main.ts:406-407`), while `ctx.state` is still `"suspended"`. `isStarting()` is false because the deadline has passed. `flush` calls `discardAll`, drops the cue and returns 0.
 
-1. **The audio graph grows without bound.**
-   - A voice is torn down (its nodes disconnected from the master bus) only in its last source's `onended`.
-   - A context that is not rendering never fires `onended`.
-   - `VoicePool.steal()` removes a stolen handle from `active` and calls `stop()`, but it disconnects nothing.
-   - So every flush with cues adds oscillators, buffer sources, filters and gains that stay attached to `master` indefinitely.
-   - The pool caps only its own `active` list. The fix report's mitigation, "The pool caps them at 16", is therefore incorrect for nodes and memory.
-2. **Stale cues all play at once on start.**
-   - `currentTime` is frozen, so every voice from every frame in the window gets the same `t0 = frozen + SCHEDULE_AHEAD_S`.
-   - When the context finally starts, up to 16 surviving voices, possibly seconds old, fire in the same instant.
-   - That burst is processed in the first render quanta together with every lingering stolen node.
-   - This contradicts the module's own contract, "a stale cue is never replayed after a resume" (`audio-engine.ts:20-22`).
+Before f1b2a1e this cue played, because `resumePending && suspended` alone made the context playable. So the fix loses the very "start" figure that WR-02 added the starting state to protect. It also loses any other cue in the first frames after the first real activation.
 
-**How likely it is:** In normal start-up the window is tens of milliseconds, and the change works as intended there. The unbounded case needs a `resume()` that stays pending while the game produces cues. Examples are an output device that cannot open, or a context created in a gesture the browser does not count as activation (Chromium does not count a modifier-only keydown, such as the Shift flipper key, as activation; crbug 709765). The fake context cannot show any of this, because its `resume()` always settles and `fireAllEnded()` is manual.
+**Reproduced:** I ran a scratch vitest against the real engine and the fake context. The resume never settles. I called `unlock()` at 1000 ms, then `unlock()` at 3000 ms, then pushed a `"start"` cue and flushed at 3016 ms. The result was `flush() === 0`.
 
-**Fix:** Bound the starting window, and tear down stolen voices that cannot end on their own:
+**Fix:** Reopen an expired window when the new gesture can actually start the context. Do not reopen it on every keydown: Shift auto-repeat while held would reopen it every 250 ms. Each reopening keeps creating sources that a context that never renders cannot finish, which brings node growth back. Inject an activation probe next to the clock:
 
 ```ts
-// audio-engine.ts
-private startingUntilMs = 0;               // wall-clock deadline for the starting window
-private static readonly STARTING_MAX_MS = 250;
-
-// in unlock(), when calling resume():
-this.resumePending = true;
-this.startingUntilMs = performance.now() + AudioEngine.STARTING_MAX_MS; // or an injected clock
-
-// in flush():
-const starting =
-  this.resumePending && ctx.state === "suspended" && performance.now() < this.startingUntilMs;
-const playable = ctx !== null && (ctx.state === "running" || starting);
+// constructor: isActivation: () => boolean = () => navigator.userActivation?.isActive ?? true
+// unlock():
+const nowMs = this.clock();
+const expired = nowMs >= this.startingUntilMs;
+if (!this.resumePending || (expired && this.isActivation())) {
+  // Voices from an expired window must not ride into the new one.
+  if (this.resumePending) this.pool.discardAll(ctx.currentTime);
+  this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
+}
 ```
 
-Also give `VoiceHandle` a `teardown()` that the engine supplies (the same body as `onended`), and have `steal()` call it when the context is not running. Then a stolen voice is disconnected even if `onended` never fires. Add a fake test that keeps `resume()` pending, flushes many bumper cues over many frames, and asserts that the number of connected nodes stays bounded.
+A simpler option is to make `AudioUnlock` ignore modifier-only keydowns (`Shift`, `Control`, `Alt`, `Meta`, `CapsLock`). Then the context is created on the first gesture that can start it. Either way, add the scratch scenario as an engine test: a stuck resume, an expired window, a re-gesture with activation, then "start" flushed while still suspended, expecting 1.
 
 ## Info
 
@@ -130,30 +92,32 @@ Also give `VoiceHandle` a `teardown()` that the engine supplies (the same body a
 
 **File:** `src/sandbox/main.ts:55-58`
 
-**Issue:** The header says: "a cue recorded before that, or while the context is not running, is dropped, never replayed." After c5d02e2, a suspended context with a resume in flight is playable, and its cues are voiced (`audio-engine.ts:266-271`). The composition root's documentation now contradicts the engine.
+**Issue:** This is carried forward and still applies, because f1b2a1e did not touch `main.ts`. The header says: "a cue recorded before that, or while the context is not running, is dropped, never replayed." In fact, a suspended context with a resume in flight is playable for up to STARTING_WINDOW_MS (`audio-engine.ts:316`, `341-343`), and its cues are voiced. The composition root's documentation contradicts the engine, and the contradiction is now larger because the window is bounded.
 
-**Fix:** Reword it to: "a cue recorded before that, or while the context is suspended with no resume in flight (or closed), is dropped; cues on a still-starting context are scheduled and sound when it runs."
+**Fix:** Reword it to: "a cue recorded before that, or while the context is neither running nor starting (suspended with a resume in flight, at most STARTING_WINDOW_MS), is dropped; cues on a starting context are scheduled and sound when it runs."
 
 ### IN-02: [new, IN-03 fix code] A second live region contradicts the "only announced line" documentation, and unmuting is silent to assistive tech
 
 **File:** `index.html:79-80`, `index.html:89-90`, `index.html:189`, `src/ui/hud.ts:14-16`
 
-**Issue:**
+**Issue:** This is carried forward and still applies; the files are unchanged.
 - `#hud-mute` is a second `role="status" aria-live="polite"` region.
-- It sits inside the controls `<dl>`, which the CSS comment calls "a static key/action list, not announced" (lines 89-90).
-- `.hud-status` is documented as "the one announced line" (lines 79-80), and `hud.ts:14-16` says the status line "is the only line announced to assistive tech".
+- It sits inside the controls `<dl>`, which the CSS comment calls "a static key/action list, not announced".
+- `.hud-status` is documented as "the one announced line", and `hud.ts:14-16` says the status line "is the only line announced to assistive tech".
 - Unmuting writes `""`. Clearing a live region announces nothing, so a screen-reader user hears "MUTED" but never hears that the sound is back on.
 
-**Fix:** Update the three comments to describe two live regions. Then either accept that unmuting is silent (and say so), or keep the announcement in a visually hidden sibling that reads "Sound on" or "Muted", while the visible span stays empty when unmuted.
+**Fix:** Update the three comments to describe two live regions. Then either accept that unmuting is silent (and say so), or announce through a visually hidden sibling that reads "Sound on" or "Muted".
 
 ### IN-03: [new, IN-04 fix code] The asset gate still misses remote stylesheets, fonts and scripts
 
 **File:** `src/render/asset-free.test.ts:35-77`
 
-**Issue:** The gate's stated contract is "no image, audio or font asset, and no network fetch that could pull one in". Several plausible regressions for a space-themed HUD still pass it:
-- `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron">` has no asset extension, no `url(`, no `@font-face` in our own file and no `fetch`.
-- `@import "https://…";` in a `.css` file passes for the same reasons.
-- `<script src="https://cdn…">`, `<object>`, `<embed>`, `<iframe>`, `new WebSocket(`, `new EventSource(` and CSS `image-set(` all pass too.
+**Issue:** This is carried forward and still applies; the file is unchanged. None of the following is caught:
+- `<link rel="stylesheet" href="https://fonts.googleapis.com/...">`
+- CSS `@import "https://..."`
+- `<script src="https://cdn...">`, `<object>`, `<embed>` and `<iframe>`
+- `new WebSocket(` and `new EventSource(`
+- CSS `image-set(`
 
 **Fix:** Add patterns, each with a positive sample:
 
@@ -166,24 +130,49 @@ Also give `VoiceHandle` a `teardown()` that the engine supplies (the same body a
 
 ### IN-04: [new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step
 
-**File:** `src/audio/audio-engine.ts:375-376`, `src/audio/envelope.ts:108-123`
+**File:** `src/audio/audio-engine.ts:445-446` (was 375-376), `src/audio/envelope.ts:108-123`
+
+**Issue:** This is carried forward. I re-assessed it, and it still applies: f1b2a1e did not change how envelope points are built.
+- `buildLayer` calls `applyEnvelope(env.gain, lt, envelope, peak)`, which builds and schedules its own points.
+- It then calls `envelopePoints(lt, envelope, peak)` a second time to store on the handle for `envelopeValueAt`.
+- Today the two agree because both are pure functions of the same inputs. If they ever diverge, the steal anchor drifts silently.
+
+The fix makes this matter more. `discardAll` and the non-rendering steal now also anchor their fades through `envelopeValueAt(env.points, now)` (`voice-pool.ts:179`).
+
+**Fix:** Build the points once and schedule that same array (`scheduleEnvelope(param, points)`), or have `applyEnvelope` return the points it scheduled.
+
+### IN-05: [new, f1b2a1e WR-01 fix code] `state === "running"` lags real rendering, so a steal or discard during start-up can cut a voice that is already sounding
+
+**File:** `src/audio/audio-engine.ts:315-316`, `src/audio/audio-engine.ts:342`, `src/audio/voice-pool.ts:184`
+
+**Issue:** The fix uses `ctx.state === "running"` to decide that a context is rendering. Per the Web Audio spec, the control thread updates `state` in a queued task *after* the rendering thread has started. `currentTime` starts advancing before `state` flips. In that interval:
+- **(a)** A steal passes `rendering=false`. `steal()` calls `teardown()` at once, so a voice that is actually sounding is disconnected mid-waveform. That cuts the 5 ms fade, which is the click the `rendering` flag exists to prevent.
+- **(b)** If the interval straddles the deadline, `flush` calls `discardAll` on voices that are audibly playing, which also causes a click.
+
+Both need start-up to finish within one task turn of a steal or of the deadline, so this is rare.
+
+**Fix:** Also treat the context as rendering once its clock has moved. Record `ctx.currentTime` when the window opens, and use `const rendering = ctx.state === "running" || ctx.currentTime > this.startAudioT;` in `flush()`. The same check in `isStarting()` stops a context whose clock is already advancing from being discarded.
+
+### IN-06: [new, f1b2a1e WR-01 fix code] The "starts inside the window" test cannot detect a too-short window, and the double-teardown path has no test
+
+**File:** `src/audio/audio-engine.test.ts` (the `"a context that starts inside the window keeps the voices scheduled while starting"` case, and `stuckRig`)
 
 **Issue:**
-- `buildLayer` calls `applyEnvelope(env.gain, lt, envelope, peak)`, which builds the points internally and schedules them.
-- It then calls `envelopePoints(lt, envelope, peak)` a second time to store on the handle for `envelopeValueAt`.
-- The steal fade is exact only if the stored points are the ones actually scheduled.
-- Today the two calls agree because both are pure with the same inputs. If `applyEnvelope` ever schedules anything else (an extra point, a different clamp), the anchor silently drifts and the stale-level click from the prior WR-01 comes back.
-- It also allocates the point array twice per layer. That happens per voice, not per frame, so it is minor.
+- **The "starts inside the window" test.** It flushes once at window open, then flips the fake to `"running"` before the second flush. So `isStarting()` is only ever checked at t = 0 ms. With `STARTING_WINDOW_MS = 1` the test still passes. It never checks that a *still-suspended* flush at +40 ms is playable, and that check is what "inside the window" means.
+- **No test for `onended` after a pool teardown.** No test fires `onended` after `discardAll` or a non-rendering steal (`release` miss plus a second `teardown()`). The fix report says this is safe, and it is, but nothing pins it.
+- **The WR-01 scenario is not covered** (a re-gesture with activation after expiry).
+- **Minor:** `await Promise.resolve()` in the first test has no effect, because the stuck resume never settles.
 
-**Fix:** Have `applyEnvelope` return the points it scheduled, or accept precomputed points, so one array is both scheduled and stored:
+**Fix:** In the inside-window test, add a suspended flush at `clock.ms += 40` that expects 1 before switching to running. In the bounded-window test, after the window expires, set `fake.state = "running"`, call `fake.fireAllEnded()`, and assert that `activeVoices()` stays 0 and nothing throws. Add the WR-01 regression test.
 
-```ts
-export function scheduleEnvelope(param: AudioParamLike, points: readonly EnvPoint[]): void { /* cancel from points[0].time, then apply */ }
-// buildLayer:
-const points = envelopePoints(lt, envelope, peak);
-scheduleEnvelope(env.gain, points);
-const end = envelopeEnd(lt, envelope);
-```
+### IN-07: [new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine
+
+**File:** `src/audio/voice-pool.ts:111-117`, `src/audio/audio-engine.ts:364`, `src/audio/audio-engine.ts:395`
+**Category:** necessity
+
+**Issue:** `play()` calls `pool.admit(...)`, then builds the voice synchronously, then calls `pool.add(handle, rendering)`. Nothing between the two touches the pool: `onended` cannot fire synchronously, and `buildLayer` only calls context factories. `admit()` exits only when `active.length < maxVoices` (`voice-pool.ts:104-107`). So `add()`'s `while (active.length >= maxVoices)` body never runs in production, and the `rendering` argument the fix threads into it has no effect. Only the pool unit test on a 1-voice pool reaches that path. The `= true` defaults on `admit` and `add` also mean a future caller that forgets the flag silently gets the leaking behaviour on a non-rendering context.
+
+**Fix:** This is a scope decision. Either keep the loop as a documented public-API invariant, or reduce `add()` to `push`. In either case, consider making `rendering` a required parameter on `admit`, so that forgetting it is a type error rather than a quiet leak.
 
 ---
 
