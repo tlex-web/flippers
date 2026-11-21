@@ -51,7 +51,7 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 | T-03-14 | Denial of Service (allocation/frame budget) | Per-event / per-dispatch allocation on the hot path | medium | mitigate | `planck-world.ts` reuses `nextEventSlot()` and `scratchWm`; `collision-router.test.ts:70-71` asserts listeners receive the same pooled records by reference (N x M calls) | closed |
 | T-03-15 | Tampering (replay integrity) | Draining per render frame instead of per fixed step | medium | mitigate | `FixedStepLoop.advance(..., onPostStep)` invokes once per fixed step (`loop.ts:86`); sandbox dispatches from `onPostStep` (`main.ts:166`); one-dispatch-per-step asserted | closed |
 | T-03-16 | Information disclosure (event correctness) | Misattributing the ball side, or losing sensor events | low | mitigate | Exported pure `normalizeContact` (`planck-world.ts:204`) tested in both argument orders (`collision-event.test.ts`); begin-contact sensor path tested for rollover and drain with impulse 0 (`sensor-event.test.ts`) | closed |
-| T-03-17 | Denial of Service (availability) | Demo consumer flooding the console | low | mitigate | `main.ts:66` `SOLID_LOG_EVERY = 30` throttle; sensor kinds rare by construction; one consumer only | closed |
+| T-03-17 | Denial of Service (availability) | Demo consumer flooding the console | low | mitigate | `main.ts:66` `SOLID_LOG_EVERY = 30` throttle; sensor kinds rare by construction; one consumer only. Re-audit 2026-11-21: surface removed — the demo console consumer was deleted when 04-05 recomposed `main.ts` (d14dc0b); no `console.log/info/debug` remains in non-test `src` | closed |
 | T-03-SC | Tampering | npm/pip/cargo installs | low | accept | No packages installed this phase — `package.json` / lockfile unchanged across 3ccbc71..HEAD | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
@@ -86,3 +86,11 @@ This phase has no network, storage, auth or user-data surface. The threat model 
 - [x] `status: verified` set in frontmatter
 
 **Approval:** verified 2026-11-19
+
+## Security Audit 2026-11-21
+
+| Metric | Count |
+|---|---|
+| Threats found | 20 |
+| Closed | 20 |
+| Open | 0 |
