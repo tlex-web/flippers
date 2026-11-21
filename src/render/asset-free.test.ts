@@ -74,6 +74,25 @@ const PATTERNS: readonly AssetPattern[] = [
     re: /\bnew\s+FontFace\s*\(/,
     sample: 'new FontFace("X", "local(X)");',
   },
+  // 05-REVIEW IN-03: remote stylesheets, fonts and scripts, embedded documents,
+  // streaming connections and CSS image-set().
+  {
+    name: "remote URL in markup or CSS",
+    re: /\b(href|src)\s*=\s*["']?(https?:)?\/\//i,
+    sample: '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=X">',
+  },
+  { name: "CSS @import", re: /@import\b/i, sample: '@import "https://x/y.css";' },
+  {
+    name: "embedded document element",
+    re: /<(object|embed|iframe)\b/i,
+    sample: '<iframe src="x"></iframe>',
+  },
+  {
+    name: "streaming connection",
+    re: /\bnew\s+(WebSocket|EventSource)\s*\(/,
+    sample: 'new WebSocket("wss://x");',
+  },
+  { name: "CSS image-set()", re: /\bimage-set\s*\(/i, sample: "background: image-set(x 1x);" },
 ];
 
 /** Every (file, pattern) hit in the given sources, as "file: pattern". */
@@ -115,6 +134,16 @@ describe("asset-free tree (RND-01)", () => {
     for (const e of ["ico", "avif", "bmp", "mp4", "m4a", "aac", "flac", "opus", "eot"]) {
       expect(ext.re.test(`import a from "./a.${e}";`), e).toBe(true);
     }
+  });
+
+  it("the remote-URL pattern catches remote scripts and protocol-relative links, not local ones", () => {
+    const remote = PATTERNS.find((p) => p.name === "remote URL in markup or CSS");
+    if (!remote) throw new Error("remote URL pattern missing");
+    expect(remote.re.test('<script src="https://cdn.example/x.js"></script>')).toBe(true);
+    expect(remote.re.test('<link rel="stylesheet" href="//cdn.example/x.css">')).toBe(true);
+    expect(remote.re.test('<script type="module" src="/src/sandbox/main.ts"></script>')).toBe(
+      false,
+    );
   });
 
   it("every pattern hits its own positive sample (no vacuous pass)", () => {
