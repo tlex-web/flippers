@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { ballMass } from "../physics/constants";
@@ -8,6 +8,7 @@ import { TABLE_SPEC, type TableSpec } from "../table/spec";
 import {
   deriveKickFace,
   ReactiveElements,
+  type ReactiveFeedback,
   type ReactiveWorld,
   type RulesGate,
 } from "./reactive-elements";
@@ -19,7 +20,9 @@ import {
   ROLLOVER_BANK_BONUS,
   ROLLOVER_POINTS,
   SENSOR_REARM_STEPS,
+  SLING_FACE_TOL,
   SLING_KICK_SPEED,
+  SLING_MIN_IMPULSE,
   SLING_POINTS,
 } from "./tuning";
 
@@ -95,15 +98,20 @@ class SpyWorld implements ReactiveWorld {
   }
 }
 
-/** Test gate: switchable liveness, records every award. */
+/** One entry in the shared gate + feedback log. */
+type LogEntry = readonly unknown[];
+
+/** Test gate: switchable liveness, records every award (and logs it when given a log). */
 class SpyGate implements RulesGate {
   live = true;
   readonly awards: number[] = [];
+  constructor(private readonly log: LogEntry[] | null = null) {}
   isLive(): boolean {
     return this.live;
   }
   award(points: number): void {
     this.awards.push(points);
+    this.log?.push(["award", points]);
   }
 }
 
@@ -133,9 +141,13 @@ interface Rig {
   step(batch: CollisionEvent[]): void;
 }
 
-function makeRig(spec: TableSpec = SPEC): Rig {
+function makeRig(
+  spec: TableSpec = SPEC,
+  feedback?: ReactiveFeedback,
+  log: LogEntry[] | null = null,
+): Rig {
   const world = new SpyWorld(spec);
-  const gate = new SpyGate();
+  const gate = new SpyGate(log);
   let pending: CollisionEvent[] = [];
   const router = new CollisionRouter({
     drainEvents(): CollisionEvent[] {
@@ -144,7 +156,11 @@ function makeRig(spec: TableSpec = SPEC): Rig {
       return out;
     },
   });
-  const reactive = new ReactiveElements(world, router, gate);
+  // Without a feedback the THREE-argument constructor is used, so every
+  // Phase-4 case exercises the default (no-op) feedback path.
+  const reactive = feedback
+    ? new ReactiveElements(world, router, gate, feedback)
+    : new ReactiveElements(world, router, gate);
   const step = (batch: CollisionEvent[]): void => {
     pending = batch;
     world.dispatching = true;
@@ -388,5 +404,180 @@ describe("ReactiveElements rollovers and inlanes (ELEM-03)", () => {
     rig.step([ev("drain", 600, 0)]);
     expect(rig.gate.awards).toHaveLength(0);
     expect(rig.world.impulses).toHaveLength(0);
+  });
+});
+
+/**
+ * Spy feedback that appends to the same log as the gate, so "award, then
+ * report" is one array comparison. `probe`, when set, is sampled inside every
+ * call and appended to the entry (the rule state the hook observes).
+ */
+class SpyFeedback implements ReactiveFeedback {
+  probe: (() => unknown) | null = null;
+  constructor(private readonly log: LogEntry[]) {}
+  onKick(kind: "bumper" | "slingshot", elementId: number, normalImpulse: number): void {
+    const entry: unknown[] = ["kick", kind, elementId, normalImpulse];
+    if (this.probe) entry.push(this.probe());
+    this.log.push(entry);
+  }
+  onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void {
+    const entry: unknown[] = ["sensor", kind, elementId, bank];
+    if (this.probe) entry.push(this.probe());
+    this.log.push(entry);
+  }
+}
+
+/** A rig whose gate and feedback share one log. */
+function loggedRig(spec: TableSpec = SPEC): Rig & { log: LogEntry[]; feedback: SpyFeedback } {
+  const log: LogEntry[] = [];
+  const feedback = new SpyFeedback(log);
+  return { ...makeRig(spec, feedback, log), log, feedback };
+}
+
+/** Feedback entries only (the gate's awards filtered out). */
+function hooks(log: readonly LogEntry[]): LogEntry[] {
+  return log.filter((e) => e[0] !== "award");
+}
+
+/** The real-table sling-300 face strike (see the ELEM-02 cases). */
+const FACE_STRIKE = { impulse: 0.0393, x: 0.963, y: 4.479 };
+
+describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () => {
+  it("a registered bumper hit logs the award, then onKick with the raw normalImpulse", () => {
+    const rig = loggedRig();
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0.0048)]);
+    expect(rig.log).toEqual([
+      ["award", BUMPER_POINTS],
+      ["kick", "bumper", 200, 0.0048],
+    ]);
+  });
+
+  it("a zero-impulse bumper event produces no feedback call", () => {
+    const rig = loggedRig();
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0)]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("a bumper event inside the KICKER_REARM_STEPS cooldown produces no feedback call", () => {
+    const rig = loggedRig();
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0.0048)]);
+    for (let i = 1; i < KICKER_REARM_STEPS; i++) rig.step([ev("bumper", 200, 0.0048)]);
+    expect(hooks(rig.log)).toEqual([["kick", "bumper", 200, 0.0048]]);
+    // First step past the cooldown: registered again.
+    rig.step([ev("bumper", 200, 0.0031)]);
+    expect(hooks(rig.log)).toEqual([
+      ["kick", "bumper", 200, 0.0048],
+      ["kick", "bumper", 200, 0.0031],
+    ]);
+  });
+
+  it("while not live, no bumper, slingshot or sensor event produces a feedback call", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    rig.gate.live = false;
+    rig.step([
+      ev("bumper", 200, 0.0048),
+      ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y),
+      ev("rollover", 400, 0),
+      ev("lane", 500, 0),
+    ]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("a slingshot event below SLING_MIN_IMPULSE produces no feedback call", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    const below = SLING_MIN_IMPULSE * 0.99;
+    rig.step([ev("slingshot", 300, below, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("a slingshot event farther than SLING_FACE_TOL from the kick face produces no feedback call", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    const f = deriveKickFace(tableElement(300));
+    if (!f) throw new Error("no face");
+    // Midpoint of the face, pushed out along the normal just past the tolerance.
+    const off = SLING_FACE_TOL * 1.2;
+    const px = (f.ax + f.bx) / 2 + f.nx * off;
+    const py = (f.ay + f.by) / 2 + f.ny * off;
+    rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, px, py)]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("a registered slingshot strike gives exactly one onKick(slingshot, id, impulse), after its award", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
+    expect(rig.log).toEqual([
+      ["award", SLING_POINTS],
+      ["kick", "slingshot", 300, FACE_STRIKE.impulse],
+    ]);
+  });
+
+  it("an inlane pass gives onSensor(lane, id, false) after its award", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.step([ev("lane", 500, 0)]);
+    expect(rig.log).toEqual([
+      ["award", INLANE_POINTS],
+      ["sensor", "lane", 500, false],
+    ]);
+  });
+
+  it("rollovers: two plain passes, then the bank pass reported after the bonus with every light cleared", () => {
+    const rig = loggedRig(TABLE_SPEC);
+    rig.feedback.probe = () => [400, 401, 402].map((id) => rig.reactive.isLit(id));
+    rig.step([ev("rollover", 400, 0)]);
+    rig.step([ev("rollover", 402, 0)]);
+    rig.step([ev("rollover", 401, 0)]);
+    expect(rig.log).toEqual([
+      ["award", ROLLOVER_POINTS],
+      ["sensor", "rollover", 400, false, [true, false, false]],
+      ["award", ROLLOVER_POINTS],
+      ["sensor", "rollover", 402, false, [true, false, true]],
+      ["award", ROLLOVER_POINTS],
+      ["award", ROLLOVER_BANK_BONUS],
+      ["sensor", "rollover", 401, true, [false, false, false]],
+    ]);
+  });
+
+  it("a throwing onKick, caught by the real router, still leaves the kicker armed and the kick pending", () => {
+    const throwing: ReactiveFeedback = {
+      onKick(): void {
+        throw new Error("sink failed");
+      },
+      onSensor(): void {
+        throw new Error("sink failed");
+      },
+    };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const rig = makeRig(SPEC, throwing);
+      rig.world.addBall(0, 1, 0.5);
+      // dispatch() catches the throw; the same step's service() applies the kick.
+      rig.step([ev("bumper", 200, 0.0048)]);
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(errors.mock.calls[0]?.[0]).toBe("[bus] collision listener threw");
+      expect(rig.gate.awards).toEqual([BUMPER_POINTS]);
+      expect(rig.world.impulses).toHaveLength(1);
+      // A second contact inside the cooldown awards and kicks nothing.
+      rig.step([ev("bumper", 200, 0.0048)]);
+      expect(rig.gate.awards).toEqual([BUMPER_POINTS]);
+      expect(rig.world.impulses).toHaveLength(1);
+      expect(errors).toHaveBeenCalledTimes(1);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("a ReactiveElements built with three arguments behaves as before: one award, one impulse per burst", () => {
+    const rig = makeRig(SPEC);
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0.0048), ev("bumper", 200, 0.0021), ev("bumper", 200, 0)]);
+    expect(rig.gate.awards).toEqual([BUMPER_POINTS]);
+    expect(rig.world.impulses).toHaveLength(1);
   });
 });
