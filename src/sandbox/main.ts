@@ -4,12 +4,20 @@
  * Wires the whole stack end-to-end: it constructs the Planck world from
  * `TABLE_SPEC` (the ONLY engine-specific line is `new PlanckWorld(...)`, the
  * composition root), drives it through the engine-agnostic fixed-step loop, and
- * renders the INTERPOLATED ball + table outline + flippers + velocity + contacts
- * + plunger charge meter via the Canvas debug renderer, which paints no text. The outline
- * (outer walls, right-side launch chute, drain funnel, trough walls) and both
- * flipper mounts all come from the single resolve of the spec, so what is drawn
- * is what is hit. Every read of world state goes through the `PhysicsWorld`
- * interface — this file never imports the engine (D-05/D-07).
+ * renders the table procedurally on Canvas 2D through `TableRenderer` (RND-01):
+ * a space background, a seeded starfield, neon walls and chute, the drain apron,
+ * lane and rollover inserts, bumpers and slingshots baked once per resize into an
+ * offscreen layer, then both bats, the plunger and its charge meter and the ball
+ * drawn live. Balls AND bats are drawn at interpolated state between the loop's
+ * previous and current fixed steps (`interpolateBalls` / `interpolateAngles`), so
+ * motion stays smooth at 60, 120 and 144 Hz (RND-02). The backing store is sized
+ * from the display (`computeView`), on boot, on resize and on a dpr change. Every
+ * read of world state goes through the `PhysicsWorld` interface; this file never
+ * imports the engine (D-05/D-07). The canvas paints no text (D-01): the HUD is DOM.
+ *
+ * `?debug=1` (exact match) selects the old diagnosis renderer (`DebugRenderer`:
+ * outlines, velocity arrow, contact markers) instead; any other URL draws the
+ * procedural table.
  *
  * The game (GAME-02): the sandbox boots into game-over (attract) with no ball on
  * the table. Enter or NumpadEnter starts a 3-ball game through `GameSession`,
@@ -71,7 +79,12 @@ import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
 import { initKeyLabels } from "../ui/key-labels";
-import { DebugRenderer, type InterpolatedBall } from "./debug-draw";
+import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
+import type { LayerFactory } from "../render/static-layer";
+import { TableRenderer, type LightState } from "../render/table-renderer";
+import { computeView, tableBounds } from "../render/view-transform";
+import type { BallState } from "../physics/types";
+import { DebugRenderer } from "./debug-draw";
 
 /**
  * Serve point: the session parks every ball on the plunger at `PLUNGER_REST`
@@ -243,7 +256,55 @@ function main(): void {
     session.service();
   }
 
-  const renderer = new DebugRenderer(canvas);
+  // Renderer selection (T-05-07): an exact string compare on one query
+  // parameter; `?debug=1` keeps the diagnosis renderer, anything else draws the
+  // procedural table.
+  const debug = new URLSearchParams(location.search).get("debug") === "1";
+  let debugRenderer: DebugRenderer | null = null;
+  let tableRenderer: TableRenderer | null = null;
+  if (debug) {
+    const dr = new DebugRenderer(canvas);
+    debugRenderer = dr;
+    dr.resize(world);
+    window.addEventListener("resize", () => dr.resize(world));
+  } else {
+    // The background is opaque, so the visible context needs no alpha channel.
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("2D canvas context unavailable for #stage");
+    // Offscreen layers for the static bake: plain DOM canvases.
+    const layers: LayerFactory = {
+      create(width: number, height: number) {
+        const layerCanvas = document.createElement("canvas");
+        layerCanvas.width = width;
+        layerCanvas.height = height;
+        const layerCtx = layerCanvas.getContext("2d");
+        if (!layerCtx) throw new Error("2D canvas context unavailable for the static layer");
+        return { canvas: layerCanvas, ctx: layerCtx };
+      },
+    };
+    const tr = new TableRenderer(canvas, ctx, layers, world);
+    tableRenderer = tr;
+    // The world box never changes; the view is recomputed from the display.
+    const bounds = tableBounds(world.getElements());
+    const applyView = (): void => {
+      tr.resize(computeView(bounds, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1));
+    };
+    applyView();
+    window.addEventListener("resize", applyView);
+    // A dpr change (moving the window to another monitor) may not fire resize
+    // (A6): watch the current resolution and re-arm for the new dpr each time.
+    let dprQuery: MediaQueryList | null = null;
+    const onDprChange = (): void => {
+      applyView();
+      armDprWatch();
+    };
+    const armDprWatch = (): void => {
+      if (dprQuery) dprQuery.removeEventListener("change", onDprChange);
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      dprQuery.addEventListener("change", onDprChange);
+    };
+    armDprWatch();
+  }
   // Game HUD: the DOM overlay (score, ball, status), each line written only
   // when its own inputs change.
   const hudView = new HudView(
@@ -261,12 +322,18 @@ function main(): void {
     document.querySelectorAll<HTMLElement>("[data-layout-only]"),
     navigator,
   );
-  renderer.resize(world);
-  window.addEventListener("resize", () => renderer.resize(world));
 
-  // Pre-allocated render buffers — grown only when the ball count grows, so the
-  // steady-state rAF loop performs NO per-frame heap allocation (threat T-03-01).
-  const interpolated: InterpolatedBall[] = [];
+  // Pre-allocated render buffers — grown only when the ball or bat count grows,
+  // so the steady-state rAF loop performs NO per-frame heap allocation (threat
+  // T-03-01). One mutable render frame is built once and refilled every frame.
+  const interpolated: MutableBall[] = [];
+  const flipperAngles: number[] = [];
+  const renderFrame: {
+    balls: readonly BallState[];
+    flipperAngles: readonly number[];
+    plungerCharge: number;
+    lights: LightState | null;
+  } = { balls: interpolated, flipperAngles, plungerCharge: 0, lights: reactive };
   const diag: DiagData = { fps: 0, physicsHz: 120, kineticEnergy: 0 };
 
   // Loop-local scalars (mutated in place; no per-frame allocation).
@@ -292,31 +359,12 @@ function main(): void {
     // Play the cues those fixed steps recorded, in this same frame.
     audio.flush(cues);
 
-    // Interpolate each ball between the loop's previous and current fixed states
-    // (smooth motion independent of the render rate). The two buffers are
-    // paired by index, which a respawn (or removeBall's swap-remove) breaks, so
-    // only lerp when both slots hold the SAME ball; otherwise draw the current
-    // state as-is rather than a ghost streak between two balls (03-REVIEW WR-02).
-    const previous = loop.previous;
-    const current = loop.current;
+    // Interpolate balls and bats between the loop's previous and current fixed
+    // states (smooth motion independent of the render rate, RND-02). A ball
+    // whose slot changed identity is drawn at its current state (03-REVIEW WR-02).
     const alpha = loop.alpha;
-    growTo(interpolated, current.length);
-    interpolated.length = current.length;
-    for (let i = 0; i < current.length; i++) {
-      const c = current[i];
-      if (!c) continue;
-      const prev = previous[i];
-      const p = prev && prev.id === c.id ? prev : c;
-      const out = interpolated[i];
-      if (!out) continue;
-      out.id = c.id;
-      out.x = p.x + (c.x - p.x) * alpha;
-      out.y = p.y + (c.y - p.y) * alpha;
-      out.vx = p.vx + (c.vx - p.vx) * alpha;
-      out.vy = p.vy + (c.vy - p.vy) * alpha;
-      out.radius = c.radius;
-      out.angle = c.angle;
-    }
+    interpolateBalls(loop.previous, loop.current, alpha, interpolated);
+    interpolateAngles(loop.previousFlipperAngles, loop.currentFlipperAngles, alpha, flipperAngles);
 
     // FPS: exponential moving average of the instantaneous frame rate.
     if (deltaMs > 0) {
@@ -356,7 +404,15 @@ function main(): void {
 
     // The charge meter reads the live controller value every frame (not the
     // HUD throttle), so the meter tracks the hold step by step.
-    renderer.draw(world, interpolated, plunger.getCharge(), reactive);
+    if (tableRenderer) {
+      renderFrame.balls = interpolated;
+      renderFrame.flipperAngles = flipperAngles;
+      renderFrame.plungerCharge = plunger.getCharge();
+      renderFrame.lights = reactive;
+      tableRenderer.draw(renderFrame);
+    } else if (debugRenderer) {
+      debugRenderer.draw(world, interpolated, plunger.getCharge(), reactive);
+    }
     // The score, ball and status land in the frame the session changes them
     // (each line written only on change).
     hudView.update(session);
@@ -371,13 +427,6 @@ function requireTextSink(id: string): TextSink {
   const el = document.getElementById(id);
   if (!el) throw new Error(`sandbox HUD element #${id} not found`);
   return el;
-}
-
-/** Grow `pool` to at least `n` reusable ball buffers (only allocates on growth). */
-function growTo(pool: InterpolatedBall[], n: number): void {
-  while (pool.length < n) {
-    pool.push({ id: 0, x: 0, y: 0, vx: 0, vy: 0, radius: 0, angle: 0 });
-  }
 }
 
 main();
