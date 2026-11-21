@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
@@ -6,6 +6,10 @@ import type { KeyEventLike } from "../input/flipper-input";
 import { FlipperInput } from "../input/flipper-input";
 import { FlipperController } from "../control/flipper-controller";
 import { FixedStepLoop } from "../sim/loop";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Headless END-TO-END proof of the whole flipper stack (plan 02-03, D-10/D-11).

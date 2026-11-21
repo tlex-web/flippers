@@ -1,4 +1,4 @@
-import { beforeAll, describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { CueFeedback, CueQueue, CUE_KINDS, type CueKind } from "../app/cue-queue";
@@ -29,6 +29,10 @@ import { computeView, tableBounds } from "../render/view-transform";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST } from "../table/spec";
 import { PresentationObserver } from "./presentation-observer";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * The presentation layer is read-only (plan 05-06 Task 2, RND-02 integrity,

@@ -27,6 +27,10 @@ import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import { FixedStepLoop } from "../sim/loop";
 
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Phase-5 tracer (plan 05-01, AUD-01) on the REAL table: a registered bumper
  * kick travels solver -> CollisionRouter -> ReactiveElements (gates) ->

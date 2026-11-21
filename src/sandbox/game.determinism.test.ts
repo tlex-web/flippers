@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
@@ -13,6 +13,10 @@ import { PlanckWorld } from "../physics/planck-world";
 import type { BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST } from "../table/spec";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Replay determinism of the finished game (plan 04-08 Task 3, GAME-01..03,

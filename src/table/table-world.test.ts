@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { sweptEscaped } from "../harness/containment";
 import { mulberry32 } from "../harness/prng";
@@ -26,6 +26,10 @@ import {
   type ElementKind,
   type MountSpec,
 } from "./spec";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Real-table smoke proof (03-01): the world built from `TABLE_SPEC` has its two

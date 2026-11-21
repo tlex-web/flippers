@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { sweptEscaped } from "../harness/containment";
 import {
@@ -15,6 +15,10 @@ import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Headless END-TO-END proof of the plunger launch on the real table (plan 03-05,

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { FIXED_DT, FLIPPER_LOWER_ANGLE, FLIPPER_UPPER_ANGLE } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
@@ -14,6 +14,10 @@ import type { ResolvedElement } from "../table/resolve";
 import { FlipperController } from "../control/flipper-controller";
 import { interpolateAngles } from "../render/interpolate";
 import { FixedStepLoop } from "./loop";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * RND-02 (05-08): flipper angles are snapshotted by the loop and interpolated

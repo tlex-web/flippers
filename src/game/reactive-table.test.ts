@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
@@ -24,6 +24,10 @@ import {
   SLING_MIN_IMPULSE,
   SLING_POINTS,
 } from "./tuning";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Phase-4 tracer (plan 04-01 Task 1) on the REAL table: a bumper contact travels

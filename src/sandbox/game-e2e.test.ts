@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController, type FlipperPhase } from "../control/flipper-controller";
@@ -21,6 +21,10 @@ import type { BallId, BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
 import { formatScore, HudView, type TextSink } from "../ui/hud";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Headless no-mock proof of the whole game (plan 04-05, GAME-02): the same

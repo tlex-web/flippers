@@ -1,10 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "./loop";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * PHYS-03 proof #1: the simulation is a pure function of accumulated real time

@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { OPEN_FIELD_REGION, TABLE_SPEC, BUMPER_RADIUS_M } from "../table/spec";
 import { circleSweptEscaped, runSoak } from "./soak";
 import type { SoakConfig, SoakFailure } from "./soak";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * The swept-containment soak on the REAL table (D-01: the harness reads the
