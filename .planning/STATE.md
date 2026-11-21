@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 04
 current_phase_name: Reactive Elements & Game Rules
-status: executing
-stopped_at: Completed 04-14-PLAN.md
-last_updated: "2026-11-21T02:04:25.737Z"
+status: verifying
+stopped_at: Completed 04-15-PLAN.md
+last_updated: "2026-11-21T02:50:01.584Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 04 execution started
-state_head: 2e9116a3e0045af10bf050c307888009fec58381
+state_head: 8ed3cdad9df955157a97ea175a1efc931004f42a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 34
-  completed_plans: 33
+  completed_plans: 34
 milestone_name: milestone
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-20)
 
 ## Current Position
 
-Phase: 04 (Reactive Elements & Game Rules) — READY TO EXECUTE
-Plan: 14 of 14
-Status: Ready to execute
+Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
+Plan: 15 of 15
+Status: Phase complete — ready for verification
 Last activity: 2026-11-21 — Phase 04 execution started
 
 Progress: [█████░░░░░] 50%
@@ -93,6 +93,7 @@ Progress: [█████░░░░░] 50%
 | Phase 04 P12 | 8 min | 3 tasks | 4 files |
 | Phase 04 P13 | 5 min | 2 tasks | 4 files |
 | Phase 04 P14 | 7 min | 3 tasks | 4 files |
+| Phase 04 P15 | 37 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-14: after a force-clear, a repeat-flagged keydown of the OTHER Shift is a press once the held Shift's ignored auto-repeat set repeatingShift (heal only); the marker resets in forceClear and on a Shift keyup with shiftKey false (WR-01)
 - [Phase 04]: 04-14: dropStaleShift(e, isKeyUp) - a Shift keydown never reconciles; a Shift keyup reconciles only with windowsShiftHeal on; non-Shift events unchanged (WR-02)
 - [Phase 04]: 04-14: accepted residual pinned by R3 - a second Shift pressed before the held Shift's first OS auto-repeat (~500 ms) after a clear is still missed
+- [Phase 04]: 04-15: G-04-21 cradle closed with option A (timing). SHIFT_REPEAT_GAP_MS = 450 ms (above the slowest ~400 ms Windows repeat, below the 500 ms default delay); the auto-repeating Shift re-pressed after a longer gap counts as a press; time read only from the event timeStamp, finite-checked, after the held check
+- [Phase 04]: 04-15: IN-01: dropStaleShift clears repeatingShift and lastShiftRepeatAt whenever it drops both Shift codes; the redundant handleKeyUp marker reset was removed
 
 ### Pending Todos
 
@@ -208,6 +211,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T01:21:36.462Z
-Stopped at: Completed 04-14-PLAN.md
+Last session: 2026-11-21T02:50:00.381Z
+Stopped at: Completed 04-15-PLAN.md
 Resume file: None
