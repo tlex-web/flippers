@@ -81,7 +81,11 @@ export interface CueRecipe {
 /** Inharmonic bell partial ratio for the rollover and lane chimes. */
 const BELL_PARTIAL = 2.76;
 
-/** Left (id 0) and right (id 1) flippers sit one semitone apart. */
+/**
+ * Left (id 0) and right (id 1) flippers sit one semitone apart. Keyed by
+ * TABLE_SPEC id, like the bumper map: recipes.test.ts fails if a bumper or
+ * flipper id lacks a distinct entry.
+ */
 const FLIPPER_ID_SEMITONES: Readonly<Record<number, number>> = Object.freeze({ 0: 0, 1: 1 });
 
 /** A plain sine/triangle note with no sweep (chimes and figures). */

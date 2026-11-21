@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { CUE_KINDS, CueQueue, type CueKind } from "../app/cue-queue";
+import { TABLE_SPEC } from "../table/spec";
 import { AudioEngine } from "./audio-engine";
 import { semitoneRatio } from "./mapping";
 import { RECIPES } from "./recipes";
@@ -183,5 +184,29 @@ describe("strength and element shape the voice", () => {
     const left = firstFreq(oscillators(voice("flipperUp", 0.7, 0))[0]);
     const right = firstFreq(oscillators(voice("flipperUp", 0.7, 1))[0]);
     expect(right / left).toBeCloseTo(semitoneRatio(1), 9);
+  });
+});
+
+describe("per-element pitch maps cover TABLE_SPEC (05-REVIEW IN-05)", () => {
+  /** Every TABLE_SPEC id of one element kind. */
+  const idsOf = (kind: "bumper" | "flipper"): number[] =>
+    TABLE_SPEC.filter((el) => el.kind === kind).map((el) => el.id);
+
+  it("every bumper id has its own, distinct pitch offset", () => {
+    const map = RECIPES.bumper.idSemitones ?? {};
+    const bumpers = idsOf("bumper");
+    expect(bumpers.length).toBeGreaterThan(1);
+    for (const id of bumpers) expect(map[id], `bumper ${id}`).toBeTypeOf("number");
+    expect(new Set(bumpers.map((id) => map[id])).size).toBe(bumpers.length);
+  });
+
+  it("every flipper id has a distinct offset for both flipper cues", () => {
+    const flippers = idsOf("flipper");
+    expect(flippers.length).toBe(2);
+    for (const kind of ["flipperUp", "flipperDown"] as const) {
+      const map = RECIPES[kind].idSemitones ?? {};
+      for (const id of flippers) expect(map[id], `${kind} ${id}`).toBeTypeOf("number");
+      expect(new Set(flippers.map((id) => map[id])).size).toBe(flippers.length);
+    }
   });
 });
