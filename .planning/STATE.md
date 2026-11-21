@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 04
-current_phase_name: Reactive Elements & Game Rules
-status: verifying
-stopped_at: Completed 04-15-PLAN.md
-last_updated: "2026-11-21T02:50:01.584Z"
+current_phase: 5
+current_phase_name: Rendering & Audio
+status: planning
+stopped_at: Phase 04 complete, ready to plan Phase 5
+last_updated: "2026-11-21T11:47:14.652Z"
 last_activity: 2026-11-21
-last_activity_desc: Phase 04 execution started
-state_head: 8ed3cdad9df955157a97ea175a1efc931004f42a
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: fd8826020655790699757b7ec85c9296570b0d34
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 34
   completed_plans: 34
+  percent: 67
 milestone_name: milestone
 ---
 
@@ -21,25 +22,25 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-20)
+See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 04 — Reactive Elements & Game Rules
+**Current focus:** Phase 5 — Rendering & Audio
 
 ## Current Position
 
-Phase: 04 (Reactive Elements & Game Rules) — EXECUTING
-Plan: 15 of 15
-Status: Phase complete — ready for verification
-Last activity: 2026-11-21 — Phase 04 execution started
+Phase: 5 — Rendering & Audio
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-21 — Phase 04 complete, transitioned to Phase 5
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 35
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -50,6 +51,7 @@ Progress: [█████░░░░░] 50%
 | 1 | 7 | - | - |
 | 2 | 7 | - | - |
 | 3 | 6 | - | - |
+| 04 | 15 | - | - |
 
 **Recent Trend:**
 
@@ -191,7 +193,7 @@ Recent decisions affecting current work:
 - [Phase 3 → 5]: The 03-UI-REVIEW carry-forwards apply to the real renderer:
   - ~~The HUD ignores the display fit and renders at about 3.4 px.~~ Resolved in 04-10: the readout is DOM text (#hud-diag); the canvas paints no text.
   - `#ef476f` is used for the drain, the velocity arrow and the full meter.
-  - There is no on-screen controls hint and no `aria-label` on the canvas.
+  - ~~There is no on-screen controls hint and no `aria-label` on the canvas.~~ Resolved in Phase 4: a five-row controls list (04-10) and `aria-label` on `#stage`.
 - [Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display. The headless ball-feed tests cover those rates.
 - [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
 
@@ -211,6 +213,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T02:50:00.381Z
-Stopped at: Completed 04-15-PLAN.md
+Last session: 2026-11-21T11:50:00Z
+Stopped at: Phase 04 complete, ready to plan Phase 5
 Resume file: None

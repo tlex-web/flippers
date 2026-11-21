@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Physics Core Spike** - Tunnel-proof, frame-rate-independent ball physics proven in isolation; engine decision locked (completed 2026-07-15)
 - [x] **Phase 2: Flippers & Feel** - Two keyboard flippers with rotational CCD, momentum transfer, and cradle — the Core Value (completed 2026-07-16)
 - [x] **Phase 3: Table, Plunger & Event Bus** - An original space-themed table layout, a hold-to-charge plunger, and a typed collision-event bus (completed 2026-11-20)
-- [ ] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works
+- [x] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works (completed 2026-11-21)
 - [ ] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX
 - [ ] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score
 
@@ -140,7 +140,7 @@ Plans:
   4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
   5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
 
-**Plans**: 15/15 plans executed (6 waves) + 7 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11, G-04-17, G-04-21, G-04-21 cradle)
+**Plans**: 15/15 plans complete (6 waves) + 7 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11, G-04-17, G-04-21, G-04-21 cradle)
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: bumpers kick and score through the bus (record-then-service), GameSession score, DOM score HUD, BALL_DENSITY/ballMass [wave 1]
@@ -222,6 +222,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
-| 4. Reactive Elements & Game Rules | 15/15 | In Progress | - |
+| 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |

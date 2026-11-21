@@ -27,15 +27,20 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
   - All of it comes from one parametric `table/spec`, so the colliders and the drawing cannot drift apart.
   - Seeded drops drain with no traps. A real-table swept-containment soak gate is green.
   - In the UAT Chrome run, 10 launches all drained with no stalls, and the layout was operator-accepted by eye.
+- [x] Reactive elements kick and score: **Validated in Phase 4 (Reactive Elements & Game Rules).**
+  - Bumpers raise outward speed to 5.5 m/s (+1,000), slingshots to 4.5 m/s (+500); rollovers light and pay, all three lit pays 10,000; inlanes pay 2,000.
+  - Kick energy is bounded: seeded dead-flipper drops all drain, and a rules-live 630 s soak stays green with CCD on.
+  - The visual flash and sound for each hit stay in Active (Phase 5).
+- [x] Live score display: **Validated in Phase 4.** Score, BALL n / 3 and a status line are DOM text written only on change; the diagnosis readout and a five-row controls list are DOM panels too.
+- [x] Tilt / nudge: **Validated in Phase 4.** X, Period and ArrowUp give a velocity-only shove; over-nudging warns, then TILTs. A tilt kills the elements, drops the bats and costs only the current ball.
+- [x] 3-ball game loop: **Validated in Phase 4.** Attract with no ball until Enter, three serves, GAME OVER with the score kept; replays bit-identically at 60/120/144 Hz.
+  - Flipper input was hardened during UAT: reversal dead time removed, no stuck bats on quick taps, and Windows Shift quirks (Sticky Keys, both-Shift VK merge, focus loss) healed. Arrow keys and Shift passed on a real Windows keyboard.
 
 ### Active
 
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
-- [ ] Bumpers and targets react (bounce + visual flash + sound) and award points
-- [ ] Live score display
-- [ ] Tilt / nudge mechanic (nudge the table, over-nudge triggers tilt)
-- [ ] Ball-count game loop (e.g. 3 balls, drain ends a ball, game over after last)
+- [ ] Bumpers, slings and rollovers flash and sound on hit (the kick and scoring shipped in Phase 4)
 - [ ] All graphics rendered procedurally (Canvas/WebGL) at a stable 60fps
 - [ ] Sound effects synthesized at runtime (Web Audio) — no audio files
 - [ ] Portfolio-grade "juice": visual/audio feedback that makes play feel responsive and polished
@@ -80,6 +85,9 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | Synthesized audio (Web Audio) over sound files | Keeps asset load at zero; retro pinball sfx synthesize convincingly | — Pending |
 | One `table/spec` → `resolve()` drives both the colliders and the drawing | What's hit and what's drawn cannot drift (WR-03 confirmed the flipper drawing matches its collider) | ✓ Phase 3 |
 | Typed one-way collision bus, drained once per fixed step at the `onPostStep` seam | Scoring, rendering and audio (Phases 4–5) consume contacts without touching the world; the drain is read off the bus, not by position (CR-01) | ✓ Phase 3 |
+| Reactive kicks applied by one `ReactiveElements.service()` step via `applyImpulse`; bus listeners only record and award | Keeps the world write path single and ordered, so kicks stay deterministic and energy-bounded | ✓ Phase 4 |
+| HUD and diagnosis readout are DOM text, not canvas text | Canvas text shrank to ~3.4 px under the fit-to-viewport scale; DOM text stays legible and is screen-reader reachable | ✓ Phase 4 |
+| Left/Right Shift stay default flipper bindings, with a Windows reliability note naming the arrow keys | Keeps Phase 2 D-09; Windows-only Shift heals cover the VK_SHIFT merge, and the OS Sticky Keys case is an accepted residual (UAT 18 decision A) | ✓ Phase 4 |
 
 ## Evolution
 
@@ -99,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-20 after Phase 3*
+*Last updated: 2026-11-21 after Phase 4*
