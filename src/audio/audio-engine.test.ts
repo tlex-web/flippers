@@ -454,6 +454,44 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
   });
 
+  it("an activating gesture after the deadline on a context already rendering discards nothing (WR-02)", () => {
+    const { fake, engine, clock, activation, chain } = stuckRig();
+    const q = new CueQueue();
+    for (let i = 0; i < RECIPES.bumper.cap; i++) q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(RECIPES.bumper.cap);
+    // The IN-05 interval: the clock moves, `state` still reads "suspended",
+    // the resume is pending and the wall-clock window has passed.
+    fake.currentTime = 0.02;
+    clock.ms += STARTING_WINDOW_MS + 10;
+    q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(1);
+    const nodes = connected(fake, chain);
+    const voices = engine.activeVoices();
+    expect(nodes).toBe(fake.nodes.length - chain);
+
+    // A flipper press with activation lands in that interval.
+    activation.active = true;
+    engine.unlock();
+    expect(fake.state).toBe("suspended");
+    expect(engine.activeVoices()).toBe(voices);
+    expect(connected(fake, chain)).toBe(nodes);
+
+    // `startAudioT` was not re-anchored: before the clock moves again the
+    // context still counts as rendering, so a steal keeps the fade.
+    q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(1);
+    expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
+
+    // The clock keeps advancing: still nothing discarded.
+    fake.currentTime = 0.04;
+    clock.ms += 100;
+    engine.unlock();
+    q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(1);
+    expect(engine.activeVoices("bumper")).toBe(RECIPES.bumper.cap);
+    expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
+  });
+
   it("a context that starts inside the window keeps the voices scheduled while starting", () => {
     const { fake, engine, clock, chain } = stuckRig();
     const q = new CueQueue();

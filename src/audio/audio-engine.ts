@@ -299,7 +299,9 @@ export class AudioEngine {
       // still be playable (WR-01). If that activating resume() does not start
       // the context either, no later gesture can (all pending resumes settle
       // together), so the reopen is spent until the resume settles (05-REVIEW
-      // WR-01, second pass).
+      // WR-01, second pass). A context that is already rendering (its clock
+      // moves while `state` lags) is never reopened: that would discard
+      // audibly playing voices and re-anchor `startAudioT` (05-REVIEW WR-02).
       const nowMs = this.clock();
       if (!this.resumePending) {
         this.activationReopened = false;
@@ -307,6 +309,7 @@ export class AudioEngine {
       } else if (
         !this.activationReopened &&
         nowMs >= this.startingUntilMs &&
+        !this.isRendering(ctx) &&
         this.isActivation()
       ) {
         this.activationReopened = true;
