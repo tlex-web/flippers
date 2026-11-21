@@ -30,8 +30,9 @@
  * own layer end and the latest-ending one tears the whole voice down.
  *
  * Every voice is admitted through a `VoicePool` first (16 voices, per-kind
- * recipe caps, oldest stolen with a 5 ms fade), so bumper spam cannot flood
- * the mix. `setMuted` / `toggleMute` ramp the master gain (D-02); while muted
+ * recipe caps, oldest stolen with a 5 ms fade anchored at the voice's live
+ * level), so bumper spam cannot flood the mix. `setMuted` / `toggleMute` ramp
+ * the master gain from its live level (D-02); while muted
  * `flush()` drops cues, so nothing bursts out on unmute.
  */
 
@@ -43,10 +44,10 @@ import type {
   GainNodeLike,
   ScheduledSourceLike,
 } from "./audio-context-like";
-import { applyEnvelope, type EnvelopeSpec } from "./envelope";
+import { applyEnvelope, envelopePoints, type EnvPoint, type EnvelopeSpec } from "./envelope";
 import { dbToGain, playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 import { RECIPES, type LayerSpec } from "./recipes";
-import { VoicePool, holdAt, type VoiceHandle } from "./voice-pool";
+import { VoicePool, type VoiceHandle } from "./voice-pool";
 
 export { ENV_FLOOR } from "./envelope";
 
@@ -89,6 +90,15 @@ export class AudioEngine {
   /** Set when creation threw; later gestures do not retry. */
   private failed = false;
   private muted = false;
+  /**
+   * The master gain's latest linear segment (audio clock), tracked so a mute
+   * toggle can anchor its ramp at the live level: a ramp starts at the
+   * previous automation event, never at "now" (WR-01).
+   */
+  private masterFromT = 0;
+  private masterFromV = 0;
+  private masterToT = 0;
+  private masterToV = 0;
   private readonly pool = new VoicePool();
 
   constructor(createContext: () => AudioContextLike, rng: () => number = Math.random) {
@@ -107,8 +117,26 @@ export class AudioEngine {
     const master = this.master;
     if (ctx === null || master === null) return;
     const now = ctx.currentTime;
-    holdAt(master.gain, now);
-    master.gain.linearRampToValueAtTime(muted ? 0 : MASTER_GAIN, now + MUTE_RAMP_S);
+    const level = this.masterLevelAt(now);
+    const target = muted ? 0 : MASTER_GAIN;
+    // `now` is the context's current time, so cancelling from it drops only
+    // automation that has not rendered yet; the set anchors the ramp at the
+    // level actually sounding, so the fade really lasts MUTE_RAMP_S.
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(level, now);
+    master.gain.linearRampToValueAtTime(target, now + MUTE_RAMP_S);
+    this.masterFromT = now;
+    this.masterFromV = level;
+    this.masterToT = now + MUTE_RAMP_S;
+    this.masterToV = target;
+  }
+
+  /** The master gain's level at audio time `t`, from the tracked segment. */
+  private masterLevelAt(t: number): number {
+    if (t >= this.masterToT) return this.masterToV;
+    if (t <= this.masterFromT) return this.masterFromV;
+    const u = (t - this.masterFromT) / (this.masterToT - this.masterFromT);
+    return this.masterFromV + (this.masterToV - this.masterFromV) * u;
   }
 
   /** Flip the mute flag; returns the new state (true = muted). */
@@ -163,7 +191,8 @@ export class AudioEngine {
   private build(ctx: AudioContextLike): void {
     const now = ctx.currentTime;
     const master = ctx.createGain();
-    master.gain.setValueAtTime(this.muted ? 0 : MASTER_GAIN, now);
+    const level = this.muted ? 0 : MASTER_GAIN;
+    master.gain.setValueAtTime(level, now);
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.setValueAtTime(COMPRESSOR.threshold, now);
     comp.knee.setValueAtTime(COMPRESSOR.knee, now);
@@ -180,6 +209,10 @@ export class AudioEngine {
 
     this.master = master;
     this.noise = buffer;
+    this.masterFromT = now;
+    this.masterToT = now;
+    this.masterFromV = level;
+    this.masterToV = level;
   }
 
   /**
@@ -221,7 +254,7 @@ export class AudioEngine {
     const level = recipe.peak * (recipe.levelFromStrength ? strengthToGain(s) : 1);
     this.pool.admit(cue.kind, recipe.cap, t0);
     const nodes: AudioNodeLike[] = [];
-    const envs: GainNodeLike[] = [];
+    const envs: { gain: GainNodeLike["gain"]; points: readonly EnvPoint[] }[] = [];
     const sources: ScheduledSourceLike[] = [];
     try {
       let last: ScheduledSourceLike | null = null;
@@ -230,7 +263,7 @@ export class AudioEngine {
         const layer = recipe.layers[i];
         if (!layer) continue;
         const built = this.buildLayer(ctx, master, layer, s, ratio, level, t0, nodes);
-        envs.push(built.env);
+        envs.push({ gain: built.env.gain, points: built.points });
         sources.push(built.source);
         if (built.stop > lastStop) {
           lastStop = built.stop;
@@ -279,7 +312,12 @@ export class AudioEngine {
     level: number,
     t0: number,
     nodes: AudioNodeLike[],
-  ): { env: GainNodeLike; source: ScheduledSourceLike; stop: number } {
+  ): {
+    env: GainNodeLike;
+    points: readonly EnvPoint[];
+    source: ScheduledSourceLike;
+    stop: number;
+  } {
     const lt = t0 + layer.offset;
     const envelope: EnvelopeSpec =
       layer.decayPerStrength === undefined
@@ -288,7 +326,9 @@ export class AudioEngine {
 
     const env = ctx.createGain();
     nodes.push(env);
-    const end = applyEnvelope(env.gain, lt, envelope, level * dbToGain(layer.gainDb));
+    const peak = level * dbToGain(layer.gainDb);
+    const end = applyEnvelope(env.gain, lt, envelope, peak);
+    const points = envelopePoints(lt, envelope, peak);
     env.connect(master);
     const stop = end + SOURCE_TAIL_S;
 
@@ -315,7 +355,7 @@ export class AudioEngine {
       const room = Math.max(0, NOISE_SECONDS - (stop - lt));
       src.start(lt, this.rng() * room);
       src.stop(stop);
-      return { env, source: src, stop };
+      return { env, points, source: src, stop };
     }
 
     const osc = ctx.createOscillator();
@@ -328,6 +368,6 @@ export class AudioEngine {
     osc.connect(input);
     osc.start(lt);
     osc.stop(stop);
-    return { env, source: osc, stop };
+    return { env, points, source: osc, stop };
   }
 }

@@ -18,6 +18,7 @@
 
 import type { CueKind } from "../app/cue-queue";
 import type { AudioParamLike, ScheduledSourceLike } from "./audio-context-like";
+import { envelopeValueAt, type EnvPoint } from "./envelope";
 
 /** Most voices sounding at once (assumption A3). */
 export const MAX_VOICES = 16;
@@ -35,21 +36,37 @@ export interface VoiceHandle {
   readonly startedAt: number;
   /** When its last source stops (audio clock, s). */
   readonly endsAt: number;
-  /** Every envelope gain of the voice. */
-  readonly envs: readonly { readonly gain: AudioParamLike }[];
+  /**
+   * Every envelope gain of the voice, with the points scheduled on it, so a
+   * steal can anchor the fade at the gain's live level.
+   */
+  readonly envs: readonly { readonly gain: AudioParamLike; readonly points: readonly EnvPoint[] }[];
   /** Every source of the voice (each already started). */
   readonly sources: readonly ScheduledSourceLike[];
 }
 
 /**
- * Freeze a parameter at its current value from `time` on. Uses
- * `cancelAndHoldAtTime` where the browser has it; Firefox does not implement
- * it, so there the pending automation is cancelled instead (the following
- * ramp then starts from the last kept event, still within a few ms).
+ * Freeze a parameter at `value`, its level at `time`, so a following ramp
+ * starts there. A linear or exponential ramp always starts at the previous
+ * automation event, never at "now", so the hold must leave an event at `time`:
+ * - with `cancelAndHoldAtTime` the in-progress ramp is cut at `time`, and the
+ *   explicit set covers the cases where nothing is inserted (a hold segment,
+ *   or past the last point), where the ramp would otherwise start from a stale
+ *   earlier event;
+ * - Firefox has no `cancelAndHoldAtTime`: the pending automation is cancelled
+ *   from `time` and re-created up to it with an exponential ramp to `value`,
+ *   which retraces the cancelled set/exp segment exactly (envelope points are
+ *   all set or exp), so the level between now and `time` does not jump.
  */
-export function holdAt(param: AudioParamLike, time: number): void {
-  if (typeof param.cancelAndHoldAtTime === "function") param.cancelAndHoldAtTime(time);
-  else param.cancelScheduledValues(time);
+export function holdAt(param: AudioParamLike, time: number, value: number): void {
+  if (typeof param.cancelAndHoldAtTime === "function") {
+    param.cancelAndHoldAtTime(time);
+    param.setValueAtTime(value, time);
+  } else {
+    param.cancelScheduledValues(time);
+    if (value > 0) param.exponentialRampToValueAtTime(value, time);
+    else param.setValueAtTime(value, time);
+  }
 }
 
 export class VoicePool {
@@ -126,10 +143,10 @@ export class VoicePool {
     this.active.splice(index, 1);
     const fadeEnd = now + STEAL_FADE_S;
     for (let i = 0; i < v.envs.length; i++) {
-      const g = v.envs[i]?.gain;
-      if (!g) continue;
-      holdAt(g, now);
-      g.linearRampToValueAtTime(0, fadeEnd);
+      const env = v.envs[i];
+      if (!env) continue;
+      holdAt(env.gain, now, envelopeValueAt(env.points, now));
+      env.gain.linearRampToValueAtTime(0, fadeEnd);
     }
     const stop = fadeEnd + STEAL_STOP_PAD_S;
     for (let i = 0; i < v.sources.length; i++) v.sources[i]?.stop(stop);

@@ -6,7 +6,10 @@
  * whether it was disconnected, every parameter automation event, and every
  * source's start/stop times. It mirrors the two browser rules the engine must
  * respect: an exponential ramp to a value <= 0 throws a RangeError (Pitfall 5),
- * and a source started twice throws (one start per node).
+ * and a source started twice throws (one start per node). Each parameter also
+ * keeps the effective automation timeline (cancels applied, per the Web Audio
+ * spec) so `valueAt(t)` evaluates the level a browser would render: a ramp
+ * starts at the previous event, never at "now".
  *
  * `currentTime` and `state` are plain settable fields, so tests drive the
  * audio clock and the suspended/running lifecycle directly. Test code only;
@@ -37,16 +40,33 @@ export interface ParamEvent {
   readonly time: number;
 }
 
-/** Records every automation call on one parameter. */
+/** One event on the effective (post-cancel) automation timeline. */
+interface TimelineEvent {
+  readonly type: "set" | "linear" | "exp";
+  readonly value: number;
+  readonly time: number;
+}
+
+/**
+ * Records every automation call on one parameter (`events`, the raw call log)
+ * and evaluates the resulting timeline (`valueAt`).
+ */
 export class FakeParam implements AudioParamLike {
   readonly events: ParamEvent[] = [];
-  constructor(readonly name: string) {}
+  private readonly timeline: TimelineEvent[] = [];
+  constructor(
+    readonly name: string,
+    /** The level before the first event (a gain's default is 1). */
+    readonly defaultValue: number = 0,
+  ) {}
   setValueAtTime(value: number, time: number): this {
     this.events.push({ type: "set", value, time });
+    this.insert({ type: "set", value, time });
     return this;
   }
   linearRampToValueAtTime(value: number, time: number): this {
     this.events.push({ type: "linear", value, time });
+    this.insert({ type: "linear", value, time });
     return this;
   }
   exponentialRampToValueAtTime(value: number, time: number): this {
@@ -54,15 +74,56 @@ export class FakeParam implements AudioParamLike {
       throw new RangeError(`exponentialRampToValueAtTime target must be positive, got ${value}`);
     }
     this.events.push({ type: "exp", value, time });
+    this.insert({ type: "exp", value, time });
     return this;
   }
   cancelScheduledValues(time: number): this {
     this.events.push({ type: "cancel", value: Number.NaN, time });
+    this.removeFrom(time, true);
     return this;
   }
   cancelAndHoldAtTime(time: number): this {
     this.events.push({ type: "cancelAndHold", value: Number.NaN, time });
+    // Spec: a ramp in progress at `time` is cut there at its current value;
+    // otherwise nothing is inserted and the last kept event's value holds.
+    const held = this.valueAt(time);
+    const next = this.timeline.find((e) => e.time > time);
+    this.removeFrom(time, false);
+    if (next && next.type !== "set") this.insert({ type: next.type, value: held, time });
     return this;
+  }
+
+  /** The rendered level at audio time `t` (set holds; linear/exp ramp from the previous event). */
+  valueAt(t: number): number {
+    let value = this.defaultValue;
+    let time = 0;
+    for (const e of this.timeline) {
+      if (e.time <= t) {
+        value = e.value;
+        time = e.time;
+        continue;
+      }
+      const u = (t - time) / (e.time - time);
+      if (e.type === "linear") return value + (e.value - value) * u;
+      if (e.type === "exp" && value > 0) return value * Math.pow(e.value / value, u);
+      return value;
+    }
+    return value;
+  }
+
+  /** Insert after any events at the same time, before later ones (spec order). */
+  private insert(e: TimelineEvent): void {
+    let i = this.timeline.length;
+    while (i > 0 && (this.timeline[i - 1]?.time ?? -Infinity) > e.time) i--;
+    this.timeline.splice(i, 0, e);
+  }
+
+  /** Drop events at or after `time` (`inclusive`) or strictly after it. */
+  private removeFrom(time: number, inclusive: boolean): void {
+    for (let i = this.timeline.length - 1; i >= 0; i--) {
+      const at = this.timeline[i]?.time ?? -Infinity;
+      if (inclusive ? at >= time : at > time) this.timeline.splice(i, 1);
+    }
   }
 }
 
@@ -85,7 +146,7 @@ export class FakeNode implements AudioNodeLike {
 }
 
 export class FakeGain extends FakeNode implements GainNodeLike {
-  readonly gain = new FakeParam("gain");
+  readonly gain = new FakeParam("gain", 1);
   constructor() {
     super("gain");
   }

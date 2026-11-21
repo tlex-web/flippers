@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { CUE_KINDS, CueQueue, type CueKind } from "../app/cue-queue";
 import { mulberry32 } from "../harness/prng";
 import { AudioEngine } from "./audio-engine";
+import { applyEnvelope, envelopePoints, envelopeValueAt, type EnvelopeSpec } from "./envelope";
 import { RECIPES } from "./recipes";
 import {
   FakeAudioContext,
@@ -11,11 +12,14 @@ import {
   FakeParam,
   type FakeNode,
 } from "./test/fake-audio-context";
-import { MAX_VOICES, STEAL_FADE_S, VoicePool, type VoiceHandle } from "./voice-pool";
+import { MAX_VOICES, STEAL_FADE_S, VoicePool, holdAt, type VoiceHandle } from "./voice-pool";
 
 /** A pool-level handle: two envelope gains and two started sources. */
 interface TestHandle extends VoiceHandle {
-  readonly envs: readonly { readonly gain: FakeParam }[];
+  readonly envs: readonly {
+    readonly gain: FakeParam;
+    readonly points: ReturnType<typeof envelopePoints>;
+  }[];
   readonly sources: readonly FakeOscillator[];
 }
 
@@ -29,7 +33,10 @@ function handle(kind: CueKind, startedAt: number, endsAt: number = startedAt + 1
     kind,
     startedAt,
     endsAt,
-    envs: [{ gain: new FakeParam("gain") }, { gain: new FakeParam("gain") }],
+    envs: [
+      { gain: new FakeParam("gain", 1), points: [] },
+      { gain: new FakeParam("gain", 1), points: [] },
+    ],
     sources,
   };
 }
@@ -73,7 +80,9 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     expect(pool.activeCount("bumper")).toBe(0);
     for (const e of first.envs) {
       const ev = e.gain.events;
-      expect(ev[ev.length - 2]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: now });
+      expect(ev[ev.length - 3]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: now });
+      expect(ev[ev.length - 2]?.type).toBe("set");
+      expect(ev[ev.length - 2]?.time).toBe(now);
       expect(ev[ev.length - 1]).toEqual({ type: "linear", value: 0, time: now + STEAL_FADE_S });
     }
     for (const s of first.sources) {
@@ -113,6 +122,76 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     pool.release(h);
     pool.release(h);
     expect(pool.activeCount()).toBe(0);
+  });
+});
+
+/** A voice whose single envelope gain carries a scheduled envelope. */
+function envelopedHandle(
+  kind: CueKind,
+  t0: number,
+  env: EnvelopeSpec,
+  peak: number,
+  firefox: boolean,
+): TestHandle {
+  const gain = new FakeParam("gain", 1);
+  if (firefox) Object.defineProperty(gain, "cancelAndHoldAtTime", { value: undefined });
+  const end = applyEnvelope(gain, t0, env, peak);
+  const src = new FakeOscillator();
+  src.start(t0);
+  src.stop(end);
+  return {
+    kind,
+    startedAt: t0,
+    endsAt: end,
+    envs: [{ gain, points: envelopePoints(t0, env, peak) }],
+    sources: [src],
+  };
+}
+
+describe("steal fade starts at the live level (WR-01)", () => {
+  const HOLD_ENV: EnvelopeSpec = { attack: 0.005, hold: 0.5, decay: 0.15 };
+  const DECAY_ENV: EnvelopeSpec = { attack: 0.002, hold: 0, decay: 0.3 };
+
+  it("a steal during a hold segment fades from the held peak, not from a stale event", () => {
+    const pool = new VoicePool();
+    const v = envelopedHandle("tilt", 0, HOLD_ENV, 0.8, false);
+    pool.add(v);
+    const now = 0.3;
+    pool.admit("tilt", 1, now);
+    const g = v.envs[0]?.gain;
+    if (!g) throw new Error("no gain");
+    expect(g.valueAt(now)).toBeCloseTo(0.8, 9);
+    expect(g.valueAt(now + STEAL_FADE_S / 2)).toBeCloseTo(0.4, 9);
+    expect(g.valueAt(now + STEAL_FADE_S)).toBe(0);
+  });
+
+  it("without cancelAndHoldAtTime (Firefox) a steal mid-decay keeps the decay curve up to now", () => {
+    const pool = new VoicePool();
+    const v = envelopedHandle("bumper", 0, DECAY_ENV, 0.8, true);
+    const g = v.envs[0]?.gain;
+    if (!g) throw new Error("no gain");
+    const points = v.envs[0]?.points ?? [];
+    const before = g.valueAt(0.05);
+    pool.add(v);
+    const now = 0.1;
+    pool.admit("bumper", 1, now);
+    expect(g.events.some((e) => e.type === "cancel")).toBe(true);
+    // Between the render point and `now` the level still follows the decay.
+    expect(g.valueAt(0.05)).toBeCloseTo(before, 9);
+    expect(g.valueAt(now)).toBeCloseTo(envelopeValueAt(points, now), 9);
+    expect(g.valueAt(now + STEAL_FADE_S / 2)).toBeCloseTo(envelopeValueAt(points, now) / 2, 9);
+    expect(g.valueAt(now + STEAL_FADE_S)).toBe(0);
+  });
+
+  it("holdAt with a zero level anchors with a set (an exponential ramp to 0 is illegal)", () => {
+    const g = new FakeParam("gain", 1);
+    Object.defineProperty(g, "cancelAndHoldAtTime", { value: undefined });
+    g.setValueAtTime(0, 0);
+    holdAt(g, 1, 0);
+    expect(g.events.slice(-2)).toEqual([
+      { type: "cancel", value: Number.NaN, time: 1 },
+      { type: "set", value: 0, time: 1 },
+    ]);
   });
 });
 

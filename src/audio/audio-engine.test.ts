@@ -104,18 +104,47 @@ describe("master mute (D-02 engine side)", () => {
     fake.currentTime = 2;
     engine.setMuted(true);
     let ev = master.gain.events;
-    expect(ev[ev.length - 2]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: 2 });
-    expect(ev[ev.length - 1]).toEqual({ type: "linear", value: 0, time: 2 + MUTE_RAMP_S });
+    expect(ev.slice(-3)).toEqual([
+      { type: "cancel", value: Number.NaN, time: 2 },
+      { type: "set", value: MASTER_GAIN, time: 2 },
+      { type: "linear", value: 0, time: 2 + MUTE_RAMP_S },
+    ]);
     fake.currentTime = 3;
     engine.setMuted(false);
     ev = master.gain.events;
-    expect(ev[ev.length - 2]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: 3 });
-    expect(ev[ev.length - 1]).toEqual({ type: "linear", value: MASTER_GAIN, time: 3 + MUTE_RAMP_S });
+    expect(ev.slice(-3)).toEqual([
+      { type: "cancel", value: Number.NaN, time: 3 },
+      { type: "set", value: 0, time: 3 },
+      { type: "linear", value: MASTER_GAIN, time: 3 + MUTE_RAMP_S },
+    ]);
+  });
+
+  it("the mute fade starts at the live level after a minute of play (WR-01)", () => {
+    const { fake, engine } = rig(() => 0.5);
+    const g = masterOf(fake).gain;
+    fake.currentTime = 60;
+    engine.setMuted(true);
+    expect(g.valueAt(60)).toBeCloseTo(MASTER_GAIN, 9);
+    expect(g.valueAt(60 + MUTE_RAMP_S / 2)).toBeCloseTo(MASTER_GAIN / 2, 9);
+    expect(g.valueAt(60 + MUTE_RAMP_S)).toBe(0);
+    // A toggle mid-ramp reverses from where the fade has got to, with no jump.
+    fake.currentTime = 60 + MUTE_RAMP_S / 2;
+    engine.setMuted(false);
+    expect(g.valueAt(fake.currentTime)).toBeCloseTo(MASTER_GAIN / 2, 9);
+    expect(g.valueAt(fake.currentTime + MUTE_RAMP_S / 2)).toBeCloseTo((MASTER_GAIN * 3) / 4, 9);
+    expect(g.valueAt(fake.currentTime + MUTE_RAMP_S)).toBe(MASTER_GAIN);
+    // A later toggle ramps from now, not from the end of the previous ramp.
+    fake.currentTime = 120;
+    engine.setMuted(true);
+    expect(g.valueAt(120 + MUTE_RAMP_S / 2)).toBeCloseTo(MASTER_GAIN / 2, 9);
   });
 
   it("a mute set before unlock starts the master at 0", () => {
     const fake = new FakeAudioContext();
-    const engine = new AudioEngine(() => fake, () => 0.5);
+    const engine = new AudioEngine(
+      () => fake,
+      () => 0.5,
+    );
     engine.setMuted(true);
     engine.unlock();
     const first = masterOf(fake).gain.events[0];

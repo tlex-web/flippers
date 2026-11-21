@@ -74,6 +74,34 @@ export function envelopePoints(t0: number, env: EnvelopeSpec, peak: number): rea
 }
 
 /**
+ * The envelope's level at time `t`, evaluated the way Web Audio renders the
+ * points: a "set" holds until the next point, an "exp" ramp interpolates
+ * geometrically from the previous point. Before the first point it is the
+ * first point's value (the source has not started yet); after the last, the
+ * last value. Used to anchor a stolen voice's fade at its live level.
+ */
+export function envelopeValueAt(points: readonly EnvPoint[], t: number): number {
+  const first = points[0];
+  if (!first) return ENV_FLOOR;
+  let value = first.value;
+  let time = first.time;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (!p) continue;
+    if (p.time <= t) {
+      value = p.value;
+      time = p.time;
+      continue;
+    }
+    if (p.kind === "exp" && i > 0 && value > 0 && p.value > 0 && p.time > time) {
+      return value * Math.pow(p.value / value, (t - time) / (p.time - time));
+    }
+    return value;
+  }
+  return value;
+}
+
+/**
  * Schedule the envelope on `param`: cancel anything pending from t0, then the
  * points. Returns the time the envelope reaches the floor.
  */
