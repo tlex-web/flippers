@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-11-21T15:00:58.097Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-11-21T15:21:37.672Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: 276b306a67826107e5ebcb6a3cc9e5047aa4949e
+state_head: c4e646e59290ace7856712cce11f01584495abb7
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 40
+  completed_plans: 41
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 05 execution started
 
@@ -101,6 +101,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P03 | 12 min | 3 tasks | 12 files |
 | Phase 05 P07 | 7 min | 3 tasks | 5 files |
 | Phase 05 P04 | 17 min | 2 tasks | 8 files |
+| Phase 05 P05 | 18 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-07: A5 guarded by a cast-free type-level case in src/audio/audio-unlock.test.ts; load-timeout todo closed on two clean back-to-back full runs (668/668)
 - [Phase 05]: 05-04: flipper flash drawn as a stadium 0.02 m (FLIPPER_FLASH_RIM_M) wider than the bat, since the flash pass runs before the opaque bat
 - [Phase 05]: 05-04: ContactFlash flashes only wall, chute and flipper at normalImpulse >= SLING_MIN_IMPULSE (inclusive) and holds no cue queue (D-03); kickers and sensors flash only through the rules hook
+- [Phase 05]: 05-05: launch and coil cues come from read-only transition counters on PlungerController/FlipperController (not per-step phase diffs), so same-step taps and the tilt drop are voiced
+- [Phase 05]: 05-05: a charged release with no ball on the plunger still voices launch (approved at tracer check); gate on ball-in-zone in the observer only if UAT finds it noisy
 
 ### Pending Todos
 
@@ -233,6 +236,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T15:00:57.087Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-11-21T15:21:36.118Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None

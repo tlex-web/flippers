@@ -192,7 +192,7 @@ Plans:
   3. Every element flashes on contact to confirm the hit registered.
   4. Each element (bumper, flipper, slingshot, drain, launch, tilt) produces a distinct runtime-synthesized sound with velocity/pitch variation and no audio files, played through a shared, gesture-resumed audio context with enveloped one-shots.
 
-**Plans**: 6/8 plans executed (5 waves)
+**Plans**: 7/8 plans executed (5 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
 - [x] 05-01-PLAN.md — Tracer: a bumper hit is heard in the live game. ReactiveFeedback hook, CueQueue/CueFeedback, Web Audio seam, AudioEngine (bumper voice), fake AudioContext, gesture unlock + live wiring (A5 at the composition root), testTimeout fix [wave 1]
@@ -207,7 +207,7 @@ Plans:
 - [x] 05-04-PLAN.md — Every hit flashes: FlashTracker on the step clock, baked halo sprites, flash pass, silent wall/chute/flipper ContactFlash (D-03) [wave 3]
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-05-PLAN.md — Every element speaks live: PresentationObserver (launch, drain, start, tilt, warning, game over, flipper coils) with read-only controller counters [wave 4]
+- [x] 05-05-PLAN.md — Every element speaks live: PresentationObserver (launch, drain, start, tilt, warning, game over, flipper coils) with read-only controller counters [wave 4]
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md — M mutes (D-02), space-theme DOM HUD (D-01), presentation-attached replay proof, full phase gate [wave 5]
@@ -242,5 +242,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
-| 5. Rendering & Audio | 6/8 | In Progress | - |
+| 5. Rendering & Audio | 7/8 | In Progress | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |
