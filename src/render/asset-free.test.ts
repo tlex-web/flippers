@@ -7,7 +7,9 @@ import indexHtml from "../../index.html?raw";
  * RND-01 asset gate (05-08; also AUD-01's "no audio files"). The table is drawn
  * in code and every sound is synthesized, so no image, audio or font asset, and
  * no network fetch that could pull one in, may enter the shipped tree: every
- * non-test .ts file under src plus index.html is scanned on every full suite.
+ * non-test .ts, .js, .css and .html file under src plus index.html is scanned on
+ * every full suite, and there must be no `public/` directory (Vite copies it
+ * into the build verbatim, bypassing every source scan).
  *
  * The sources are read through Vite's raw imports (the project has no Node
  * typings, and this is the same idiom key-labels.test.ts uses for index.html).
@@ -16,9 +18,12 @@ import indexHtml from "../../index.html?raw";
  */
 
 const SOURCES = import.meta.glob<string>(
-  ["/src/**/*.ts", "!/src/**/*.test.ts", "!/src/**/test/**"],
+  ["/src/**/*.{ts,js,css,html}", "!/src/**/*.test.ts", "!/src/**/test/**"],
   { query: "?raw", import: "default", eager: true },
 );
+
+/** Every file under public/ (lazy: only the keys are read, nothing is imported). */
+const PUBLIC_FILES = Object.keys(import.meta.glob("/public/**/*"));
 
 interface AssetPattern {
   readonly name: string;
@@ -37,7 +42,7 @@ const PATTERNS: readonly AssetPattern[] = [
   },
   {
     name: "image, audio or font file extension",
-    re: /\.(png|jpe?g|svg|webp|gif|mp3|wav|ogg|woff2?|ttf|otf)(\?[^"'`\s)]*)?["'`)]/i,
+    re: /\.(png|jpe?g|svg|webp|gif|ico|avif|bmp|mp3|wav|ogg|mp4|webm|m4a|aac|flac|opus|woff2?|ttf|otf|eot)(\?[^"'`\s)]*)?["'`)]/i,
     sample: 'import bump from "./bumper.wav";',
   },
   {
@@ -51,6 +56,16 @@ const PATTERNS: readonly AssetPattern[] = [
     sample: "ctx.decodeAudioData(buf);",
   },
   { name: "Audio element constructor", re: /\bnew\s+Audio\s*\(/, sample: 'new Audio("x");' },
+  {
+    name: "audio, video or source element",
+    re: /<(audio|video|source)\b/i,
+    sample: '<audio src="theme.m4a"></audio>',
+  },
+  {
+    name: "icon link",
+    re: /<link\b[^>]*\brel\s*=\s*["']?[^"'>]*\bicon\b/i,
+    sample: '<link rel="icon" href="favicon.ico">',
+  },
   { name: "network fetch", re: /\bfetch\s*\(/, sample: 'await fetch("/sfx");' },
   { name: "XMLHttpRequest", re: /\bXMLHttpRequest\b/, sample: "const x = new XMLHttpRequest();" },
   { name: "font-face rule", re: /@font-face/i, sample: "@font-face { font-family: X; }" },
@@ -73,7 +88,7 @@ function scan(files: Readonly<Record<string, string>>): string[] {
 }
 
 describe("asset-free tree (RND-01)", () => {
-  it("scans every non-test .ts file under src, plus index.html", () => {
+  it("scans every non-test source file under src, plus index.html", () => {
     const files = Object.keys(SOURCES);
     expect(files.length).toBeGreaterThan(20);
     expect(files).toContain("/src/sim/loop.ts");
@@ -88,6 +103,18 @@ describe("asset-free tree (RND-01)", () => {
   it("finds no image, audio or font asset, and no network fetch, in src or index.html", () => {
     const hits = scan({ ...SOURCES, "/index.html": indexHtml });
     expect(hits).toEqual([]);
+  });
+
+  it("there is no public/ directory (its files would ship unscanned)", () => {
+    expect(PUBLIC_FILES).toEqual([]);
+  });
+
+  it("the extension pattern catches icons, video and the other audio and font formats", () => {
+    const ext = PATTERNS.find((p) => p.name === "image, audio or font file extension");
+    if (!ext) throw new Error("extension pattern missing");
+    for (const e of ["ico", "avif", "bmp", "mp4", "m4a", "aac", "flac", "opus", "eot"]) {
+      expect(ext.re.test(`import a from "./a.${e}";`), e).toBe(true);
+    }
   });
 
   it("every pattern hits its own positive sample (no vacuous pass)", () => {
