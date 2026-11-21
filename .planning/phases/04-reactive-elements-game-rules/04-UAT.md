@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: "2026-11-21T00:26:38Z"
+updated: 2026-11-21T00:53:09.484Z
 ---
 
 ## Current Test
@@ -113,22 +113,29 @@ note: "Presented: recommendation A (keep Shift as a default binding, add a contr
 
 ### 19. UAT test 17 re-test on the real Windows keyboard (04-12 Task 3 human-check). Sticky Keys OFF, `npm run dev`, press Enter. Hold Left Shift, then also press Right Shift: both bats must be up. Release Left Shift first, then Right Shift. Repeat with the other three orders (LD RD RU LU; RD LD LU RU; RD LD RU LU). Then tap each Shift alone a few times, and finally hold Left Shift and tap the key printed Y while also tapping X.
 expected: In every order both bats rise while both Shifts are held and both drop the moment the second Shift comes up. No bat is left raised after both Shifts are up, and none rises again on the next serve. Single Shift taps flip and drop as before. Known residual, not a failure: after releasing the first Shift while the other is held, that bat stays up until the second Shift is released (Windows sends the page nothing).
-result: [pending]
+result: pass
+source: automated
+note: "Automated live run at the user's request (Claude): Chrome 157 / Win11 on the running dev server, real OS key events via SendInput (scancodes), Sticky Keys off (Flags=26), bat angles read through a read-only CDP-injected probe. All four orders (LD RD LU RU, LD RD RU LU, RD LD LU RU, RD LD RU LU): both bats UP while both Shifts held (second Shift arrives repeat:true and is accepted), the first-released bat stays up until the second release (documented residual), both bats start falling 14-16 ms after the second Shift keyup, held set empty. Single taps 3x per Shift: rise and drop. Hold Left Shift + tap Y (KeyZ) + tap X: left bat stays up, drops on Shift release. Serve check: launch, LD RD LU RU with no other key, ball drained and BALL 2 served with both bats at rest (max 0.010 rad off rest) and nothing held for 1 s."
 
 ### 20. UAT 18 decision A visual check (04-13 Task 2 human-check). Chrome, German QWERTZ, 1280x684 window at 150% scaling. Press Enter, read the controls panel, then press the key printed Y and the key printed - . Optionally open in Firefox.
 expected: Chrome: Left flipper row reads Y <- Left Shift, Right flipper row reads - -> Right Shift, Nudge reads X . up-arrow. Under the list a small note reads 'On Windows, <- -> Y - are the most reliable flipper keys. Shift can stick.' wrapped inside the panel; panel no wider than before and covering neither table nor plunger meter. Y raises the left bat and - raises the right. Firefox: note reads 'On Windows, <- -> are the most reliable flipper keys. Shift can stick.' and the rows keep their markup labels.
-result: [pending]
+result: pass
+source: automated
+note: "Automated live run (Claude): Chrome 157, this machine's German QWERTZ layout, viewport 1281x684 @ dpr 1.5, Keyboard Map API present, secure context. Rows read 'Y ← Left Shift', '- → Right Shift', 'X . ↑'. Note reads 'On Windows, ← → Y - are the most reliable flipper keys. Shift can stick.' and wraps inside the panel. Panel is 268 css px wide with and without the note (no wider); its right edge x=284 vs table canvas left x=457, so it covers neither the table nor the plunger meter (screenshot checked). KeyZ (printed Y) raises only the left bat, Slash (printed -) only the right. Firefox is not installed: the optional Firefox check was not run."
 
 ### 21. Decide disposition of open review findings WR-01 (second-Shift press after a force-clear is dropped on Windows) and WR-02 (Shift keydown reporting shiftKey false drops the other Shift).
 expected: A recorded user decision: fix in a follow-up gap plan, or accept as residual.
-result: [pending]
+result: issue
+reported: "a"
+severity: major
+note: "Decision A (recommended): fix both WR-01 and WR-02 in a follow-up gap plan rather than accept them as residuals."
 
 ## Summary
 
 total: 21
-passed: 14
-issues: 4
-pending: 3
+passed: 16
+issues: 5
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -202,7 +209,9 @@ blocked: 0
 
 - gap_id: G-04-17
   truth: "Hold ShiftLeft and ShiftRight together, release ShiftLeft first, then ShiftRight: both bats drop (Shift bindings behave as reliably as the arrow keys)."
-  status: failed
+  status: resolved
+  resolved_by: 04-12-PLAN.md
+  resolved_at: 2026-11-21
   reason: "User reported: the shift keys are still a bit more buggy than the arrow keys - sometimes they get stuck but can be quickly released"
   severity: minor
   test: 17
@@ -224,3 +233,24 @@ blocked: 0
     - "Document the browser-impossible residual: a bat whose Shift is released while the other Shift is still held stays up until the other Shift is released"
     - "UAT 18 decision A: controls-list hint naming the reliable keys layout-correctly (name the arrow keys, or label from navigator.keyboard.getLayoutMap()) — not a literal 'Z, /'"
   debug_session: ".planning/debug/shift-flipper-residual-stick.md"
+
+- gap_id: G-04-21
+  truth: "On Windows, a Shift pressed while the other Shift is held raises its bat even after a focus change, blur or hidden tab cleared the held set (WR-01), and a Shift keydown reporting shiftKey false never drops the other held Shift (WR-02)."
+  status: failed
+  reason: "User reported: a (decision: fix review findings WR-01 and WR-02 in a follow-up gap plan)"
+  severity: major
+  test: 21
+  root_cause: "Both from the 04-12 Windows both-Shift heal in src/input/flipper-input.ts, confirmed against the current code. (WR-01) isSecondShiftPress (lines 369-374) accepts a repeat-flagged Shift keydown only when the OTHER Shift code is already in held. forceClear() (blur, focus regain, hidden tab) empties held, so if the player is holding one Shift across a clear, a genuine press of the other Shift arrives repeat:true (Windows VK_SHIFT merge), fails the held check and is dropped as auto-repeat; the held Shift's own repeats are ignored too, so neither Shift can raise a bat until every Shift is released. Real trigger: the Sticky Keys prompt or a Shift+click stealing focus mid-Shift (G-04-11). (WR-02) handleKeyDown calls dropStaleShift(e) (line 219), and with windowsShiftHeal on the Shift-code exemption is gone (line 357), so a ShiftLeft/ShiftRight KEYDOWN reporting shiftKey:false deletes the other held Shift and drops its bat. The documented contract (header lines 47-49, windowsShiftHeal option doc line 103, dropStaleShift doc) is keyup-only; the VK_SHIFT reasoning justifies only the keyup case. Sources of such keydowns: NumLock-numpad fake Shift pairs, remote desktop, IME injection."
+  artifacts:
+    - path: "src/input/flipper-input.ts"
+      issue: "isSecondShiftPress requires the other Shift in held, which forceClear empties (WR-01); handleKeyDown runs dropStaleShift on Shift keydowns with the heal on (WR-02)"
+    - path: "src/input/flipper-input.test.ts"
+      issue: "No heal-on test for a second-Shift press after handleFocus/handleBlur, and none pinning Shift-keydown shiftKey:false behaviour"
+    - path: "src/sandbox/main.ts"
+      issue: "IN-01: flipperGate comment (lines 142-144) omits the Windows Shift-keyup heal source (G-04-17); fix alongside"
+  missing:
+    - "WR-01: remember the Shift code carried by ignored Shift auto-repeats since the last clear (reset in forceClear and on a Shift keyup with shiftKey false); a repeat-flagged keydown for the OTHER Shift code is then a new physical press even when held is empty"
+    - "WR-01: document in the module's Residual paragraph that a second press landing before the first OS auto-repeat (~500 ms) after a clear is still missed"
+    - "WR-02: restrict the Shift keys' own-event reconciliation to keyup (dropStaleShift takes isKeyUp; false from handleKeyDown, true from handleKeyUp)"
+    - "Heal-on regression tests: focus -> ShiftLeft repeat -> ShiftRight repeat => rightPress; ShiftRight held, then a ShiftLeft keydown with shiftKey:false keeps right held; existing G-04-17 four-order and B6 tests stay green"
+  debug_session: ".planning/phases/04-reactive-elements-game-rules/04-REVIEW.md (WR-01, WR-02)"
