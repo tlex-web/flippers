@@ -1,57 +1,134 @@
 ---
 phase: 05-rendering-audio
-fixed_at: 2026-11-21T23:34:00Z
+fixed_at: 2026-11-22T00:04:00Z
 review_path: .planning/phases/05-rendering-audio/05-REVIEW.md
 iteration: 1
-findings_in_scope: 1
-fixed: 1
+findings_in_scope: 8
+fixed: 8
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 5: Code Review Fix Report
 
-**Fixed at:** 2026-11-21T23:34:00Z
-**Source review:** .planning/phases/05-rendering-audio/05-REVIEW.md
+**Fixed at:** 2026-11-22T00:04:00Z
+**Source review:** .planning/phases/05-rendering-audio/05-REVIEW.md (incremental review of f1b2a1e)
 **Iteration:** 1
+**Fix scope:** all (Warning, Info, and the necessity finding)
 
 **Summary:**
-- Findings in scope: 1 (fix_scope `critical_warning`: 0 critical, 1 warning)
-- Fixed: 1
+- Findings in scope: 8 (1 Warning, 7 Info, including 1 necessity finding)
+- Fixed: 8 (3 of them marked "requires human verification")
 - Skipped: 0
-- Out of scope, left open in REVIEW.md: IN-01, IN-02, IN-03, IN-04 (info)
-
-## Fixed Issues
-
-### WR-01: [new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph
-
-**Files modified:** `src/audio/audio-engine.ts`, `src/audio/voice-pool.ts`, `src/audio/audio-engine.test.ts`, `src/audio/voice-pool.test.ts`
-**Commit:** f1b2a1e
-**Status:** fixed: requires human verification (lifecycle and state logic)
-**Applied fix:**
-- **Bounded starting window.** I added `STARTING_WINDOW_MS = 250` and a third, optional `clock: () => number` constructor parameter. It defaults to `performance.now()`, so `main.ts` is unchanged, and tests pass a fake clock. `unlock()` sets the deadline only when no resume is already in flight. A re-gesture while the first `resume()` is still pending, such as every Shift flipper keydown, does not reopen the window. `flush()` now treats a context as playable only if it is running, or suspended with a resume in flight before the deadline (`isStarting()`).
-- **Discard when the context is neither running nor starting.** In that state `flush()` calls `pool.discardAll(currentTime)`, which fades, stops, disconnects and forgets every voice the pool still holds, and then drops the cues. Voices built in an expired window therefore cannot all fire at once on a late start. This covers point 2 of the finding as well as the graph bound. A cue sounds at most `STARTING_WINDOW_MS` late. A context that starts inside the window keeps its voices, so the first "start" figure still plays as before.
-- **Teardown on steal.** `VoiceHandle` gained a required `teardown()`. The engine supplies it as the shared disconnect body, and `onended` now runs `pool.release` and then `teardown()`. `admit()` and `add()` take `rendering` (default `true`). When it is `false`, `steal()` calls `teardown()` right after fading and stopping the voice, because `onended` will not fire. On a running context, teardown still waits for `onended`, so the 5 ms steal fade is not cut.
-- **Doc comments updated** to match the new behaviour: the engine header (lifecycle bullet, the "stale cue is never replayed" contract, and Pattern 6 teardown), the `flush()`/`play()`/`resumePending` docs, and the pool header plus the `admit`/`add`/`steal` docs. I left the `main.ts` header alone because that is IN-01, which is out of scope.
-- **Hot path:** no per-frame allocation. The clock is read only while a resume is pending on a suspended context. `discardAll` on an empty pool is an empty loop. The one extra closure per voice is allocated per event, not per frame. Sim and determinism are untouched.
-- **Tests added** (6 new; the suite went from 758 to 764):
-  - **Engine, never-settling resume:** `resume()` stays pending, the fake clock advances, and every cue kind plus extra bumpers is flushed for 120 frames, with a re-gesture at frame 60. While the window is open, the connected voice nodes stay within `MAX_VOICES * max nodes per voice`, and `fireAllEnded()` is never called, so every disconnection came from the pool's teardown. After the window, flushes build nothing, `activeVoices()` is 0 and no voice node is still connected. `resume()` was called twice, and the window opened only once. After the context runs, fresh cues play.
-  - **Engine, start inside the window:** a context that starts within the window keeps the voice scheduled while it was starting.
-  - **Engine, running context:** a voice stolen on a running context stays connected until `onended`.
-  - **Pool:** a steal on a rendering context does not call teardown. A steal on a non-rendering context calls it, through both the `admit` path and the `add` path. `discardAll` tears down and forgets every voice, and running it on an empty pool does nothing.
 
 ## Verification
 
-All gates ran twice: first in the isolated worktree (`.claude/worktrees/rf-05-*`, using the main checkout's `node_modules` via parent-directory resolution), then again in the **main checkout** after the fast-forward to f1b2a1e. The main-checkout results below can be reproduced from the current tree:
-- `npx tsc --noEmit`: exit 0
-- `npx eslint src`: exit 0
-- `npx vitest run`: 52 files, 764 tests passed
-- `npm run soak`: 4 files, 4 tests passed
+| Gate | Isolated worktree (per fix, then full) | Main checkout (after fast-forward) |
+|------|----------------------------------------|------------------------------------|
+| `tsc --noEmit` | exit 0 | exit 0 |
+| `vitest run` | 52 files, 771/771 passed | 52 files, 771/771 passed |
+| `eslint` | exit 0 (changed files) | exit 0 (`eslint .`) |
 
-Note: `prettier --check` flags every CRLF working-copy file, including files this fix did not touch, because Git `core.autocrlf=true`. Run on LF copies, the four touched files are clean.
+- Baseline before the fixes: tsc exit 0, 764/764 tests. This pass adds 7 tests.
+- Each fix was checked in the isolated worktree before its commit (tsc plus the affected test files). The worktree had no `node_modules`; it sat inside the repo, so Node and TypeScript resolved them from the main checkout's `node_modules` through ancestor lookup. No link or junction was created.
+- After the fast-forward, every gate was re-run in the main checkout. Those numbers can be reproduced from the current tree.
+- `prettier --check` flags many audio files that this pass never touched. That is a pre-existing line-ending difference, not something introduced here.
+- I confirmed that the WR-01 regression test fails on the unfixed engine (`flush` returns 0) and passes with the fix.
+
+## Fixed Issues
+
+### WR-01: The starting window never reopens while the first resume is pending, so the "start" cue is dropped
+
+**Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-engine.test.ts`
+**Commit:** 9d1f3b1
+**Status:** fixed: requires human verification (lifecycle and state logic)
+**Applied fix:** I used the reviewer's activation-probe option and did not change `AudioUnlock`.
+- `AudioEngine` takes a 4th constructor parameter, `isActivation`. Its default is `navigator.userActivation.isActive`, and it falls back to `true` when the API or `navigator` is missing.
+- `unlock()` reopens the window in two cases: no resume is pending, or the window has expired **and** the gesture has transient activation. On a reopen it first calls `pool.discardAll()`, so voices from the expired window do not carry over into the new one.
+- A non-activating re-gesture, such as held-Shift auto-repeat, still cannot reopen the window. The node-growth bound therefore still holds.
+- In the tests, `stuckRig` injects the probe. It defaults to non-activating, which keeps the existing "frame-60 re-gesture does not reopen" assertion meaningful.
+- New test: the resume is stuck, the window expires, a non-activating re-gesture leaves it closed, then a re-gesture with activation reopens it. A "start" cue flushed 16 ms later, with the context still suspended, returns 1. The reopened window is also bounded and discards when it expires.
+- New test: a re-gesture with activation inside a window that is still open does not extend it.
+
+I did not take the alternative (making `AudioUnlock` ignore modifier-only keys). On its own it leaves the engine unable to recover, and the engine-level regression test the review asked for would still fail.
+
+### IN-01: The sandbox header still says cues are dropped while the context is not running
+
+**Files modified:** `src/sandbox/main.ts`
+**Commit:** 56df7b0
+**Applied fix:** I reworded the presentation paragraph as the review suggested. Cues are dropped only when the context is neither running nor starting (starting means suspended with a resume in flight, for at most STARTING_WINDOW_MS). Cues on a starting context are scheduled and sound once it runs.
+
+### IN-02: A second live region contradicts the "only announced line" documentation, and unmuting is silent
+
+**Files modified:** `index.html`, `src/ui/hud.ts`, `src/ui/hud.test.ts`, `src/sandbox/main.ts`
+**Commit:** ad83a46
+**Applied fix:**
+- I took `role="status"`/`aria-live` off the visible `#hud-mute` marker. The controls `<dl>` really is unannounced again.
+- I added a visually hidden live region, `#hud-mute-live`, after the `<dl>`, with a standard clip-path `.visually-hidden` class.
+- `MuteView` takes an optional `announce` sink and writes `muteAnnouncement(muted)` ("Muted" or "Sound on") on every change after the first write. The initial state is not announced, so nothing is read out at boot.
+- I wired it in `main.ts`.
+- I updated the `.hud-status` CSS comment and the `hud.ts` header to say there are two live regions.
+- New test: both the mute and the unmute are announced, a steady frame announces nothing, and the initial state is not announced.
+
+### IN-03: The asset gate still misses remote stylesheets, fonts and scripts
+
+**Files modified:** `src/render/asset-free.test.ts`
+**Commit:** 3876b5b
+**Applied fix:** I added five patterns, each with a positive sample:
+- a remote `href`/`src` URL (`https:`, `http:` or protocol-relative)
+- CSS `@import`
+- `<object>`, `<embed>` and `<iframe>`
+- `new WebSocket(` and `new EventSource(`
+- CSS `image-set(`
+
+A further test checks two things. The remote-URL pattern catches a CDN `<script src>` and a protocol-relative `<link href>`. It does not match the page's own `<script type="module" src="/src/sandbox/main.ts">`. The real tree still scans clean.
+
+### IN-04: Envelope points are built twice per layer
+
+**Files modified:** `src/audio/envelope.ts`, `src/audio/envelope.test.ts`, `src/audio/audio-engine.ts`
+**Commit:** 47d0caa
+**Applied fix:**
+- New `scheduleEnvelope(param, points)`: it cancels from the first point's time, then schedules each point.
+- `applyEnvelope` now delegates to it, so its API and behavior are unchanged.
+- `buildLayer` builds the points once, schedules that same array, stores it on the handle and takes `end` from `envelopeEnd`. The steal anchor can no longer drift from the scheduled automation.
+- The determinism tests (identical automation logs) still pass.
+- New tests: the given points are scheduled exactly as passed, and an empty list is a no-op.
+
+### IN-05: `state === "running"` lags real rendering
+
+**Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-engine.test.ts`
+**Commit:** 60c34ac
+**Status:** fixed: requires human verification (rendering-state logic)
+**Applied fix:**
+- `unlock()` records `startAudioT = ctx.currentTime` whenever it opens or reopens the window.
+- New `isRendering(ctx)`: true when `state === "running"`, or when a resume is pending, the state is `"suspended"` and `currentTime > startAudioT`.
+- `flush()` uses `isRendering()` for both the steal `rendering` flag and the discard gate. A context whose clock is already moving is no longer discarded past the deadline, and its stolen voices are no longer torn down mid-fade.
+- A context suspended with no resume pending is still not rendering.
+- New test: the clock advances while the state still reads "suspended" and the wall-clock window has passed. The cue still plays, nothing is discarded, and the stolen voice stays connected until its `onended`.
+
+### IN-06: The "starts inside the window" test cannot detect a too-short window, and the double-teardown path has no test
+
+**Files modified:** `src/audio/audio-engine.test.ts`
+**Commit:** de4923e
+**Applied fix:**
+- **Inside-window test:** it now flushes again at +40 ms while still suspended and expects 1, then switches to running. A window of 1 ms would now fail it.
+- **Bounded-window test:** after the window expires, it sets the fake to running, checks that `fireAllEnded()` does not throw, and checks that `activeVoices()` and the connected-node count stay 0. This exercises `onended` after both a non-rendering steal and `discardAll` (the `release` miss plus the second `teardown`).
+- **Cleanup:** I removed the `await Promise.resolve()` that had no effect, and the `async` that went with it.
+- The WR-01 scenario is covered by the WR-01 commit.
+
+### IN-07: `add()`'s steal loop and its `rendering` flag never run from the engine (necessity)
+
+**Files modified:** `src/audio/voice-pool.ts`, `src/audio/voice-pool.test.ts`
+**Commit:** 7534110
+**Status:** fixed: requires human verification (necessity finding, a scope decision)
+**Applied fix:** I took the minimal option the orchestrator asked for.
+- `rendering` is now a required parameter on both `VoicePool.admit` and `VoicePool.add`, so forgetting it is a type error instead of a quiet leak.
+- I kept `add()`'s steal loop and documented it as a deliberate public-API invariant: it runs only for a caller that skips `admit`.
+- No code was removed.
+- The engine already passed the flag. The 21 pool-test call sites now pass `true` explicitly.
 
 ---
 
-_Fixed: 2026-11-21T23:34:00Z_
+_Fixed: 2026-11-22T00:04:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
