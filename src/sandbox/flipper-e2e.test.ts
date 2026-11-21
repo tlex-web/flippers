@@ -823,4 +823,116 @@ describe("Windows Shift after a force-clear (G-04-21)", () => {
     expect(rig.input.isHeld("left")).toBe(false);
     expect(rig.input.isHeld("right")).toBe(false);
   });
+
+  describe("cradle held across a force-clear (G-04-21 cradle)", () => {
+    /** A timed synthetic key event; the timeStamp (ms) comes from the fixed-step clock. */
+    const tkey = (code: string, shiftKey: boolean, repeat: boolean, timeStamp: number) => ({
+      code,
+      shiftKey,
+      repeat,
+      timeStamp,
+      preventDefault: () => {},
+    });
+
+    /** One fixed step in ms: the timed rig's clock advances by this on every step. */
+    const STEP_MS = FIXED_DT * 1000;
+
+    /**
+     * Both Shifts held (firstCode, then lastCode) across a focus regain on a
+     * heal-on rig whose events carry the fixed-step clock as their timeStamp.
+     * lastCode auto-repeats after the clear (Windows repeats only the
+     * last-pressed key), then is lifted and re-pressed after a 600 ms pause;
+     * Windows flags the re-press as a repeat. Its bat rises; the final
+     * firstCode keyup (Shift up) drops it.
+     */
+    function cradleAcrossClear(firstCode: ShiftCode, lastCode: ShiftCode): void {
+      const rig = makeRig(true);
+      let now = 0;
+      const tr: ReturnType<typeof makeRig> = {
+        ...rig,
+        step: (): void => {
+          rig.step();
+          now += STEP_MS;
+        },
+      };
+      const steps = (n: number): void => {
+        for (let i = 0; i < n; i++) tr.step();
+      };
+      const ids = [rig.leftId, rig.rightId] as const;
+      const idOf = (c: ShiftCode): number => (c === "ShiftLeft" ? rig.leftId : rig.rightId);
+      const firstId = idOf(firstCode);
+      const lastId = idOf(lastCode);
+      steps(20);
+      const restTip = ids.map((id) => rig.tipY(id));
+
+      rig.input.handleKeyDown(tkey(firstCode, true, false, now));
+      steps(20);
+      expect(rig.controller.getPhase(firstId)).toBe("held-up");
+
+      // The second Shift, flagged repeat by Windows (G-04-17).
+      rig.input.handleKeyDown(tkey(lastCode, true, true, now));
+      steps(20);
+      expect(rig.controller.getPhase(firstId)).toBe("held-up");
+      expect(rig.controller.getPhase(lastId)).toBe("held-up");
+
+      // The held last-pressed Shift's typematic.
+      for (let i = 0; i < 3; i++) {
+        rig.input.handleKeyDown(tkey(lastCode, true, true, now));
+        steps(4);
+        expect(rig.controller.getPhase(firstId)).toBe("held-up");
+        expect(rig.controller.getPhase(lastId)).toBe("held-up");
+      }
+
+      rig.input.handleFocus();
+      steps(90);
+      expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+      expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+
+      // The post-clear typematic of the last-pressed Shift never raises a bat.
+      for (let i = 0; i < 10; i++) {
+        rig.input.handleKeyDown(tkey(lastCode, true, true, now));
+        steps(4);
+        expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+        expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+      }
+
+      // lastCode lifted (Windows sends nothing) for 600 ms.
+      steps(72);
+      expect(rig.controller.getPhase(rig.leftId)).toBe("resting");
+      expect(rig.controller.getPhase(rig.rightId)).toBe("resting");
+
+      // The re-press, flagged repeat by Windows.
+      rig.input.handleKeyDown(tkey(lastCode, true, true, now));
+      const rise = stepsUntilMoved(tr, lastId, 40);
+      expect(rise).toBeGreaterThanOrEqual(1);
+      expect(rise).toBeLessThanOrEqual(2);
+      steps(20);
+      expect(rig.controller.getPhase(lastId)).toBe("held-up");
+      expect(rig.controller.getPhase(firstId)).toBe("resting");
+
+      // The re-pressed key's own typematic keeps it up, no new edge.
+      for (let i = 0; i < 5; i++) {
+        rig.input.handleKeyDown(tkey(lastCode, true, true, now));
+        steps(4);
+        expect(rig.controller.getPhase(lastId)).toBe("held-up");
+      }
+
+      // lastCode released (nothing), then firstCode: the only keyup.
+      rig.input.handleKeyUp(tkey(firstCode, false, false, now));
+      const fall = stepsUntilMoved(tr, lastId, 40);
+      expect(fall).toBeGreaterThanOrEqual(1);
+      expect(fall).toBeLessThanOrEqual(2);
+      steps(90);
+      ids.forEach((id, k) => {
+        expect(rig.controller.getPhase(id)).toBe("resting");
+        expect(Math.abs(rig.tipY(id) - (restTip[k] ?? 0))).toBeLessThan(0.02);
+      });
+      expect(rig.input.isHeld("left")).toBe(false);
+      expect(rig.input.isHeld("right")).toBe(false);
+    }
+
+    it("both Shifts held across a focus regain: re-pressing Right Shift after a pause raises the right bat and the final ShiftLeft keyup drops it", () => {
+      cradleAcrossClear("ShiftLeft", "ShiftRight");
+    });
+  });
 });

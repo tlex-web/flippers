@@ -960,4 +960,91 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
       expect(input.isHeld("right")).toBe(true);
     });
   }
+
+  describe("cradle held across a force-clear, timed re-press and marker resets (G-04-21 cradle)", () => {
+    type ShiftCode = "ShiftLeft" | "ShiftRight";
+
+    /** A timed synthetic key event (s = shiftKey, r = repeat; timeStamp in ms). */
+    function tev(code: string, shiftKey: boolean, repeat: boolean, timeStamp: number) {
+      return { code, shiftKey, repeat, timeStamp, preventDefault: vi.fn() };
+    }
+
+    const sideOf = (c: ShiftCode): "left" | "right" => (c === "ShiftLeft" ? "left" : "right");
+    const pressOf = (e: { leftPress: boolean; rightPress: boolean }, side: "left" | "right") =>
+      side === "left" ? e.leftPress : e.rightPress;
+    const releaseOf = (
+      e: { leftRelease: boolean; rightRelease: boolean },
+      side: "left" | "right",
+    ) => (side === "left" ? e.leftRelease : e.rightRelease);
+
+    /**
+     * Both Shifts held (firstCode, then lastCode) across `clear`. Windows
+     * repeats only the last-pressed Shift, so its auto-repeat names it in the
+     * marker. The player lifts and re-presses lastCode after a pause: Windows
+     * flags that re-press as a repeat (the other Shift is still down), and the
+     * gap since the last auto-repeat marks it as a fresh press.
+     */
+    function cradleAcrossClear(
+      clear: (input: FlipperInput) => void,
+      firstCode: ShiftCode,
+      lastCode: ShiftCode,
+    ): void {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      const first = sideOf(firstCode);
+      const last = sideOf(lastCode);
+
+      input.handleKeyDown(tev(firstCode, true, false, 0));
+      expect(pressOf(input.drainEdges(), first)).toBe(true);
+
+      // The second Shift, flagged repeat by Windows (G-04-17).
+      input.handleKeyDown(tev(lastCode, true, true, 100));
+      expect(pressOf(input.drainEdges(), last)).toBe(true);
+
+      // The held last-pressed Shift's typematic: no edge.
+      for (const t of [600, 633, 666]) {
+        input.handleKeyDown(tev(lastCode, true, true, t));
+        expect(anyEdge(input.drainEdges())).toBe(false);
+      }
+
+      clear(input);
+      const cleared = input.drainEdges();
+      expect(cleared.leftRelease).toBe(true);
+      expect(cleared.rightRelease).toBe(true);
+      expect(input.isHeld("left")).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+
+      // The post-clear typematic of the last-pressed Shift: never a press.
+      for (let i = 1; i <= 10; i++) {
+        const rep = tev(lastCode, true, true, 1000 + 33 * i);
+        input.handleKeyDown(rep);
+        expect(anyEdge(input.drainEdges())).toBe(false);
+        expect(input.isHeld(last)).toBe(false);
+        expect(rep.preventDefault).not.toHaveBeenCalled();
+      }
+
+      // lastCode released (Windows sends nothing), then re-pressed 600 ms after
+      // its last auto-repeat. Windows flags the re-press as a repeat.
+      const again = tev(lastCode, true, true, 1930);
+      input.handleKeyDown(again);
+      expect(pressOf(input.drainEdges(), last)).toBe(true);
+      expect(again.preventDefault).toHaveBeenCalledTimes(1);
+      expect(input.isHeld(last)).toBe(true);
+      expect(input.isHeld(first)).toBe(false);
+
+      for (const t of [2430, 2463, 2496]) {
+        input.handleKeyDown(tev(lastCode, true, true, t));
+        expect(anyEdge(input.drainEdges())).toBe(false);
+      }
+
+      // lastCode released (nothing), then firstCode: the only keyup.
+      input.handleKeyUp(tev(firstCode, false, false, 2600));
+      expect(releaseOf(input.drainEdges(), last)).toBe(true);
+      expect(input.isHeld("left")).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+    }
+
+    it("C1 (focus): both Shifts held across a focus regain; re-pressing the auto-repeating Shift after a pause is a press", () => {
+      cradleAcrossClear((input) => input.handleFocus(), "ShiftLeft", "ShiftRight");
+    });
+  });
 });
