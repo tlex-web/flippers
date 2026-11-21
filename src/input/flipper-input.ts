@@ -87,6 +87,17 @@ export interface KeyEventLike {
    * PlungerInput signatures stay valid under `exactOptionalPropertyTypes`.
    */
   readonly shiftKey?: boolean;
+  /**
+   * The event's time stamp in ms. A real `KeyboardEvent` always carries it (a
+   * `DOMHighResTimeStamp`). It is read only to tell a fresh Windows Shift
+   * re-press from OS auto-repeat (G-04-21 cradle). Synthetic events may omit
+   * it. An omitted or non-finite value means the time is unknown, so the event
+   * never counts as a timed re-press, and an ignored Shift repeat without it
+   * clears the timing reference. Optional so every existing synthetic event and
+   * the GameInput / PlungerInput signatures stay valid under
+   * `exactOptionalPropertyTypes`.
+   */
+  readonly timeStamp?: number;
   preventDefault(): void;
 }
 
@@ -167,6 +178,21 @@ const CODE_TO_SIDE: ReadonlyMap<string, FlipperSide> = new Map<string, FlipperSi
 const SHIFT_LEFT = "ShiftLeft";
 const SHIFT_RIGHT = "ShiftRight";
 
+/**
+ * The gap in ms after the last ignored Shift auto-repeat beyond which a
+ * repeat-flagged keydown of that same Shift is a fresh press (G-04-21 cradle).
+ * Windows repeats at about 2.5 (KeyboardSpeed 0) to about 30 (KeyboardSpeed 31)
+ * keydowns per second (SPI_GETKEYBOARDSPEED), so the slowest nominal interval
+ * is about 400 ms and a steady stream never leaves a gap above 450 ms. The
+ * typematic delay is about 250 ms to 1 s (KeyboardDelay 0-3,
+ * SPI_GETKEYBOARDDELAY), 500 ms by default, so a re-press missed under the gap
+ * is still taken on its own first auto-repeat at the default and longer
+ * delays. Microsoft notes real rates may deviate up to 20% from a linear
+ * scale; at the slowest setting that can only turn a physically held Shift's
+ * repeat into a press.
+ */
+export const SHIFT_REPEAT_GAP_MS = 450;
+
 /** The bound codes for each side (for the per-side OR held test), built once. */
 const SIDE_CODES: Readonly<Record<FlipperSide, readonly string[]>> = {
   left: ["KeyZ", "ShiftLeft", "ArrowLeft"],
@@ -195,6 +221,14 @@ export class FlipperInput {
    * keyup reporting Shift up. Holds only the module constants or null.
    */
   private repeatingShift: typeof SHIFT_LEFT | typeof SHIFT_RIGHT | null = null;
+
+  /**
+   * The timeStamp of the ignored Shift auto-repeat that last set
+   * `repeatingShift`, or null when that repeat had no finite timeStamp. Written
+   * only together with the marker, so it always belongs to the code the marker
+   * names (G-04-21 cradle). A number primitive: never allocates.
+   */
+  private lastShiftRepeatAt: number | null = null;
 
   /** The latch handlers write into; copied out and reset on every drain. */
   private readonly pending: MutableEdges = {
@@ -236,12 +270,14 @@ export class FlipperInput {
     const leftBefore = this.isSideHeld("left");
     const rightBefore = this.isSideHeld("right");
     this.dropStaleShift(e, false);
-    if (e.repeat && !this.isSecondShiftPress(e.code)) {
+    if (e.repeat && !this.isSecondShiftPress(e.code, e.timeStamp)) {
       // auto-repeat suppression: never re-triggers a flip, never preventDefaults
-      if (this.windowsShiftHeal) {
-        // G-04-21: remember which Shift is auto-repeating (physically down).
-        if (e.code === SHIFT_LEFT) this.repeatingShift = SHIFT_LEFT;
-        else if (e.code === SHIFT_RIGHT) this.repeatingShift = SHIFT_RIGHT;
+      if (this.windowsShiftHeal && (e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT)) {
+        // G-04-21: remember which Shift is auto-repeating (physically down), and
+        // when (G-04-21 cradle); an untimed repeat clears the time reference.
+        this.repeatingShift = e.code === SHIFT_LEFT ? SHIFT_LEFT : SHIFT_RIGHT;
+        const t = e.timeStamp;
+        this.lastShiftRepeatAt = typeof t === "number" && Number.isFinite(t) ? t : null;
       }
       this.commitTransitions(leftBefore, rightBefore);
       return;
@@ -404,12 +440,20 @@ export class FlipperInput {
    * clear no longer blocks the other Shift even though `held` is empty. A held
    * Shift's own auto-repeat and a lone repeat stay ignored. Allocates nothing.
    */
-  private isSecondShiftPress(code: string): boolean {
+  private isSecondShiftPress(code: string, timeStamp: number | undefined): boolean {
     if (!this.windowsShiftHeal) return false;
     if (code !== SHIFT_LEFT && code !== SHIFT_RIGHT) return false;
     if (this.held.has(code)) return false;
     const other = code === SHIFT_LEFT ? SHIFT_RIGHT : SHIFT_LEFT;
-    return this.held.has(other) || this.repeatingShift === other;
+    if (this.held.has(other) || this.repeatingShift === other) return true;
+    // G-04-21 cradle: the timed re-press of the auto-repeating Shift itself.
+    return (
+      this.repeatingShift === code &&
+      this.lastShiftRepeatAt !== null &&
+      timeStamp !== undefined &&
+      Number.isFinite(timeStamp) &&
+      timeStamp - this.lastShiftRepeatAt > SHIFT_REPEAT_GAP_MS
+    );
   }
 
   /**
@@ -438,6 +482,7 @@ export class FlipperInput {
     const rightBefore = this.isSideHeld("right");
     this.held.clear();
     this.repeatingShift = null;
+    this.lastShiftRepeatAt = null;
     this.commitTransitions(leftBefore, rightBefore);
   }
 }
