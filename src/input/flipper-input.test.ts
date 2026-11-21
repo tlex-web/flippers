@@ -753,4 +753,84 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
   it("R1 (focus): ShiftLeft held across a focus regain; after its first OS auto-repeat a repeat-flagged ShiftRight is a press", () => {
     heldLeftAcrossClear((input) => input.handleFocus());
   });
+
+  it("K1: ShiftRight held, then a ShiftLeft keydown reporting Shift up presses left and keeps right held (WR-02)", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftRight", true, false));
+    expect(input.drainEdges().rightPress).toBe(true);
+
+    input.handleKeyDown(gev("ShiftLeft", false, false));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.rightRelease).toBe(false);
+    expect(input.isHeld("left")).toBe(true);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("K2: mirror, ShiftLeft held, then a ShiftRight keydown reporting Shift up presses right and keeps left held (WR-02)", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    expect(input.drainEdges().leftPress).toBe(true);
+
+    input.handleKeyDown(gev("ShiftRight", false, false));
+    const edges = input.drainEdges();
+    expect(edges.rightPress).toBe(true);
+    expect(edges.leftRelease).toBe(false);
+    expect(input.isHeld("left")).toBe(true);
+    expect(input.isHeld("right")).toBe(true);
+  });
+
+  it("K3: ShiftRight held, then a repeat-flagged ShiftLeft keydown reporting Shift up is the second press and keeps right held", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftRight", true, false));
+    expect(input.drainEdges().rightPress).toBe(true);
+
+    input.handleKeyDown(gev("ShiftLeft", false, true));
+    const edges = input.drainEdges();
+    expect(edges.leftPress).toBe(true);
+    expect(edges.rightRelease).toBe(false);
+  });
+
+  it("K4: a non-Shift keydown reporting Shift up still drops a stale ShiftLeft with the heal on (G-04-11)", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    input.drainEdges();
+
+    input.handleKeyDown(gev("KeyX", false, false));
+    expect(input.drainEdges().leftRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+  });
+
+  it("K5: after K1, the final ShiftLeft keyup reporting Shift up still drops both Shifts (G-04-17)", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftRight", true, false));
+    input.drainEdges();
+    input.handleKeyDown(gev("ShiftLeft", false, false));
+    input.drainEdges();
+
+    input.handleKeyUp(gev("ShiftLeft", false, false));
+    const end = input.drainEdges();
+    expect(end.leftRelease).toBe(true);
+    expect(end.rightRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  });
+
+  for (const make of [
+    { label: "new FlipperInput()", build: () => new FlipperInput() },
+    {
+      label: "new FlipperInput({ windowsShiftHeal: false })",
+      build: () => new FlipperInput({ windowsShiftHeal: false }),
+    },
+  ]) {
+    it(`K6 (${make.label}): with the heal off a ShiftLeft keydown reporting Shift up keeps a held ShiftRight`, () => {
+      const input = make.build();
+      input.handleKeyDown(gev("ShiftRight", true, false));
+      input.drainEdges();
+
+      input.handleKeyDown(gev("ShiftLeft", false, false));
+      expect(input.drainEdges().rightRelease).toBe(false);
+      expect(input.isHeld("right")).toBe(true);
+    });
+  }
 });

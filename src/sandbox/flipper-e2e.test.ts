@@ -791,4 +791,32 @@ describe("Windows Shift after a force-clear (G-04-21)", () => {
   it("ShiftLeft held across a focus regain: a Right Shift press raises the right bat and the final ShiftLeft keyup drops it", () => {
     heldAcrossClear("ShiftLeft", "ShiftRight");
   });
+
+  it("a Shift keydown reporting Shift up keeps the other held Shift's bat up (WR-02)", () => {
+    const rig = makeRig(true);
+    const ids = [rig.leftId, rig.rightId] as const;
+    for (let i = 0; i < 20; i++) rig.step();
+
+    rig.input.handleKeyDown(fkey("ShiftRight", true, false));
+    for (let i = 0; i < 20; i++) rig.step();
+    expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+
+    rig.input.handleKeyDown(fkey("ShiftLeft", false, false));
+    for (let i = 0; i < 30; i++) {
+      rig.step();
+      expect(rig.controller.getPhase(rig.rightId)).toBe("held-up");
+    }
+    expect(rig.controller.getPhase(rig.leftId)).toBe("held-up");
+
+    rig.input.handleKeyUp(fkey("ShiftLeft", false, false));
+    const fall = stepsUntilEachMoved(rig, ids, 40);
+    for (const n of fall) {
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(2);
+    }
+    for (let i = 0; i < 90; i++) rig.step();
+    for (const id of ids) expect(rig.controller.getPhase(id)).toBe("resting");
+    expect(rig.input.isHeld("left")).toBe(false);
+    expect(rig.input.isHeld("right")).toBe(false);
+  });
 });
