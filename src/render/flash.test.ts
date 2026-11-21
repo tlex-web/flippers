@@ -3,9 +3,12 @@ import { describe, it, expect } from "vitest";
 import { resolve } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
 import {
+  CONTACT_FLASH_PEAK,
   FLASH_BUMPER,
+  FLASH_CONTACT,
   FLASH_CUTOFF_TAUS,
   FLASH_SENSOR,
+  FLASH_SLING,
   FLASH_TIMING,
   FlashTracker,
   flashLevel,
@@ -70,13 +73,26 @@ describe("FlashTracker", () => {
     expect(f.level(202, 0, FLASH_BUMPER)).toBe(0.8);
   });
 
-  it("reads strength * e^-1 after hold + decay ticks at alpha 0", () => {
+  it("reads strength * e^-1 after hold + decay ticks past the recording step, at alpha 0", () => {
     const f = new FlashTracker(maxId);
     f.record(202, 0.8);
+    f.tick(); // the recording step's own tick (the last call of onPostStep)
     const ticks = FLASH_BUMPER.holdSteps + FLASH_BUMPER.decaySteps;
     for (let i = 0; i < ticks; i++) f.tick();
-    expect(f.step).toBe(ticks);
+    expect(f.step).toBe(ticks + 1);
     expect(f.level(202, 0, FLASH_BUMPER)).toBeCloseTo(0.8 * Math.exp(-1), 12);
+  });
+
+  it("the first render after the recording step's tick is at the peak (IN-01)", () => {
+    const f = new FlashTracker(maxId);
+    f.record(100, CONTACT_FLASH_PEAK);
+    f.tick();
+    // Age is alpha, not 1 + alpha: a hold-0 contact flash is drawn at its peak.
+    expect(f.level(100, 0, FLASH_CONTACT)).toBe(CONTACT_FLASH_PEAK);
+    // A one-step sling hold is still intact for the whole first frame.
+    f.record(300, 1);
+    f.tick();
+    expect(f.level(300, 0.99, FLASH_SLING)).toBe(1);
   });
 
   it("interpolates between whole steps during the decay at alpha 0.5", () => {

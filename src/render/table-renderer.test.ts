@@ -368,7 +368,8 @@ describe("TableRenderer flash pass (RND-03, T-05-15)", () => {
 
     // Decayed past the hard cutoff.
     flash.record(202, 1);
-    const steps = BUMPER_TIMING.holdSteps + FLASH_CUTOFF_TAUS * BUMPER_TIMING.decaySteps;
+    // One tick for the recording step itself, then hold + cutoff.
+    const steps = 1 + BUMPER_TIMING.holdSteps + FLASH_CUTOFF_TAUS * BUMPER_TIMING.decaySteps;
     for (let i = 0; i < steps; i++) flash.tick();
     expect(flash.level(202, 0, BUMPER_TIMING)).toBeLessThanOrEqual(FLASH_EPS);
     rig.renderer.draw(frameOf(rig.world, { flash }));

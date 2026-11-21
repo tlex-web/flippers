@@ -1,11 +1,17 @@
 /**
  * Element flashes on the fixed-step clock (RND-03, research Pattern 4).
  *
- * A registered hit records a flash: `record(id, strength)` stamps the current
- * step and the peak strength into two typed arrays indexed by element id. The
- * clock advances once per fixed step (`tick()`, the last call of `onPostStep`),
- * and the renderer reads `level(id, alpha, timing)` at `step + alpha`, so a
- * flash pauses with the simulation on tab blur and never reads a wall clock.
+ * A registered hit records a flash: `record(id, strength)` stamps the step the
+ * flash is first seen on and the peak strength into two typed arrays indexed by
+ * element id. The clock advances once per fixed step (`tick()`, the last call
+ * of `onPostStep`), and the renderer reads `level(id, alpha, timing)` at
+ * `step + alpha`, so a flash pauses with the simulation on tab blur and never
+ * reads a wall clock.
+ *
+ * A hit recorded during step N's `onPostStep` is stamped N + 1: the clock has
+ * ticked to N + 1 before any render, so the first frame reads age `alpha`, not
+ * `1 + alpha`, and a flash is drawn at its peak and keeps its whole hold (a read
+ * before that tick clamps to age 0).
  *
  * Decay law (`flashLevel`): full brightness through the hold, then
  * `exp(-(age - hold) / decay)`, cut to exactly 0 at `hold + FLASH_CUTOFF_TAUS *
@@ -103,7 +109,7 @@ export class FlashTracker implements FlashSink {
    */
   record(id: number, strength: number): void {
     if (!Number.isInteger(id) || id < 0 || id > this.maxId) return;
-    this.hitAt[id] = this.stepCount;
+    this.hitAt[id] = this.stepCount + 1;
     this.peak[id] = clamp01(strength);
   }
 
@@ -122,7 +128,8 @@ export class FlashTracker implements FlashSink {
     if (hit === -Infinity) return 0;
     const a = alpha > 0 ? (alpha < 1 ? alpha : 1) : 0;
     const p = this.peak[id] ?? 0;
-    return p * flashLevel(this.stepCount + a - hit, timing.decaySteps, timing.holdSteps);
+    const age = this.stepCount + a - hit;
+    return p * flashLevel(age > 0 ? age : 0, timing.decaySteps, timing.holdSteps);
   }
 
   /** Fixed steps ticked so far. */
