@@ -3,7 +3,7 @@ status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-21T11:45:57.128Z
+updated: 2026-11-21T22:20:00.000Z
 ---
 
 ## Current Test
@@ -134,12 +134,16 @@ note: "Decision A (recommended): fix both WR-01 and WR-02 in a follow-up gap pla
 expected: Re-pressing the last-pressed Shift raises its bat (provided the pause since its last auto-repeat exceeds 450 ms), the bat drops when the last Shift is released, and nothing stays latched. A re-press within 450 ms of its previous auto-repeat may be missed and is then picked up by its own first auto-repeat (documented residual). A second Shift within about 0.5 s of returning focus may be missed (04-14 residual). Regression: 04-15 changed the Shift path, so also re-run test 19's four both-Shift orders and one serve with no other key; they must behave exactly as recorded there.
 result: pass
 
+### 23. Controls and HUD panel layout after the Phase 5 restyle (05-06). Chrome, 1280x684 at 150% scaling, press Enter, charge the plunger. Read the panel: Start, Launch, Left flipper, Right flipper, Nudge, Mute rows (six rows now, was five), the Windows note, the MUTED marker beside the M key cap.
+expected: Key caps on one line per row (Slash shows as its own cap), layout labels correct on the player's layout (Y / - on QWERTZ), the Windows note wraps inside the panel, and neither the HUD panel nor the diag readout covers the table or the plunger charge meter. Score, BALL n / 3 and status read clearly.
+result: [pending]
+
 ## Summary
 
-total: 22
+total: 23
 passed: 17
 issues: 5
-pending: 0
+pending: 1
 skipped: 0
 blocked: 0
 
