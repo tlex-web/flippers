@@ -140,7 +140,7 @@ Plans:
   4. A 3-ball game loop serves the next ball to the plunger on drain and ends the game after the last ball drains.
   5. Nudging applies a small impulse to the ball (never a teleport); over-nudging trips an accumulating-and-decaying TILT that goes dead — elements stop scoring and the flippers drop.
 
-**Plans**: 13/14 plans executed (6 waves) + 6 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11, G-04-17, G-04-21)
+**Plans**: 14/14 plans executed (6 waves) + 6 gap-closure plans from UAT (G-04-10, G-04-6, G-04-11, G-04-17, G-04-21)
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md — Tracer: bumpers kick and score through the bus (record-then-service), GameSession score, DOM score HUD, BALL_DENSITY/ballMass [wave 1]
@@ -174,7 +174,7 @@ Plans:
 - [x] 04-13-PLAN.md — Controls hint (G-04-17, UAT 18 decision A): key caps relabelled from navigator.keyboard.getLayoutMap(); a Windows note names ← → and, when the layout resolves, the Z/Slash keys under their printed labels; Shift stays bound and listed [wave 2]
 
 **Gap closure 4** *(UAT 04 test 21, decision A: fix review findings WR-01/WR-02)*
-- [ ] 04-14-PLAN.md — Windows Shift heal follow-ups (G-04-21): after a blur/focus/hidden-tab clear, the other Shift's repeat-flagged press counts once the held Shift has auto-repeated (WR-01); a Shift keydown reporting Shift up never drops the other held Shift (WR-02); IN-01 gate comment; residual documented and pinned [wave 1]
+- [x] 04-14-PLAN.md — Windows Shift heal follow-ups (G-04-21): after a blur/focus/hidden-tab clear, the other Shift's repeat-flagged press counts once the held Shift has auto-repeated (WR-01); a Shift keydown reporting Shift up never drops the other held Shift (WR-02); IN-01 gate comment; residual documented and pinned [wave 1]
 
 ### Phase 5: Rendering & Audio
 
@@ -219,6 +219,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Physics Core Spike | 7/7 | Complete    | 2026-07-15 |
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
-| 4. Reactive Elements & Game Rules | 13/13 | In Progress | - |
+| 4. Reactive Elements & Game Rules | 14/14 | In Progress | - |
 | 5. Rendering & Audio | 0/TBD | Not started | - |
 | 6. Juice & Polish | 0/TBD | Not started | - |
