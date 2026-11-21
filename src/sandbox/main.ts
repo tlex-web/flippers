@@ -45,7 +45,8 @@
  *   then the charge; then the start edge (a started game resets the lights);
  *   then the nudge edges (`session.onNudge`); then `session.tick()`.
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
- *   `reactive.service()` (kicks), then `session.service()` (drain and serve).
+ *   `reactive.service()` (kicks), then `session.service()` (drain and serve),
+ *   then `flash.tick()` (the flash clock, RND-03).
  *
  * Presentation (Phase 5, AUD-01): the rules report every registered kick and
  * sensor pass through `ReactiveFeedback`; `CueFeedback` records each one as a
@@ -80,8 +81,9 @@ import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
 import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
+import { FlashTracker, maxElementId } from "../render/flash";
 import type { LayerFactory } from "../render/static-layer";
-import { TableRenderer, type LightState } from "../render/table-renderer";
+import { TableRenderer, type FlashReader, type LightState } from "../render/table-renderer";
 import { computeView, tableBounds } from "../render/view-transform";
 import type { BallState } from "../physics/types";
 import { DebugRenderer } from "./debug-draw";
@@ -185,7 +187,11 @@ function main(): void {
   // Phase-5 cues (AUD-01): registered hits are recorded as scalar cues on the
   // step path (no allocation) and flushed to audio once per render frame.
   const cues = new CueQueue();
-  const cueFeedback = new CueFeedback(cues);
+  // Element flashes (RND-03) on the fixed-step clock: registered kicks and
+  // sensor passes record through CueFeedback; the clock ticks once per step at
+  // the end of onPostStep and the renderer reads it at loop.alpha.
+  const flash = new FlashTracker(maxElementId(world.getElements()));
+  const cueFeedback = new CueFeedback(cues, flash);
   const reactive = new ReactiveElements(world, router, session, cueFeedback);
 
   // Audio: the factory runs only inside the first trusted gesture (a context
@@ -254,6 +260,8 @@ function main(): void {
     router.dispatch();
     reactive.service();
     session.service();
+    // Last: advance the flash clock one fixed step (it pauses with the sim).
+    flash.tick();
   }
 
   // Renderer selection (T-05-07): an exact string compare on one query
@@ -333,7 +341,16 @@ function main(): void {
     flipperAngles: readonly number[];
     plungerCharge: number;
     lights: LightState | null;
-  } = { balls: interpolated, flipperAngles, plungerCharge: 0, lights: reactive };
+    flash: FlashReader | null;
+    alpha: number;
+  } = {
+    balls: interpolated,
+    flipperAngles,
+    plungerCharge: 0,
+    lights: reactive,
+    flash,
+    alpha: 0,
+  };
   const diag: DiagData = { fps: 0, physicsHz: 120, kineticEnergy: 0 };
 
   // Loop-local scalars (mutated in place; no per-frame allocation).
@@ -409,6 +426,8 @@ function main(): void {
       renderFrame.flipperAngles = flipperAngles;
       renderFrame.plungerCharge = plunger.getCharge();
       renderFrame.lights = reactive;
+      renderFrame.flash = flash;
+      renderFrame.alpha = loop.alpha;
       tableRenderer.draw(renderFrame);
     } else if (debugRenderer) {
       debugRenderer.draw(world, interpolated, plunger.getCharge(), reactive);

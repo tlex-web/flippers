@@ -27,6 +27,9 @@ import { computeView, tableBounds, type ViewTransform } from "./view-transform";
  * PlanckWorld on TABLE_SPEC so the drawn geometry is the collider geometry.
  */
 
+/** Halo sprites baked per resize: one bumper halo and one sensor halo (05-04). */
+const HALO_LAYERS = 2;
+
 interface Rig {
   readonly world: PlanckWorld;
   readonly canvas: CanvasTarget;
@@ -58,6 +61,8 @@ function frameOf(world: PlanckWorld, extra?: Partial<RenderFrame>): RenderFrame 
     flipperAngles: world.getFlippers().map((f) => f.angle),
     plungerCharge: 0.5,
     lights: null,
+    flash: null,
+    alpha: 0,
     ...extra,
   };
 }
@@ -90,11 +95,14 @@ function drawFrames(rig: Rig, n: number, frame: RenderFrame): CallEntry[][] {
 }
 
 describe("TableRenderer frame contract (RND-02)", () => {
-  it("bakes once across ten draws: bakeCount 1 and one layer created", () => {
+  it("bakes once across ten draws: bakeCount 1 and no layer created by draw()", () => {
     const rig = makeRig();
+    // One static layer plus the halo sprites, all created by resize().
+    const atResize = rig.layers.createCount;
+    expect(atResize).toBe(1 + HALO_LAYERS);
     drawFrames(rig, 10, frameOf(rig.world));
     expect(rig.renderer.bakeCount).toBe(1);
-    expect(rig.layers.createCount).toBe(1);
+    expect(rig.layers.createCount).toBe(atResize);
   });
 
   it("starts every frame with an identity setTransform then exactly one drawImage of the static layer at (0, 0)", () => {
@@ -220,6 +228,6 @@ describe("TableRenderer frame contract (RND-02)", () => {
     expect(rig.canvas.style.width).toBe(`${next.cssW}px`);
     expect(rig.canvas.style.height).toBe(`${next.cssH}px`);
     expect(rig.renderer.bakeCount).toBe(2);
-    expect(rig.layers.createCount).toBe(2);
+    expect(rig.layers.createCount).toBe(2 * (1 + HALO_LAYERS));
   });
 });
