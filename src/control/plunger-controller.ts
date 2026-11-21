@@ -76,6 +76,10 @@ export class PlungerController {
   private heldSteps = 0;
   /** Raw charge in [0, PLUNGER_MAX_CHARGE]. */
   private charge = 0;
+  /** Releases that ended a charge, since construction (presentation counter). */
+  private releaseCount = 0;
+  /** Normalized charge the most recent counted release ended at. */
+  private lastReleaseCharge = 0;
 
   constructor(world: PlungerWorld, zone: PlungerZone = PLUNGER_ZONE) {
     this.world = world;
@@ -96,10 +100,14 @@ export class PlungerController {
    * `PLUNGER_REST_SPEED_EPS`), apply one impulse along `PLUNGER_AXIS` scaled by
    * the current charge. A moving ball gets nothing, so the launch can never add
    * to a velocity the meter does not show (IN-01, D-10). Always returns to idle
-   * with charge 0.
+   * with charge 0. Every release that ends a charge is counted (with the charge
+   * it ended at) for the presentation layer, whether or not a ball launched:
+   * the spring fires either way.
    */
   onReleaseEdge(ballId: BallId): void {
     if (this.phase !== "charging") return;
+    this.lastReleaseCharge = this.getCharge();
+    this.releaseCount++;
     if (this.ballRestingInZone(ballId)) {
       const mag =
         PLUNGER_MIN_IMPULSE + (PLUNGER_MAX_IMPULSE - PLUNGER_MIN_IMPULSE) * this.getCharge();
@@ -169,6 +177,25 @@ export class PlungerController {
   /** Observable phase (read-only, for the renderer and tests). */
   getPhase(): PlungerPhase {
     return this.phase;
+  }
+
+  /**
+   * Releases that ended a charge since construction (read-only, for the
+   * presentation layer). Counts every charging release whether or not a ball
+   * launched; an idle release and a cancel (focus loss) count nothing. Changes
+   * no behavior: it is incremented inside the existing release transition.
+   */
+  getReleaseCount(): number {
+    return this.releaseCount;
+  }
+
+  /**
+   * Normalized charge in [0, 1] the most recent counted release ended at (the
+   * same value the impulse used); 0 before any release. A tap shorter than one
+   * step releases at 0.
+   */
+  getLastReleaseCharge(): number {
+    return this.lastReleaseCharge;
   }
 
   private reset(): void {

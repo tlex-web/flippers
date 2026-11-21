@@ -307,6 +307,68 @@ describe("PlungerController: applyEdges orders same-window edges by held state (
   });
 });
 
+describe("PlungerController: release counter for the presentation layer (05-05)", () => {
+  it("starts at count 0 and last charge 0", () => {
+    const { plunger } = rig();
+    expect(plunger.getReleaseCount()).toBe(0);
+    expect(plunger.getLastReleaseCharge()).toBe(0);
+  });
+
+  it("press, 40 updates, release: count 1 and the last charge equals the charge read just before release", () => {
+    const { plunger } = rig();
+    plunger.onPressEdge();
+    for (let i = 0; i < 40; i++) plunger.update();
+    const before = plunger.getCharge();
+    expect(before).toBeGreaterThan(0);
+    plunger.onReleaseEdge(BALL);
+    expect(plunger.getReleaseCount()).toBe(1);
+    expect(plunger.getLastReleaseCharge()).toBe(before);
+  });
+
+  it("an idle release and a cancel leave the count unchanged", () => {
+    const { plunger } = rig();
+    plunger.onReleaseEdge(BALL);
+    expect(plunger.getReleaseCount()).toBe(0);
+    plunger.onPressEdge();
+    for (let i = 0; i < 10; i++) plunger.update();
+    plunger.onCancelEdge();
+    expect(plunger.getReleaseCount()).toBe(0);
+    plunger.onReleaseEdge(BALL); // key-up after the cancel: idle release
+    expect(plunger.getReleaseCount()).toBe(0);
+    expect(plunger.getLastReleaseCharge()).toBe(0);
+  });
+
+  it("a charging release counts even when no ball rests in the zone (the spring still fires)", () => {
+    const world = new SpyWorld();
+    world.putBall(BALL, 1.45, 3.0); // out of the zone
+    const plunger = new PlungerController(world);
+    plunger.onPressEdge();
+    for (let i = 0; i < 20; i++) plunger.update();
+    plunger.onReleaseEdge(BALL);
+    expect(world.calls.length).toBe(0);
+    expect(plunger.getReleaseCount()).toBe(1);
+    expect(plunger.getLastReleaseCharge()).toBeCloseTo(20 * STEP, 12);
+  });
+
+  it("a sub-window tap from idle (applyEdges press+release, not held) counts once at charge 0", () => {
+    const { plunger } = rig();
+    plunger.applyEdges(true, true, false, false, BALL);
+    expect(plunger.getReleaseCount()).toBe(1);
+    expect(plunger.getLastReleaseCharge()).toBe(0);
+  });
+
+  it("a release and re-press inside one window while charging counts once and ends charging", () => {
+    const { plunger } = rig();
+    plunger.onPressEdge();
+    for (let i = 0; i < 10; i++) plunger.update();
+    const before = plunger.getCharge();
+    plunger.applyEdges(true, true, false, true, BALL);
+    expect(plunger.getReleaseCount()).toBe(1);
+    expect(plunger.getLastReleaseCharge()).toBe(before);
+    expect(plunger.getPhase()).toBe("charging");
+  });
+});
+
 describe("PlungerController: determinism and meter honesty (T-03-11, D-10)", () => {
   it("two fresh controllers fed the same edge script produce identical impulse calls", () => {
     const script = (plunger: PlungerController): void => {

@@ -46,7 +46,8 @@
  *   then the nudge edges (`session.onNudge`); then `session.tick()`.
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve),
- *   then `flash.tick()` (the flash clock, RND-03).
+ *   then `observer.observe()` (game-event cues), then `flash.tick()` (the
+ *   flash clock, RND-03).
  *
  * Presentation (Phase 5, AUD-01): the rules report every registered kick and
  * sensor pass through `ReactiveFeedback`; `CueFeedback` records each one as a
@@ -88,6 +89,7 @@ import { TableRenderer, type FlashReader, type LightState } from "../render/tabl
 import { computeView, tableBounds } from "../render/view-transform";
 import type { BallState } from "../physics/types";
 import { DebugRenderer } from "./debug-draw";
+import { PresentationObserver } from "./presentation-observer";
 
 /**
  * Serve point: the session parks every ball on the plunger at `PLUNGER_REST`
@@ -197,6 +199,11 @@ function main(): void {
   // Walls, the chute and the bats flash on a real hit straight off the bus,
   // silently (D-03): ContactFlash holds only the flash sink, never the cues.
   new ContactFlash(router, flash);
+  // Game-event cues (launch, drain, tilt, warning, start, game over) are derived
+  // once per step by diffing read-only getters at the end of onPostStep; a drain
+  // also flashes the drain apron. Resolved once: -1 when the table has no drain.
+  const drainId = world.getElements().find((e) => e.kind === "drain")?.id ?? -1;
+  const observer = new PresentationObserver(cues, flash, session, plunger, drainId);
 
   // Audio: the factory runs only inside the first trusted gesture (a context
   // built here at boot would start suspended). The DOM factory is handed to a
@@ -264,6 +271,9 @@ function main(): void {
     router.dispatch();
     reactive.service();
     session.service();
+    // Diff the session and plunger getters for this step's game-event cues
+    // (after the drain and serve landed, before the flash clock advances).
+    observer.observe();
     // Last: advance the flash clock one fixed step (it pauses with the sim).
     flash.tick();
   }
