@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
-status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-11-21T15:21:37.672Z"
+status: verifying
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-11-21T20:06:53.850Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: c4e646e59290ace7856712cce11f01584495abb7
+state_head: e046b27400e1817efe0bfd15123889af654fbfa3
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 41
+  completed_plans: 42
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 
 Phase: 05 (Rendering & Audio) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-21 — Phase 05 execution started
 
 Progress: [███████░░░] 67%
@@ -102,6 +102,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P07 | 7 min | 3 tasks | 5 files |
 | Phase 05 P04 | 17 min | 2 tasks | 8 files |
 | Phase 05 P05 | 18 min | 2 tasks | 7 files |
+| Phase 05 P06 | 15 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-04: ContactFlash flashes only wall, chute and flipper at normalImpulse >= SLING_MIN_IMPULSE (inclusive) and holds no cue queue (D-03); kickers and sensors flash only through the rules hook
 - [Phase 05]: 05-05: launch and coil cues come from read-only transition counters on PlungerController/FlipperController (not per-step phase diffs), so same-step taps and the tilt drop are voiced
 - [Phase 05]: 05-05: a charged release with no ball on the plunger still voices launch (approved at tracer check); gate on ball-in-zone in the observer only if UAT finds it noisy
+- [Phase 05]: 05-06: HUD colors live in CSS custom properties on :root echoing palette.ts (04-UI-REVIEW #8); CSS-only space theme, no assets
+- [Phase 05]: 05-06: bare-vs-presented scripted replay (144 and 60 Hz) is the read-only gate for presentation modules
 
 ### Pending Todos
 
@@ -236,6 +239,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T15:21:36.118Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-11-21T20:06:52.207Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None

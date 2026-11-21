@@ -43,12 +43,12 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Audio (AUD)
 
-- [ ] **AUD-01**: Each element produces a distinct runtime-synthesized sound (bumper, flipper, slingshot, drain, launch) with velocity/pitch variation and no audio files
+- [x] **AUD-01**: Each element produces a distinct runtime-synthesized sound (bumper, flipper, slingshot, drain, launch) with velocity/pitch variation and no audio files
 
 ### Rendering (RND)
 
-- [ ] **RND-01**: The entire table is rendered procedurally in code (Canvas) with no image assets
-- [ ] **RND-02**: The game holds a stable 60fps via render interpolation
+- [x] **RND-01**: The entire table is rendered procedurally in code (Canvas) with no image assets
+- [x] **RND-02**: The game holds a stable 60fps via render interpolation
 - [x] **RND-03**: Elements flash on contact to confirm the hit registered
 
 ### Polish (PLSH — portfolio "juice", in scope for v1)
@@ -113,10 +113,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 | GAME-01 | Phase 4 | Complete |
 | GAME-02 | Phase 4 | Complete |
 | GAME-03 | Phase 4 | Complete |
-| RND-01 | Phase 5 | Pending |
-| RND-02 | Phase 5 | Pending |
+| RND-01 | Phase 5 | Complete |
+| RND-02 | Phase 5 | Complete |
 | RND-03 | Phase 5 | Complete |
-| AUD-01 | Phase 5 | Pending |
+| AUD-01 | Phase 5 | Complete |
 | PLSH-01 | Phase 6 | Pending |
 | PLSH-02 | Phase 6 | Pending |
 | PLSH-03 | Phase 6 | Pending |
