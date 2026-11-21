@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-21T03:08:36.000Z
+updated: 2026-11-21T11:45:57.128Z
 ---
 
 ## Current Test
@@ -132,14 +132,14 @@ note: "Decision A (recommended): fix both WR-01 and WR-02 in a follow-up gap pla
 
 ### 22. 04-15 Task 3 real-keyboard cradle check. Windows, Sticky Keys OFF, Chrome, npm run dev, press Enter. Hold BOTH Shifts (left bat and right bat up), click another window (not the taskbar) and click back; both bats drop. Keep holding both Shifts about 1 s (the last-pressed Shift auto-repeats and is ignored), release and re-press the Shift that was pressed LAST, then repeat with the other Shift. Also repeat the 04-14 single-Shift check: hold Left Shift across the focus change, then press Right Shift, and the mirror.
 expected: Re-pressing the last-pressed Shift raises its bat (provided the pause since its last auto-repeat exceeds 450 ms), the bat drops when the last Shift is released, and nothing stays latched. A re-press within 450 ms of its previous auto-repeat may be missed and is then picked up by its own first auto-repeat (documented residual). A second Shift within about 0.5 s of returning focus may be missed (04-14 residual). Regression: 04-15 changed the Shift path, so also re-run test 19's four both-Shift orders and one serve with no other key; they must behave exactly as recorded there.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 22
-passed: 16
+passed: 17
 issues: 5
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -240,7 +240,9 @@ blocked: 0
 
 - gap_id: G-04-21
   truth: "On Windows, a Shift pressed while the other Shift is held raises its bat even after a focus change, blur or hidden tab cleared the held set (WR-01), and a Shift keydown reporting shiftKey false never drops the other held Shift (WR-02)."
-  status: failed
+  status: resolved
+  resolved_by: 04-15-PLAN.md
+  resolved_at: 2026-11-21
   reason: "User reported: a (decision: fix review findings WR-01 and WR-02 in a follow-up gap plan)"
   severity: major
   test: 21
