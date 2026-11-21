@@ -282,9 +282,8 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     ),
   );
 
-  it("cues stop being built after the window; stolen and leftover voices are torn down without onended", async () => {
+  it("cues stop being built after the window; stolen and leftover voices are torn down without onended", () => {
     const { fake, engine, clock, chain } = stuckRig();
-    await Promise.resolve();
     const graphBound = MAX_VOICES * MAX_NODES_PER_VOICE;
     const frameMs = 1000 / 60;
     const q = new CueQueue();
@@ -322,8 +321,13 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     // fireAllEnded() was never called: every disconnection came from the pool.
     expect(fake.nodes.length - chain).toBeGreaterThan(3 * graphBound);
 
-    // When the context finally starts, only fresh cues play.
+    // When the context finally starts, the pool-torn-down voices' onended
+    // fires (release misses, teardown repeats): harmless, nothing is revived.
     fake.state = "running";
+    expect(() => fake.fireAllEnded()).not.toThrow();
+    expect(engine.activeVoices()).toBe(0);
+    expect(connected(fake, chain)).toBe(0);
+    // Only fresh cues play.
     q.push("start", 0, 1);
     expect(engine.flush(q)).toBe(1);
     expect(engine.activeVoices()).toBe(1);
@@ -397,12 +401,16 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     q.push("start", 0, 1);
     expect(engine.flush(q)).toBe(1);
     const firstVoice = fake.nodes.length - chain;
-    clock.ms += 40; // normal start-up: tens of ms
+    clock.ms += 40; // normal start-up: tens of ms, still suspended
+    expect(fake.state).toBe("suspended");
+    q.push("bumper", 201, 0.5);
+    expect(engine.flush(q)).toBe(1); // still inside the window: playable
+    clock.ms += 10;
     fake.state = "running";
-    fake.currentTime = 0.04;
+    fake.currentTime = 0.01;
     q.push("bumper", 200, 0.5);
     expect(engine.flush(q)).toBe(1);
-    expect(engine.activeVoices()).toBe(2);
+    expect(engine.activeVoices()).toBe(3);
     expect(fake.nodes.slice(chain, chain + firstVoice).every((n) => !n.disconnected)).toBe(true);
   });
 
