@@ -5,27 +5,27 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "[new, 9d1f3b1 WR-01 fix] Any activating gesture after expiry reopens the window, so a resume that never settles is unbounded again (regression of the previous WR-01 bound)"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "[new, 9d1f3b1 x 60c34ac] The reopen path discards and hard-cuts voices on a context that IN-05 already treats as rendering"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "[new, 56df7b0 / 9d1f3b1 / 60c34ac] The window documentation still says \"at most STARTING_WINDOW_MS after the first resume()\""
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "[new, 47d0caa] `applyEnvelope` is now test-only, and the envelope header still describes \"one thin applier\""
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: fixed
     title: "[new, 3876b5b] The asset gate still misses a few ways to pull assets into the page from script"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "[new, 60c34ac] IN-05's \"suspended with no resume pending stays not-rendering\" branch has no clock-advanced test"
   - id: IN-05
     severity: info
@@ -39,21 +39,21 @@ findings:
     severity: info
     disposition: fixed
     title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
-open: 6
+open: 0
 total: 9
-recorded: 2026-11-21T23:31:53.209Z
+recorded: 2026-11-21T23:43:09.554Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
+| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 05-REVIEW-FIX.md |
+| IN-01 | info | fixed | 05-REVIEW-FIX.md |
+| IN-02 | info | fixed | 05-REVIEW-FIX.md |
+| IN-03 | info | fixed | 05-REVIEW-FIX.md |
+| IN-04 | info | fixed | 05-REVIEW-FIX.md |
 | IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-06 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-07 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
