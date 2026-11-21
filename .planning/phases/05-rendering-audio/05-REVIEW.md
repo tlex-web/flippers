@@ -1,235 +1,189 @@
 ---
 phase: 05-rendering-audio
-reviewed: 2026-11-21T00:00:00Z
+reviewed: 2026-11-21T23:30:00Z
 depth: standard
-files_reviewed: 50
+files_reviewed: 38
 files_reviewed_list:
   - index.html
-  - src/app/cue-queue.test.ts
-  - src/app/cue-queue.ts
   - src/audio/audio-context-like.ts
   - src/audio/audio-engine.test.ts
   - src/audio/audio-engine.ts
-  - src/audio/audio-unlock.test.ts
-  - src/audio/audio-unlock.ts
-  - src/audio/envelope.test.ts
   - src/audio/envelope.ts
-  - src/audio/mapping.test.ts
-  - src/audio/mapping.ts
   - src/audio/recipes.test.ts
   - src/audio/recipes.ts
   - src/audio/test/fake-audio-context.ts
   - src/audio/voice-pool.test.ts
   - src/audio/voice-pool.ts
-  - src/control/flipper-controller.test.ts
-  - src/control/flipper-controller.ts
-  - src/control/plunger-controller.test.ts
-  - src/control/plunger-controller.ts
-  - src/game/reactive-elements.test.ts
-  - src/game/reactive-elements.ts
+  - src/game/reactive-table.test.ts
+  - src/harness/flipper-tunnel.test.ts
+  - src/harness/reactive-soak.test.ts
+  - src/harness/soak.test.ts
+  - src/harness/stability.test.ts
+  - src/harness/table-soak.test.ts
+  - src/input/flipper-input.ts
   - src/input/game-input.test.ts
   - src/input/game-input.ts
   - src/render/asset-free.test.ts
-  - src/render/contact-flash.test.ts
-  - src/render/contact-flash.ts
   - src/render/flash.test.ts
   - src/render/flash.ts
-  - src/render/interpolate.test.ts
-  - src/render/interpolate.ts
-  - src/render/palette.ts
-  - src/render/sprites.ts
-  - src/render/static-layer.test.ts
-  - src/render/static-layer.ts
   - src/render/table-renderer.test.ts
-  - src/render/table-renderer.ts
-  - src/render/test/recording-context.ts
-  - src/render/view-transform.test.ts
-  - src/render/view-transform.ts
   - src/sandbox/cue-pipeline.test.ts
+  - src/sandbox/flipper-e2e.test.ts
+  - src/sandbox/game-e2e.test.ts
+  - src/sandbox/game.determinism.test.ts
   - src/sandbox/main.ts
-  - src/sandbox/presentation-observer.test.ts
-  - src/sandbox/presentation-observer.ts
+  - src/sandbox/plunger-e2e.test.ts
   - src/sandbox/presentation.determinism.test.ts
+  - src/sim/loop.determinism.test.ts
   - src/sim/loop.flippers.test.ts
+  - src/sim/loop.tabblur.test.ts
   - src/sim/loop.ts
-  - src/ui/key-labels.test.ts
+  - src/table/table-world.test.ts
+  - src/ui/hud.test.ts
+  - src/ui/hud.ts
   - vitest.config.ts
 findings:
   critical: 0
-  warning: 2
-  info: 7
-  total: 9
+  warning: 1
+  info: 4
+  total: 5
   necessity: 0
 status: issues_found
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (incremental: review-fix commits)
 
 **Reviewed:** 2026-11-21
 **Depth:** standard
-**Files Reviewed:** 50
+**Files Reviewed:** 38
 **Status:** issues_found
+**Scope:** `git diff f6b825c..HEAD`, the 9 fix commits 11ab06a, c5d02e2, 2259d2e, 6956600, c91183a, 309a1b0, 5d73335, 69129bd, 023ded9
 
 ## Summary
 
-I reviewed the Phase 5 rendering and audio stack: the cue queue and observer, the audio engine, unlock, envelope, mapping, recipes and voice pool, the flash tracker and contact flash, the table renderer, static layer, sprites, view transform and interpolation, the flipper-angle snapshots in the loop, the new presentation counters in the controllers and reactive elements, the mute key, and the sandbox wiring.
+This pass checks the fixes for the prior pass's 9 findings (WR-01, WR-02, IN-01 to IN-07). Every finding ID below is new and is about the fix code. None of them reopens a prior finding.
 
-The simulation and presentation are well separated. The observer, contact flash and cue feedback only write scalars and never mutate the world. The step-path code allocates nothing. The renderer resets its composite and alpha state. Element ids line up across the flash tracker, the recipes and `TABLE_SPEC`: flippers are 0/1, bumpers 200-202 and the drain is 600.
+**Does each fix resolve its finding?**
 
-The two real defects are both in the audio scheduling, and neither is caught by the fake `AudioContext`:
+| Prior | Verdict | Notes |
+|---|---|---|
+| WR-01 (stale-event fades) | Resolved | **Master:** the tracked linear segment plus `cancel(now)` / `set(level, now)` / `linear(target, now + MUTE_RAMP_S)` is exact. Two toggles in one frame at the same `currentTime` also work: the second cancel removes the first anchor, which is then re-set at its tracked level. **Steal, Chrome path:** the explicit `set` after `cancelAndHoldAtTime` covers the hold-segment case, where the spec inserts nothing. **Steal, Firefox path:** the `cancel` then `exp(value, now)` exactly retraces the attack, hold and decay segments, because every envelope point is a set or an exp between positive values. `envelopeValueAt` matches the Web Audio exponential formula. |
+| WR-02 (starting context) | Resolved, with a new robustness gap (WR-01 below) | |
+| IN-01 (flash lead) | Resolved | The first frame now reads age `alpha`. A hold-0 contact flash is 0.29 to 0.35 on the first frame (exactly 0.35 only at alpha 0). The fix report says it is drawn "at its 0.35 peak", which is slightly too strong. Every `record()` caller (CueFeedback, ContactFlash, PresentationObserver) runs inside `onPostStep` before `flash.tick()`, so the +1 stamp is consistent. |
+| IN-02 (negative delta) | Resolved | `realDeltaMs > 0 ? min(...) : 0` handles negative, NaN and +Infinity deltas. |
+| IN-03 (mute modifiers, marker) | Resolved | Minor documentation and accessibility drift (IN-02 below). |
+| IN-04 (asset gate) | Resolved for the listed gaps | One gap remains (IN-03 below). |
+| IN-05 (pitch maps) | Resolved | Resolved with tests, which is the review's option (b). |
+| IN-06 (unlock edge cases) | Resolved | `ctx.close?.().catch(...)` short-circuits correctly when `close` is absent. |
+| IN-07 (test timeout) | Resolved | Each heavy file calls `vi.setConfig` at module scope, before collection. |
 
-- **WR-01:** The mute ramp, and the voice-steal fade in Firefox, start from a stale automation event. The 50 ms fade is effectively an instant cut, so muting clicks.
-- **WR-02:** The fake context starts in the `"running"` state, so nothing tests the gap between creating the context and it actually starting. Cues in that gap, including the very first "start" jingle, are thrown away.
-
-No security issues. The only untrusted input is keyboard and pointer events, which are gated by `isTrusted`, and a `?debug=1` query parameter compared with exact string equality.
-
-I read `necessity-review.md` and found no necessity findings that meet its evidence rule. Most remaining guards are `noUncheckedIndexedAccess` artifacts, test seams (the `NO_FEEDBACK` default, nullable `flash` and `lights`) or real browser differences (the `cancelAndHoldAtTime` feature check).
+**Other checks:**
+- **Allocation:** the hot path stays allocation-free. `MuteView.update` and the loop clamp allocate nothing. The new `envs` arrays and point arrays are allocated once per voice, not per frame.
+- **Determinism:** untouched. The mute toggle and the flash stamp are presentation-only.
+- **Security:** no issues. No new trust-boundary input was added.
+- **Necessity:** I read `necessity-review.md`. No finding meets its evidence rule. The `value > 0` branch of the exported `holdAt` is defensive for an exported helper, not provably dead.
 
 ## Warnings
 
-### WR-01: Mute ramp and Firefox voice-steal fade start from a stale event, so the 50 ms fade is effectively an instant cut
+### WR-01: [new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph
 
-**File:** `src/audio/audio-engine.ts:104-112`, `src/audio/voice-pool.ts:50-53`, `src/audio/voice-pool.ts:127-133`
+**File:** `src/audio/audio-engine.ts:266-275` (the `playable` rule), `src/audio/audio-engine.ts:214-224` (`resumePending`), `src/audio/audio-engine.ts:327-331` (teardown only in `onended`), `src/audio/voice-pool.ts:140-154` (steal only stops sources)
 
-**Issue:** `linearRampToValueAtTime` always ramps from the *previous automation event's* time and value. It does not ramp from "now". `holdAt()` does not insert an anchor at `now` in the cases these call sites hit.
+**Issue:** `flush()` now builds voices whenever `resumePending && state === "suspended"`. This state has no time bound. It ends only when the `resume()` promise settles, and per the Web Audio spec a context that is not allowed to start (or has no device) keeps that promise pending. Two defects follow while the context is in this state:
 
-- **Master mute (all browsers).** The master gain's only event is `setValueAtTime(MASTER_GAIN, buildTime)` from `build()`.
-  - `cancelAndHoldAtTime(now)` finds no ramp after `now`, and the last event before it is a plain set. Per the Web Audio spec, nothing is inserted.
-  - The following `linearRampToValueAtTime(0, now + 0.05)` therefore runs from `(buildTime, 0.6)`. At `now` the gain is already `0.6 * 0.05 / (now + 0.05 - buildTime)`, which is about 0.0005 after one minute of play.
-  - Muting during play (with voices sounding) is a hard cut and clicks, so D-02's "linear ramp over MUTE_RAMP_S" does not hold.
-  - Every later toggle has the same problem: it ramps from the end of the previous ramp, not from `now`.
-- **Voice steal (Firefox).** Firefox has no `cancelAndHoldAtTime`, so the fallback `cancelScheduledValues(now)` deletes the in-progress exponential decay. The 5 ms linear fade then starts from the attack peak event `(t0 + attack, peak)`. The gain jumps away from its current decaying value, and the steal clicks: the code comment says "still within a few ms", but the level is wrong.
-- **Why tests pass.** The tests assert only the event list (`audio-engine.test.ts:100-114`). `FakeParam` records events but does not evaluate the timeline, so this is invisible to them.
+1. **The audio graph grows without bound.**
+   - A voice is torn down (its nodes disconnected from the master bus) only in its last source's `onended`.
+   - A context that is not rendering never fires `onended`.
+   - `VoicePool.steal()` removes a stolen handle from `active` and calls `stop()`, but it disconnects nothing.
+   - So every flush with cues adds oscillators, buffer sources, filters and gains that stay attached to `master` indefinitely.
+   - The pool caps only its own `active` list. The fix report's mitigation, "The pool caps them at 16", is therefore incorrect for nodes and memory.
+2. **Stale cues all play at once on start.**
+   - `currentTime` is frozen, so every voice from every frame in the window gets the same `t0 = frozen + SCHEDULE_AHEAD_S`.
+   - When the context finally starts, up to 16 surviving voices, possibly seconds old, fire in the same instant.
+   - That burst is processed in the first render quanta together with every lingering stolen node.
+   - This contradicts the module's own contract, "a stale cue is never replayed after a resume" (`audio-engine.ts:20-22`).
 
-**Fix:** For the master, use a target curve, which starts from the current value by definition and needs no anchor. Add `setTargetAtTime` to `AudioParamLike`:
+**How likely it is:** In normal start-up the window is tens of milliseconds, and the change works as intended there. The unbounded case needs a `resume()` that stays pending while the game produces cues. Examples are an output device that cannot open, or a context created in a gesture the browser does not count as activation (Chromium does not count a modifier-only keydown, such as the Shift flipper key, as activation; crbug 709765). The fake context cannot show any of this, because its `resume()` always settles and `fireAllEnded()` is manual.
 
-```ts
-// audio-context-like.ts
-setTargetAtTime(target: number, startTime: number, timeConstant: number): unknown;
-
-// audio-engine.ts setMuted
-const now = ctx.currentTime;
-master.gain.cancelScheduledValues(now);
-master.gain.setTargetAtTime(muted ? 0 : MASTER_GAIN, now, MUTE_RAMP_S / 4);
-```
-
-For the steal path, anchor explicitly after the hold. Add `readonly value: number` to `AudioParamLike`; `AudioParam` already has it.
+**Fix:** Bound the starting window, and tear down stolen voices that cannot end on their own:
 
 ```ts
-export function holdAt(param: AudioParamLike, time: number): void {
-  if (typeof param.cancelAndHoldAtTime === "function") {
-    param.cancelAndHoldAtTime(time);
-  } else {
-    param.cancelScheduledValues(time);
-    param.setValueAtTime(param.value, time); // ramp now starts at the current level
-  }
-}
+// audio-engine.ts
+private startingUntilMs = 0;               // wall-clock deadline for the starting window
+private static readonly STARTING_MAX_MS = 250;
+
+// in unlock(), when calling resume():
+this.resumePending = true;
+this.startingUntilMs = performance.now() + AudioEngine.STARTING_MAX_MS; // or an injected clock
+
+// in flush():
+const starting =
+  this.resumePending && ctx.state === "suspended" && performance.now() < this.startingUntilMs;
+const playable = ctx !== null && (ctx.state === "running" || starting);
 ```
 
-Also teach `FakeParam` to evaluate `valueAt(t)` per the spec, and assert the level at `now` and at `now + MUTE_RAMP_S / 2`, so the test actually checks the ramp.
-
-### WR-02: Cues recorded before a new context reports "running" are dropped, so the first "start" jingle can be lost
-
-**File:** `src/audio/audio-engine.ts:138-160`, `src/audio/audio-engine.ts:191-197`; untested because `src/audio/test/fake-audio-context.ts:165` starts at `"running"`
-
-**Issue:** The first trusted gesture is normally Enter, which both unlocks audio and latches the game start.
-
-1. `unlock()` constructs the context in the keydown.
-2. In the next rAF frame, the step runs `session.onStart()`, the observer pushes `"start"`, and `audio.flush(cues)` runs.
-3. `flush()` drops and clears every cue unless `ctx.state === "running"`.
-
-Per the Web Audio spec, a newly constructed context starts with control-thread state `"suspended"` and switches to `"running"` asynchronously, via a queued task and `statechange`, once the audio device starts. Gecko and WebKit behave this way, and device start-up on Windows/macOS can take tens of milliseconds, which is longer than one frame.
-
-The very first game-start figure is therefore likely silent on those engines, and so is any cue during that window: a flipper press right after Enter, or a resume after an OS-level suspend. Test (g) in `cue-pipeline.test.ts:291` passes only because the fake is `"running"` from construction.
-
-**Fix:** Treat a context that is starting as playable. Web Audio lets you build and schedule nodes on a suspended context; `currentTime` is frozen, so voices scheduled at `currentTime + SCHEDULE_AHEAD_S` play as soon as the context starts. Track a pending resume and only drop when the context is suspended with no resume in flight, or closed:
-
-```ts
-private starting = false; // set true in unlock() when the context was just created or resume() was called;
-                          // cleared in resume().then/catch and on ctx 'statechange' to running
-
-flush(cues: CueQueue): number {
-  const ctx = this.ctx, master = this.master;
-  const playable = ctx !== null && (ctx.state === "running" || (this.starting && ctx.state === "suspended"));
-  if (this.muted || master === null || !playable) { cues.clear(); return 0; }
-  ...
-}
-```
-
-Add a fake test that sets `fake.state = "suspended"` before `unlock()`, flushes a `"start"` cue, and expects voices to be scheduled.
+Also give `VoiceHandle` a `teardown()` that the engine supplies (the same body as `onended`), and have `steal()` call it when the context is not running. Then a stolen voice is disconnected even if `onended` never fires. Add a fake test that keeps `resume()` pending, flushes many bumper cues over many frames, and asserts that the number of connected nodes stays bounded.
 
 ## Info
 
-### IN-01: The flash clock runs one step ahead of the interpolated scene, and the first rendered frame of every flash is already past its hold
+### IN-01: [new, WR-02 fix code] The sandbox header still says cues are dropped while the context is not running
 
-**File:** `src/render/flash.ts:104-126`, `src/sandbox/main.ts:283-292`
+**File:** `src/sandbox/main.ts:55-58`
 
-**Issue:** `record()` stamps `stepCount = N` during step N's `onPostStep`, then `flash.tick()` advances to N+1 before any render. So the youngest age `level()` can return is `1 + alpha`.
+**Issue:** The header says: "a cue recorded before that, or while the context is not running, is dropped, never replayed." After c5d02e2, a suspended context with a resume in flight is playable, and its cues are voiced (`audio-engine.ts:266-271`). The composition root's documentation now contradicts the engine.
 
-- `FLASH_CONTACT` (hold 0, decay 5) is never drawn at its 0.35 peak: the first visible level is at most `0.35 * e^-0.2`, about 0.29.
-- A sling's one-step hold is used up before the first frame.
+**Fix:** Reword it to: "a cue recorded before that, or while the context is suspended with no resume in flight (or closed), is dropped; cues on a still-starting context are scheduled and sound when it runs."
 
-Meanwhile balls and bats are drawn at `previous + alpha`, which is one step behind `current`. The flash therefore leads the ball it reacts to by about one step.
+### IN-02: [new, IN-03 fix code] A second live region contradicts the "only announced line" documentation, and unmuting is silent to assistive tech
 
-**Fix:** Either stamp `hitAt[id] = stepCount + 1` in `record()` (age 0 at the post-tick render point), or evaluate `level()` at `stepCount - 1 + alpha` to match the interpolation. Then update `flash.test.ts` accordingly.
-
-### IN-02: `FixedStepLoop.advance` does not floor a negative delta, so `alpha` can go below 0 and interpolation extrapolates
-
-**File:** `src/sim/loop.ts:87`, `src/sandbox/main.ts:384,395`
-
-**Issue:** `lastTimeMs` is seeded from `performance.now()`. Browsers can pass a first rAF timestamp that is earlier than that value: the timestamp is the frame's begin time. A negative `deltaMs` goes through `Math.min(realDeltaMs, MAX_FRAME_MS)` unchanged, the accumulator goes negative, and `alpha` becomes negative.
-
-That breaks the documented `[0, 1)` contract. `interpolateBalls` and `interpolateAngles` (newly fed by `loop.alpha` this phase) do not clamp it, while `FlashTracker.level` does. The effect is invisible at boot because nothing moves yet, but the contract is broken.
-
-**Fix:** `const clamped = Math.min(Math.max(realDeltaMs, 0), MAX_FRAME_MS);`, or seed `lastTimeMs` from the first rAF timestamp.
-
-### IN-03: The mute key ignores modifiers and there is no on-screen mute state
-
-**File:** `src/input/game-input.ts:97-105`, `index.html:174-175`
-
-**Issue:** `KeyM` latches a mute toggle and calls `preventDefault()` whatever modifiers are held. Two consequences:
-
-- Ctrl+Shift+M (Firefox responsive design mode) and Cmd+M (macOS minimize) both toggle mute as a side effect.
-- After Cmd+M, the keyup is often lost to the minimize, so `held` keeps `KeyM` until the next blur.
-
-Separately, the HUD never shows whether sound is muted: `isMuted()` has no consumer outside tests. A player who presses M by accident gets silence with no explanation. Before unlock, M silently arms a muted master.
-
-**Fix:** In `handleKeyDown`, ignore bound codes when `e.ctrlKey || e.metaKey || e.altKey`; this needs those fields on `KeyEventLike`. Show a small "MUTED" marker in the HUD, written only on change like the other lines.
-
-### IN-04: The asset-free gate has blind spots
-
-**File:** `src/render/asset-free.test.ts:30-62`
-
-**Issue:** The extension regex leaves out several types: `ico`, `avif`, `bmp`, `mp4`, `m4a`, `aac`, `flac`, `opus` and `eot`. There is no pattern for `<audio`, `<video`, `<source` or `<link rel="icon"`. Only `.ts` and `index.html` are scanned, so a future `.css` or `.js` file, or a `public/` directory, is never checked.
-
-**Fix:** Add the missing extensions and element patterns, and widen the glob to `/src/**/*.{ts,js,css,html}`, plus a check that `public/` does not exist.
-
-### IN-05: Per-element pitch offsets hard-code `TABLE_SPEC` ids inside the recipes
-
-**File:** `src/audio/recipes.ts:85`, `src/audio/recipes.ts:135`
-
-**Issue:** `idSemitones: { 200: 0, 201: 2, 202: -3 }` and `FLIPPER_ID_SEMITONES = { 0: 0, 1: 1 }` silently depend on the spec's id numbering. A renumbered or added bumper gets offset 0 with no test failure, so the "each bumper has its own pitch" behaviour quietly disappears.
-
-**Fix:** Derive the maps from `TABLE_SPEC` (for example, by bumper index), or add a recipes test asserting that every bumper and flipper id in `TABLE_SPEC` has an entry.
-
-### IN-06: `AudioEngine.unlock` edge cases: leaked context on a `build()` failure, and an error logged on every key with a closed context
-
-**File:** `src/audio/audio-engine.ts:138-160`
+**File:** `index.html:79-80`, `index.html:89-90`, `index.html:189`, `src/ui/hud.ts:14-16`
 
 **Issue:**
+- `#hud-mute` is a second `role="status" aria-live="polite"` region.
+- It sits inside the controls `<dl>`, which the CSS comment calls "a static key/action list, not announced" (lines 89-90).
+- `.hud-status` is documented as "the one announced line" (lines 79-80), and `hud.ts:14-16` says the status line "is the only line announced to assistive tech".
+- Unmuting writes `""`. Clearing a live region announces nothing, so a screen-reader user hears "MUTED" but never hears that the sound is back on.
 
-- If `createContext()` succeeds but `build()` throws (for example, a missing `createDynamicsCompressor`), the context is dropped without `close()`. It keeps holding an audio device and counts against the browser's context limit.
-- If the context ever reaches `"closed"`, every later gesture, including each flipper keydown, calls `resume()`. That call rejects and logs `console.error`, flooding the console during play.
+**Fix:** Update the three comments to describe two live regions. Then either accept that unmuting is silent (and say so), or keep the announcement in a visually hidden sibling that reads "Sound on" or "Muted", while the visible span stays empty when unmuted.
 
-**Fix:** In the catch, call `ctx.close?.()` on the context you just created. In `unlock()`, return early when `ctx.state === "closed"`, and report it once.
+### IN-03: [new, IN-04 fix code] The asset gate still misses remote stylesheets, fonts and scripts
 
-### IN-07: A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites
+**File:** `src/render/asset-free.test.ts:35-77`
 
-**File:** `vitest.config.ts:18-19`
+**Issue:** The gate's stated contract is "no image, audio or font asset, and no network fetch that could pull one in". Several plausible regressions for a space-themed HUD still pass it:
+- `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron">` has no asset extension, no `url(`, no `@font-face` in our own file and no `fetch`.
+- `@import "https://…";` in a `.css` file passes for the same reasons.
+- `<script src="https://cdn…">`, `<object>`, `<embed>`, `<iframe>`, `new WebSocket(`, `new EventSource(` and CSS `image-set(` all pass too.
 
-**Issue:** The comment says the timeout is for heavy simulation tests, but `testTimeout: 30000` applies to the whole suite. A unit test that hangs (for example, an un-awaited promise in the audio unlock tests) now takes 30 s to fail instead of 5 s, which hides regressions in the fast suites.
+**Fix:** Add patterns, each with a positive sample:
 
-**Fix:** Keep the 5 s default, and set `{ timeout: 30_000 }` on the heavy `describe`/`it` blocks: the determinism, e2e and loop-flipper suites.
+```ts
+{ name: "remote URL in markup or CSS", re: /\b(href|src)\s*=\s*["']?(https?:)?\/\//i, sample: '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=X">' },
+{ name: "CSS @import", re: /@import\b/i, sample: '@import "https://x/y.css";' },
+{ name: "embedded document element", re: /<(object|embed|iframe)\b/i, sample: '<iframe src="x"></iframe>' },
+{ name: "streaming connection", re: /\bnew\s+(WebSocket|EventSource)\s*\(/, sample: 'new WebSocket("wss://x");' },
+```
+
+### IN-04: [new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step
+
+**File:** `src/audio/audio-engine.ts:375-376`, `src/audio/envelope.ts:108-123`
+
+**Issue:**
+- `buildLayer` calls `applyEnvelope(env.gain, lt, envelope, peak)`, which builds the points internally and schedules them.
+- It then calls `envelopePoints(lt, envelope, peak)` a second time to store on the handle for `envelopeValueAt`.
+- The steal fade is exact only if the stored points are the ones actually scheduled.
+- Today the two calls agree because both are pure with the same inputs. If `applyEnvelope` ever schedules anything else (an extra point, a different clamp), the anchor silently drifts and the stale-level click from the prior WR-01 comes back.
+- It also allocates the point array twice per layer. That happens per voice, not per frame, so it is minor.
+
+**Fix:** Have `applyEnvelope` return the points it scheduled, or accept precomputed points, so one array is both scheduled and stored:
+
+```ts
+export function scheduleEnvelope(param: AudioParamLike, points: readonly EnvPoint[]): void { /* cancel from points[0].time, then apply */ }
+// buildLayer:
+const points = envelopePoints(lt, envelope, peak);
+scheduleEnvelope(env.gain, points);
+const end = envelopeEnd(lt, envelope);
+```
 
 ---
 
