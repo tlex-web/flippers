@@ -5,8 +5,8 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "[new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph"
+    disposition: open
+    title: "[new, f1b2a1e WR-01 fix code] The starting window never reopens while the first resume is pending, so the \"start\" cue is dropped when a real activation finally starts the context"
   - id: IN-01
     severity: info
     disposition: open
@@ -23,40 +23,40 @@ findings:
     severity: info
     disposition: open
     title: "[new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step"
+  - id: IN-05
+    severity: info
+    disposition: open
+    title: "[new, f1b2a1e WR-01 fix code] `state === \"running\"` lags real rendering, so a steal or discard during start-up can cut a voice that is already sounding"
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "[new, f1b2a1e WR-01 fix code] The \"starts inside the window\" test cannot detect a too-short window, and the double-teardown path has no test"
+  - id: IN-07
+    severity: info
+    disposition: open
+    title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
   - id: WR-02
     severity: warning
     disposition: fixed
     title: "Cues recorded before a new context reports \"running\" are dropped, so the first \"start\" jingle can be lost"
-  - id: IN-05
-    severity: info
-    disposition: fixed
-    title: "Per-element pitch offsets hard-code `TABLE_SPEC` ids inside the recipes"
-  - id: IN-06
-    severity: info
-    disposition: fixed
-    title: "`AudioEngine.unlock` edge cases: leaked context on a `build()` failure, and an error logged on every key with a closed context"
-  - id: IN-07
-    severity: info
-    disposition: fixed
-    title: "A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites"
-open: 4
+open: 8
 total: 9
-recorded: 2026-11-21T22:36:18.341Z
+recorded: 2026-11-21T22:49:48.341Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
+| WR-01 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
 | IN-04 | info | open | - |
+| IN-05 | info | open | - |
+| IN-06 | info | open | - |
+| IN-07 | info | open | - |
 | WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
-| IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
-| IN-06 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
-| IN-07 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
