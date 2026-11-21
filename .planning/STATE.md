@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-11-21T14:14:50.340Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-11-21T14:29:59.643Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: 238dbf796857515e345fb99df47d62ed4752a269
+state_head: 67759d5063f10b45f98e4db5175ab9768f0df1d7
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 37
+  completed_plans: 38
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 05 execution started
 
@@ -98,6 +98,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P01 | 7 min | 2 tasks | 9 files |
 | Phase 05 P08 | 7 min | 3 tasks | 5 files |
 | Phase 05 P02 | 18min | 2 tasks | 9 files |
+| Phase 05 P03 | 12 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-02: backing store follows the display (CSS fit first, backing = round(css*dpr)); under a tenth of the old 400 px/m area at 1280x684 dpr 1.5
 - [Phase 05]: 05-02: D-01 holds - HUD stays DOM text, canvas paints no text (proven: no fillText/strokeText in draw)
 - [Phase 05]: 05-02: ?debug=1 (exact compare) keeps DebugRenderer; TableRenderer is the default live renderer with interpolated balls and bats
+- [Phase 05]: 05-03: every cue kind is a RECIPES entry (osc/noise source + optional biquad + own envelope gain per layer); level = peak * dB(gainDb) * strengthToGain when levelFromStrength; pitch = semitoneRatio(idSemitones + playbackSemitones) on oscillators; latest-ending source disconnects the voice
+- [Phase 05]: 05-03: VoicePool caps 16 global + recipe caps (bumper 4); steal = earliest start then admission order, hold + 5 ms linear fade + stop; holdAt() falls back to cancelScheduledValues where cancelAndHoldAtTime is missing (Firefox)
+- [Phase 05]: 05-03: mute is a 50 ms linear master ramp (setMuted/toggleMute/isMuted); a muted flush drops its cues; 05-06 binds KeyM to toggleMute()
 
 ### Pending Todos
 
@@ -223,6 +227,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T14:14:49.369Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-11-21T14:29:58.733Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
