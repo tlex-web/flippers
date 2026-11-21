@@ -3,7 +3,7 @@ status: complete
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: 2026-11-21T22:20:00.000Z
+updated: 2026-11-21T22:05:14.626Z
 ---
 
 ## Current Test
@@ -136,14 +136,14 @@ result: pass
 
 ### 23. Controls and HUD panel layout after the Phase 5 restyle (05-06). Chrome, 1280x684 at 150% scaling, press Enter, charge the plunger. Read the panel: Start, Launch, Left flipper, Right flipper, Nudge, Mute rows (six rows now, was five), the Windows note, the MUTED marker beside the M key cap.
 expected: Key caps on one line per row (Slash shows as its own cap), layout labels correct on the player's layout (Y / - on QWERTZ), the Windows note wraps inside the panel, and neither the HUD panel nor the diag readout covers the table or the plunger charge meter. Score, BALL n / 3 and status read clearly.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 23
-passed: 17
+passed: 18
 issues: 5
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
