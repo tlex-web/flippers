@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-11-21T14:29:59.643Z"
+stopped_at: Completed 05-07-PLAN.md
+last_updated: "2026-11-21T14:39:52.632Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: 67759d5063f10b45f98e4db5175ab9768f0df1d7
+state_head: 61724fd6d117d81f37efc26b889800b6cdec6f05
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 38
+  completed_plans: 39
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 05 execution started
 
@@ -99,6 +99,7 @@ Progress: [███████░░░] 67%
 | Phase 05 P08 | 7 min | 3 tasks | 5 files |
 | Phase 05 P02 | 18min | 2 tasks | 9 files |
 | Phase 05 P03 | 12 min | 3 tasks | 12 files |
+| Phase 05 P07 | 7 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -197,10 +198,12 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: every cue kind is a RECIPES entry (osc/noise source + optional biquad + own envelope gain per layer); level = peak * dB(gainDb) * strengthToGain when levelFromStrength; pitch = semitoneRatio(idSemitones + playbackSemitones) on oscillators; latest-ending source disconnects the voice
 - [Phase 05]: 05-03: VoicePool caps 16 global + recipe caps (bumper 4); steal = earliest start then admission order, hold + 5 ms linear fade + stop; holdAt() falls back to cancelScheduledValues where cancelAndHoldAtTime is missing (Firefox)
 - [Phase 05]: 05-03: mute is a 50 ms linear master ramp (setMuted/toggleMute/isMuted); a muted flush drops its cues; 05-06 binds KeyM to toggleMute()
+- [Phase 05]: 05-07: presentation seams contract-proven with no production change; a throwing sink leaves the real-table drop bit-identical (case j); teeth shown by 5 production mutants each killed
+- [Phase 05]: 05-07: A5 guarded by a cast-free type-level case in src/audio/audio-unlock.test.ts; load-timeout todo closed on two clean back-to-back full runs (668/668)
 
 ### Pending Todos
 
-- [2026-11-21] [testing] Give heavy simulation tests an explicit timeout so the suite is load-stable — [todo file](.planning/todos/pending/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md)
+None. (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planning/todos/completed/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md).)
 
 ### Blockers/Concerns
 
@@ -227,6 +230,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T14:29:58.733Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-11-21T14:39:51.552Z
+Stopped at: Completed 05-07-PLAN.md
 Resume file: None
