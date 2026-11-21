@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import {
@@ -17,7 +17,11 @@ import {
   type FakeNode,
 } from "../audio/test/fake-audio-context";
 import { FlipperController } from "../control/flipper-controller";
-import { ReactiveElements, type RulesGate } from "../game/reactive-elements";
+import {
+  ReactiveElements,
+  type ReactiveFeedback,
+  type RulesGate,
+} from "../game/reactive-elements";
 import { mulberry32 } from "../harness/prng";
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
@@ -57,19 +61,24 @@ class SpyFlash implements FlashSink {
 
 interface Rig {
   readonly world: PlanckWorld;
+  readonly gate: TestGate;
   readonly cues: CueQueue;
   readonly flash: SpyFlash;
   run(n: number): void;
 }
 
-function makeRig(live: boolean): Rig {
+/**
+ * The main.ts composition. `feedback` replaces the CueFeedback sink when given
+ * (case j); `cues` and `flash` then stay empty because nothing writes to them.
+ */
+function makeRig(live: boolean, feedbackOverride?: ReactiveFeedback): Rig {
   const world = new PlanckWorld();
   new FlipperController(world);
   const router = new CollisionRouter(world);
   const gate = new TestGate(live);
   const cues = new CueQueue();
   const flash = new SpyFlash();
-  const feedback = new CueFeedback(cues, flash);
+  const feedback = feedbackOverride ?? new CueFeedback(cues, flash);
   const reactive = new ReactiveElements(world, router, gate, feedback);
   const loop = new FixedStepLoop(world);
   const onPostStep = (): void => {
@@ -79,7 +88,7 @@ function makeRig(live: boolean): Rig {
   const run = (n: number): void => {
     for (let i = 0; i < n; i++) loop.advance(FIXED_DT * 1000, undefined, onPostStep);
   };
-  return { world, cues, flash, run };
+  return { world, gate, cues, flash, run };
 }
 
 const TWO_SECONDS = Math.round(2 / FIXED_DT);
@@ -314,5 +323,64 @@ describe("gesture gate on the real table (AUD-01, Pattern 5)", () => {
     g.unlock.handleGesture({ isTrusted: true, type: "pointerdown" });
     expect(g.fake.resumeCalls).toBe(1);
     expect(g.factoryCalls()).toBe(1);
+  });
+});
+
+/** A presentation sink that throws on every call. */
+const THROWING_FEEDBACK: ReactiveFeedback = {
+  onKick(): void {
+    throw new Error("presentation sink failed (onKick)");
+  },
+  onSensor(): void {
+    throw new Error("presentation sink failed (onSensor)");
+  },
+};
+
+/** Every fixed step: each ball's (x, y, vx, vy), then the gate's running total. */
+function traceBumperDrop(rig: Rig): number[][] {
+  dropOnBumper202(rig);
+  const trace: number[][] = [];
+  for (let i = 0; i < TWO_SECONDS; i++) {
+    rig.run(1);
+    const row: number[] = [];
+    for (const b of rig.world.getBalls()) row.push(b.x, b.y, b.vx, b.vy);
+    row.push(rig.gate.score);
+    trace.push(row);
+  }
+  return trace;
+}
+
+describe("presentation sink fault isolation on the real table (T-05-21, Pitfall 8)", () => {
+  it("(j) a throwing feedback sink leaves the simulation bit-identical and is reported by the router", () => {
+    const cueRig = makeRig(true);
+    const cueTrace = traceBumperDrop(cueRig);
+
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    let throwTrace: number[][];
+    let throwRig: Rig;
+    let reports: unknown[][];
+    try {
+      throwRig = makeRig(true, THROWING_FEEDBACK);
+      throwTrace = traceBumperDrop(throwRig);
+      reports = errors.mock.calls.slice();
+    } finally {
+      errors.mockRestore();
+    }
+
+    // Not vacuous: the drop registered at least one scored hit in both runs.
+    expect(cueRig.gate.score).toBeGreaterThan(0);
+    expect(throwTrace).toHaveLength(TWO_SECONDS);
+    // Bit-identical: fixed step, no wall clock, no PRNG draw from presentation.
+    expect(throwTrace).toEqual(cueTrace);
+
+    // The router caught and reported each throw instead of breaking the step.
+    const busReports = reports.filter((c) => c[0] === "[bus] collision listener threw");
+    expect(busReports.length).toBeGreaterThanOrEqual(1);
+    for (const c of busReports) expect(c[1]).toBeInstanceOf(Error);
+
+    // Only the CueFeedback run queued a bumper cue for 202.
+    expect(hasCue(cueRig.cues, "bumper", 202)).toBe(true);
+    expect(throwRig.cues.size).toBe(0);
+    expect(throwRig.flash.records.length).toBe(0);
   });
 });
