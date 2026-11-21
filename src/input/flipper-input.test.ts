@@ -754,6 +754,133 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
     heldLeftAcrossClear((input) => input.handleFocus());
   });
 
+  for (const source of [
+    { label: "blur", clear: (input: FlipperInput) => input.handleBlur() },
+    { label: "hidden", clear: (input: FlipperInput) => input.handleVisibilityChange(true) },
+  ]) {
+    it(`R1 (${source.label}): ShiftLeft held across the clear; after its first OS auto-repeat a repeat-flagged ShiftRight is a press`, () => {
+      heldLeftAcrossClear(source.clear);
+    });
+  }
+
+  it("R2 (mirror): ShiftRight held across a focus regain; after its auto-repeat a repeat-flagged ShiftLeft is a press", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftRight", true, false));
+    expect(input.drainEdges().rightPress).toBe(true);
+
+    input.handleFocus();
+    expect(input.drainEdges().rightRelease).toBe(true);
+
+    const rep = gev("ShiftRight", true, true);
+    input.handleKeyDown(rep);
+    expect(anyEdge(input.drainEdges())).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+    expect(rep.preventDefault).not.toHaveBeenCalled();
+
+    const second = gev("ShiftLeft", true, true);
+    input.handleKeyDown(second);
+    const pressed = input.drainEdges();
+    expect(pressed.leftPress).toBe(true);
+    expect(pressed.rightPress).toBe(false);
+    expect(second.preventDefault).toHaveBeenCalledTimes(1);
+    expect(input.isHeld("left")).toBe(true);
+    expect(input.isHeld("right")).toBe(false);
+
+    // The newly pressed Shift is released last, so its keyup is the only one.
+    input.handleKeyUp(gev("ShiftLeft", false, false));
+    expect(input.drainEdges().leftRelease).toBe(true);
+    expect(input.isHeld("left")).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+  });
+
+  it("R3 (residual): a second Shift pressed before the held Shift's first OS auto-repeat after a clear is still missed", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    input.drainEdges();
+    input.handleFocus();
+    input.drainEdges();
+
+    const second = gev("ShiftRight", true, true);
+    input.handleKeyDown(second);
+    expect(anyEdge(input.drainEdges())).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+    expect(second.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("R4: every force-clear resets the repeat marker, so a later repeat-flagged ShiftRight is not a press", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    input.drainEdges();
+    input.handleFocus();
+    input.drainEdges();
+    input.handleKeyDown(gev("ShiftLeft", true, true));
+    input.drainEdges();
+    input.handleBlur();
+    input.handleFocus();
+    input.drainEdges();
+
+    const second = gev("ShiftRight", true, true);
+    input.handleKeyDown(second);
+    expect(input.drainEdges().rightPress).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+    expect(second.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("R5: a Shift keyup reporting Shift up resets the repeat marker; a genuine ShiftRight press still works", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, true));
+    expect(anyEdge(input.drainEdges())).toBe(false);
+    input.handleKeyUp(gev("ShiftLeft", false, false));
+    expect(anyEdge(input.drainEdges())).toBe(false);
+
+    const rep = gev("ShiftRight", true, true);
+    input.handleKeyDown(rep);
+    expect(anyEdge(input.drainEdges())).toBe(false);
+    expect(input.isHeld("right")).toBe(false);
+    expect(rep.preventDefault).not.toHaveBeenCalled();
+
+    input.handleKeyDown(gev("ShiftRight", true, false));
+    expect(input.drainEdges().rightPress).toBe(true);
+  });
+
+  it("R6: lone auto-repeats of the Shift held across a clear stay ignored", () => {
+    const input = new FlipperInput({ windowsShiftHeal: true });
+    input.handleKeyDown(gev("ShiftLeft", true, false));
+    input.drainEdges();
+    input.handleFocus();
+    input.drainEdges();
+
+    for (let i = 0; i < 5; i++) {
+      const rep = gev("ShiftLeft", true, true);
+      input.handleKeyDown(rep);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("left")).toBe(false);
+      expect(rep.preventDefault).not.toHaveBeenCalled();
+    }
+  });
+
+  for (const make of [
+    { label: "new FlipperInput()", build: () => new FlipperInput() },
+    {
+      label: "new FlipperInput({ windowsShiftHeal: false })",
+      build: () => new FlipperInput({ windowsShiftHeal: false }),
+    },
+  ]) {
+    it(`R7 (${make.label}): with the heal off, a repeat-flagged ShiftRight after a clear and a ShiftLeft repeat is not a press`, () => {
+      const input = make.build();
+      input.handleKeyDown(gev("ShiftLeft", true, false));
+      input.drainEdges();
+      input.handleFocus();
+      input.drainEdges();
+      input.handleKeyDown(gev("ShiftLeft", true, true));
+      input.drainEdges();
+
+      input.handleKeyDown(gev("ShiftRight", true, true));
+      expect(input.drainEdges().rightPress).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+    });
+  }
+
   it("K1: ShiftRight held, then a ShiftLeft keydown reporting Shift up presses left and keeps right held (WR-02)", () => {
     const input = new FlipperInput({ windowsShiftHeal: true });
     input.handleKeyDown(gev("ShiftRight", true, false));

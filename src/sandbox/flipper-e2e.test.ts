@@ -792,6 +792,10 @@ describe("Windows Shift after a force-clear (G-04-21)", () => {
     heldAcrossClear("ShiftLeft", "ShiftRight");
   });
 
+  it("ShiftRight held across a focus regain: a Left Shift press raises the left bat and the final ShiftRight keyup drops it", () => {
+    heldAcrossClear("ShiftRight", "ShiftLeft");
+  });
+
   it("a Shift keydown reporting Shift up keeps the other held Shift's bat up (WR-02)", () => {
     const rig = makeRig(true);
     const ids = [rig.leftId, rig.rightId] as const;

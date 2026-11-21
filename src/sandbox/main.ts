@@ -140,8 +140,9 @@ function main(): void {
   // it on re-presses any side whose key is held right now, so a key held
   // through a drain raises its bat on the next ball with no new press. Built
   // once; called only on a start, a tilt, a drain or game over. isHeld reads a
-  // held set that heals on a window focus regain and on any non-Shift key event
-  // that reports Shift up (G-04-11), so a lost keyup no longer survives a serve.
+  // held set that heals on a window focus regain, on any non-Shift key event
+  // that reports Shift up (G-04-11) and, on Windows, on a Shift keyup reporting
+  // Shift up (G-04-17), so a lost keyup no longer survives a serve.
   const flipperGate: FlipperGate = {
     setEnabled(on: boolean): void {
       controller.setEnabled(on);

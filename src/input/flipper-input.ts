@@ -26,11 +26,12 @@
  *    `shiftKey` is strictly `false` drops a held `ShiftLeft`/`ShiftRight`. The
  *    OS's modifier state then proves no Shift is down, so a held Shift is a
  *    stale code whose keyup the OS took. Only a strict `false` counts: an
- *    event without the field (unknown state) never reconciles. Events of the
- *    Shift keys themselves reconcile only with `windowsShiftHeal` on (below):
- *    platforms differ in how they report the REMAINING Shift on one Shift's
- *    keyup, and off Windows the D-09 both-Shift cradle must never lose a held
- *    bat to that. Edges come from each
+ *    event without the field (unknown state) never reconciles. A Shift key's
+ *    own keyup reconciles only with `windowsShiftHeal` on (below): platforms
+ *    differ in how they report the REMAINING Shift on one Shift's keyup, and
+ *    off Windows the D-09 both-Shift cradle must never lose a held bat to
+ *    that. A Shift keydown never reconciles (G-04-21): a keydown reporting
+ *    Shift up proves nothing about the other Shift. Edges come from each
  *    event's NET per-side transition, so dropping a stale Shift and adding the
  *    new key in one event (Z over a stale ShiftLeft) is edge-free: the bat does
  *    not drop under the player's finger. Residual: with Windows Sticky Keys
@@ -44,16 +45,23 @@
  *    shared key), and the first Shift released while both are held sends NO
  *    keyup; only the final release fires, reporting `shiftKey` false. Two
  *    heals: (1) a repeat keydown for a Shift code that is not held while the
- *    other Shift is held counts as a press; (2) a ShiftLeft/ShiftRight keyup
- *    reporting `shiftKey` strictly false drops BOTH Shift codes, because on
- *    Windows such a keyup only arrives once VK_SHIFT is fully up. Both are
+ *    other Shift is held counts as a press. G-04-21 extends it past a
+ *    force-clear: the other Shift code also counts as a press once the Shift
+ *    held across the clear has sent an ignored auto-repeat, a marker tracked
+ *    until the next force-clear or a Shift keyup reporting Shift up; (2) a
+ *    ShiftLeft/ShiftRight KEYUP (keyups only) reporting `shiftKey` strictly
+ *    false drops BOTH Shift codes, because on Windows such a keyup only
+ *    arrives once VK_SHIFT is fully up. Both are
  *    gated to Windows: noVNC ships the same Windows-gated drop-both heal, and
  *    Linux `shiftKey` on a one-of-two Shift release is unverified. The gate is
  *    injected, never read here: main.ts passes `isWindowsPlatform(navigator)`
  *    as `windowsShiftHeal`, and the default is off so tests pick a path
  *    explicitly. Residual: on Windows, a bat whose Shift is released while the
  *    other Shift is still held stays up until the other Shift is released,
- *    because the browser receives no event in between.
+ *    because the browser receives no event in between. After a force-clear, a
+ *    second Shift pressed before the held Shift's first OS auto-repeat (the
+ *    typematic delay, about 500 ms) is still missed, because no event before
+ *    that repeat tells the page a Shift is down.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -100,9 +108,11 @@ export interface InputEdges {
 export interface FlipperInputOptions {
   /**
    * Heal the Windows both-Shift merge (G-04-17): accept the second Shift press
-   * that Windows flags as a repeat, and drop both Shift codes on a Shift keyup
-   * reporting `shiftKey` false. Defaults to off. main.ts passes
-   * `isWindowsPlatform(navigator)`; tests choose a path explicitly.
+   * that Windows flags as a repeat, also after a force-clear once the held
+   * Shift has auto-repeated (G-04-21), and drop both Shift codes on a Shift
+   * keyup (never a keydown) reporting `shiftKey` false. Defaults to off.
+   * main.ts passes `isWindowsPlatform(navigator)`; tests choose a path
+   * explicitly.
    */
   readonly windowsShiftHeal?: boolean;
 }
@@ -276,7 +286,9 @@ export class FlipperInput {
    * prompt) took focus, and its keyup went to the dialog, never to the page.
    * The clear is strictly safe: window focus only follows a blur, and the blur
    * already cleared every key held before it. A key physically held across the
-   * focus regain needs a fresh press, the same as after a blur.
+   * focus regain needs a fresh press, the same as after a blur. On Windows, the
+   * other Shift still counts as a press once the held Shift's auto-repeat
+   * arrives (G-04-21).
    */
   handleFocus(): void {
     this.forceClear();
