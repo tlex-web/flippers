@@ -229,11 +229,16 @@ describe("a starting context is playable (WR-02)", () => {
     engine.unlock();
     await Promise.resolve();
     fake.state = "running";
+    const unlockedAt = fake.currentTime;
+    fake.currentTime = unlockedAt + 0.5; // it ran: its clock has advanced
     fake.state = "suspended"; // an OS-level suspend after the start
     const chain = fake.nodes.length;
     const q = new CueQueue();
     q.push("bumper", 200, 1);
+    // A moved clock alone is not rendering without a resume in flight (IN-05,
+    // 05-REVIEW IN-04): nothing is built and no voice is held.
     expect(engine.flush(q)).toBe(0);
+    expect(engine.activeVoices()).toBe(0);
     expect(fake.nodes.length).toBe(chain);
   });
 });
