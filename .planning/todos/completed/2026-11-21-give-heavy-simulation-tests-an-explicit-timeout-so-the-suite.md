@@ -30,3 +30,10 @@ Evidence it is load-dependent and pre-existing, not a regression:
 Give the simulation-heavy tests an explicit per-test or per-file timeout (e.g. 20-30s) instead of
 the 5s default, or cap vitest worker count. Keep the soak gate config (vitest.gate.config.ts) as is.
 Verify with several back-to-back full runs while the machine is loaded.
+
+## Resolution
+
+Closed 2026-11-21 by plan 05-07 on evidence.
+
+- Fix: `testTimeout: 30000` in `vitest.config.ts` (added by plan 05-01), in place of the 5 s default. The soak gate config (`vitest.gate.config.ts`) is unchanged.
+- Evidence: two back-to-back full runs (`npx vitest run`) during the phase-05 execution: 48 files, 668/668 passed each time (5.5 s and 5.9 s), and no "Test timed out" line in either. `npm run soak` was also green (4/4).
