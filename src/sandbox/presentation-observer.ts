@@ -9,6 +9,11 @@
  * construction, so the first call pushes nothing) and pushes, in this fixed
  * order:
  * - `"start"`: the state went from game-over to playing;
+ * - `"flipperUp"` (on the flipper id): once per coil-on count increment, for
+ *   each watched flipper in `flipperIds` order;
+ * - `"flipperDown"` (on the flipper id): once per coil-off count increment,
+ *   for each watched flipper (a same-step tap is up then down; the tilt drop
+ *   counts here, ahead of `"tilt"`);
  * - `"launch"`: once per plunger release-count increment, at the charge that
  *   release ended at (a sub-window tap launches at 0, a cancel counts nothing);
  * - `"tilt"`: the state became tilted;
@@ -20,7 +25,7 @@
  * A step with no change pushes nothing, so a held state never spams (T-05-17).
  *
  * Read-only by construction (T-05-16): it holds only `Pick<>` getter slices of
- * the session and the plunger, never a world handle, and writes only scalars
+ * the session, the plunger and the flipper controller, never a world handle, and writes only scalars
  * into the cue ring and the flash sink. No allocation, no closures, no DOM, no
  * engine import (type-only imports).
  */
@@ -48,11 +53,16 @@ export class PresentationObserver {
   private readonly session: ObserverSession;
   private readonly plunger: ObserverPlunger;
   private readonly drainElementId: number;
+  private readonly flippers: ObserverFlippers;
+  private readonly flipperIds: readonly number[];
 
   private prevState: GameState;
   private prevBall: number;
   private prevWarning: boolean;
   private prevReleases: number;
+  /** Per watched flipper (same index as flipperIds), preallocated once. */
+  private readonly prevCoilOn: number[];
+  private readonly prevCoilOff: number[];
 
   constructor(
     cues: CueQueue,
@@ -63,8 +73,6 @@ export class PresentationObserver {
     flippers: ObserverFlippers,
     flipperIds: readonly number[],
   ) {
-    void flippers; // RED contract stub (05-05 Task 2)
-    void flipperIds;
     this.cues = cues;
     this.flash = flash;
     this.session = session;
@@ -74,6 +82,15 @@ export class PresentationObserver {
     this.prevBall = session.getBall();
     this.prevWarning = session.isWarning();
     this.prevReleases = plunger.getReleaseCount();
+    this.flippers = flippers;
+    this.flipperIds = flipperIds;
+    this.prevCoilOn = new Array<number>(flipperIds.length);
+    this.prevCoilOff = new Array<number>(flipperIds.length);
+    for (let i = 0; i < flipperIds.length; i++) {
+      const id = flipperIds[i] ?? -1;
+      this.prevCoilOn[i] = flippers.getCoilOnCount(id);
+      this.prevCoilOff[i] = flippers.getCoilOffCount(id);
+    }
   }
 
   /** Diff once per fixed step and push this step's cues in the fixed order. */
@@ -85,6 +102,20 @@ export class PresentationObserver {
     const prev = this.prevState;
 
     if (prev === "game-over" && state === "playing") this.cues.push("start", NO_ELEMENT, 1);
+
+    const ids = this.flipperIds;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i] ?? -1;
+      const on = this.flippers.getCoilOnCount(id);
+      for (let n = this.prevCoilOn[i] ?? on; n < on; n++) this.cues.push("flipperUp", id, 1);
+      this.prevCoilOn[i] = on;
+    }
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i] ?? -1;
+      const off = this.flippers.getCoilOffCount(id);
+      for (let n = this.prevCoilOff[i] ?? off; n < off; n++) this.cues.push("flipperDown", id, 1);
+      this.prevCoilOff[i] = off;
+    }
 
     if (releases > this.prevReleases) {
       const charge = this.plunger.getLastReleaseCharge();

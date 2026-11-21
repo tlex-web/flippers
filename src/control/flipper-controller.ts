@@ -93,6 +93,10 @@ interface FlipperFsm {
   readonly restLimitAngle: number;
   /** Consecutive settled updates within REST_ANGLE_TOL of the rest limit. */
   restSettled: number;
+  /** Presentation counter: resting/returning -> flipping-up transitions. */
+  coilOn: number;
+  /** Presentation counter: flipping-up/held-up -> returning transitions. */
+  coilOff: number;
 }
 
 export class FlipperController {
@@ -116,6 +120,8 @@ export class FlipperController {
         moved: false,
         restLimitAngle: f.restLimitAngle,
         restSettled: 0,
+        coilOn: 0,
+        coilOff: 0,
       });
       // Enforce the resting invariant IMMEDIATELY (D-04/D-06): command motor 0 so
       // each bat is brake-held at rest rather than left running the adapter's
@@ -135,16 +141,28 @@ export class FlipperController {
     return fsm ? fsm.phase : "resting";
   }
 
-  /** RED contract stub (05-05 Task 2): coil-on transitions for a flipper. */
+  /**
+   * Read-only presentation counter (05-05, AUD-01): how many times this
+   * flipper's coil has energized, i.e. every resting/returning -> flipping-up
+   * transition (a re-flip while returning counts again; a press while already
+   * up or while disabled does not). The observer diffs it once per step, so a
+   * press and release inside one step is still heard. Issues no motor command;
+   * 0 for an unknown id.
+   */
   getCoilOnCount(id: number): number {
-    void id;
-    return 0;
+    const fsm = this.find(id);
+    return fsm ? fsm.coilOn : 0;
   }
 
-  /** RED contract stub (05-05 Task 2): coil-off transitions for a flipper. */
+  /**
+   * Read-only presentation counter (05-05, AUD-01): how many times this
+   * flipper's coil has dropped, i.e. every flipping-up/held-up -> returning
+   * transition, whether from a key release or the `setEnabled(false)` tilt
+   * drop. Issues no motor command; 0 for an unknown id.
+   */
   getCoilOffCount(id: number): number {
-    void id;
-    return 0;
+    const fsm = this.find(id);
+    return fsm ? fsm.coilOff : 0;
   }
 
   /** Whether presses are honored right now (see {@link setEnabled}). */
@@ -182,6 +200,7 @@ export class FlipperController {
     if (!fsm) return; // unknown id: safe no-op
     if (fsm.phase === "resting" || fsm.phase === "returning") {
       fsm.phase = "flipping-up";
+      fsm.coilOn++;
       fsm.moved = false;
       fsm.prevAngle = this.angleOf(id, fsm.prevAngle);
       this.world.setFlipperMotor(id, 1);
@@ -252,6 +271,7 @@ export class FlipperController {
   private drop(fsm: FlipperFsm): void {
     if (fsm.phase === "flipping-up" || fsm.phase === "held-up") {
       fsm.phase = "returning";
+      fsm.coilOff++;
       fsm.moved = false;
       fsm.restSettled = 0;
       fsm.prevAngle = this.angleOf(fsm.id, fsm.prevAngle);
