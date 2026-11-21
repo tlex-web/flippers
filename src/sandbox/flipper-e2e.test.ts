@@ -934,5 +934,9 @@ describe("Windows Shift after a force-clear (G-04-21)", () => {
     it("both Shifts held across a focus regain: re-pressing Right Shift after a pause raises the right bat and the final ShiftLeft keyup drops it", () => {
       cradleAcrossClear("ShiftLeft", "ShiftRight");
     });
+
+    it("mirror: re-pressing Left Shift after a pause raises the left bat and the final ShiftRight keyup drops it", () => {
+      cradleAcrossClear("ShiftRight", "ShiftLeft");
+    });
   });
 });

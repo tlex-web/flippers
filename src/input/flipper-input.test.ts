@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { FlipperInput, isWindowsPlatform } from "./flipper-input";
+import { FlipperInput, isWindowsPlatform, SHIFT_REPEAT_GAP_MS } from "./flipper-input";
 
 /**
  * Unit proof for the first keyboard-input module in the codebase (D-10). Every
@@ -1045,6 +1045,232 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
 
     it("C1 (focus): both Shifts held across a focus regain; re-pressing the auto-repeating Shift after a pause is a press", () => {
       cradleAcrossClear((input) => input.handleFocus(), "ShiftLeft", "ShiftRight");
+    });
+
+    /**
+     * The shared C1 prefix on a heal-on input, without its assertions: the
+     * cradle (firstCode at 0, lastCode at 100), lastCode's held repeats at 600,
+     * 633 and 666, `clear`, then ten post-clear repeats of lastCode at
+     * 1000 + 33*i. Returns the input and T, the last ignored repeat's time.
+     */
+    function primedAfterClear(
+      clear: (input: FlipperInput) => void,
+      firstCode: ShiftCode,
+      lastCode: ShiftCode,
+    ): { input: FlipperInput; T: number } {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev(firstCode, true, false, 0));
+      input.drainEdges();
+      input.handleKeyDown(tev(lastCode, true, true, 100));
+      input.drainEdges();
+      for (const t of [600, 633, 666]) {
+        input.handleKeyDown(tev(lastCode, true, true, t));
+        input.drainEdges();
+      }
+      clear(input);
+      input.drainEdges();
+      let T = 0;
+      for (let i = 1; i <= 10; i++) {
+        T = 1000 + 33 * i;
+        input.handleKeyDown(tev(lastCode, true, true, T));
+        input.drainEdges();
+      }
+      return { input, T };
+    }
+
+    const focus = (input: FlipperInput): void => input.handleFocus();
+
+    for (const source of [
+      { label: "blur", clear: (input: FlipperInput) => input.handleBlur() },
+      { label: "hidden", clear: (input: FlipperInput) => input.handleVisibilityChange(true) },
+    ]) {
+      it(`C1 (${source.label}): both Shifts held across the clear; re-pressing the auto-repeating Shift after a pause is a press`, () => {
+        cradleAcrossClear(source.clear, "ShiftLeft", "ShiftRight");
+      });
+    }
+
+    it("C2 (mirror): ShiftRight then ShiftLeft held across a focus regain; the re-pressed ShiftLeft raises left and the final ShiftRight keyup releases it", () => {
+      cradleAcrossClear(focus, "ShiftRight", "ShiftLeft");
+    });
+
+    it("C3 (boundary): a re-press exactly SHIFT_REPEAT_GAP_MS after the last repeat is not a press; one just past the gap is", () => {
+      expect(SHIFT_REPEAT_GAP_MS).toBe(450);
+      const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+
+      const atGap = tev("ShiftRight", true, true, T + SHIFT_REPEAT_GAP_MS);
+      input.handleKeyDown(atGap);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+      expect(atGap.preventDefault).not.toHaveBeenCalled();
+
+      const past = tev("ShiftRight", true, true, T + 2 * SHIFT_REPEAT_GAP_MS + 1);
+      input.handleKeyDown(past);
+      expect(input.drainEdges().rightPress).toBe(true);
+    });
+
+    it("C4: a steady auto-repeat stream at the slowest nominal Windows rate (400 ms) never counts as a press", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+      input.handleKeyDown(tev("ShiftRight", true, true, 100));
+      input.drainEdges();
+      input.handleFocus();
+      input.drainEdges();
+
+      for (let i = 1; i <= 8; i++) {
+        const rep = tev("ShiftRight", true, true, 1000 + 400 * i);
+        input.handleKeyDown(rep);
+        expect(anyEdge(input.drainEdges())).toBe(false);
+        expect(input.isHeld("right")).toBe(false);
+        expect(rep.preventDefault).not.toHaveBeenCalled();
+      }
+    });
+
+    it("C5 (residual): a re-press within SHIFT_REPEAT_GAP_MS of the previous auto-repeat is missed", () => {
+      const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 200));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 233));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+    });
+
+    it("C6: a missed fast re-press held past the typematic delay is taken on its own first auto-repeat", () => {
+      const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 200));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      // The re-pressed key's first auto-repeat after the 500 ms default delay.
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 700));
+      expect(input.drainEdges().rightPress).toBe(true);
+      expect(input.isHeld("right")).toBe(true);
+    });
+
+    it("C7 (no timeStamp): a re-press without a timeStamp never counts as a timed re-press", () => {
+      const { input } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      const again = gev("ShiftRight", true, true);
+      input.handleKeyDown(again);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+      expect(again.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("C7 (non-finite timeStamp): a re-press with an infinite timeStamp never counts as a timed re-press", () => {
+      const { input } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      const again = tev("ShiftRight", true, true, Number.POSITIVE_INFINITY);
+      input.handleKeyDown(again);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+      expect(again.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("C8: an untimed ignored repeat clears the time reference; the next timed repeat restores it", () => {
+      const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      input.handleKeyDown(gev("ShiftRight", true, true));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+
+      const late = tev("ShiftRight", true, true, T + 1000);
+      input.handleKeyDown(late);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(late.preventDefault).not.toHaveBeenCalled();
+
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 2000));
+      expect(input.drainEdges().rightPress).toBe(true);
+    });
+
+    it("C9: a timed re-press of a Shift that is still held is a de-duped no-op", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+      input.handleKeyDown(tev("ShiftRight", true, true, 100));
+      input.drainEdges();
+      for (const t of [600, 633, 666]) {
+        input.handleKeyDown(tev("ShiftRight", true, true, t));
+        input.drainEdges();
+      }
+
+      const again = tev("ShiftRight", true, true, 1300);
+      input.handleKeyDown(again);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(again.preventDefault).not.toHaveBeenCalled();
+      expect(input.isHeld("right")).toBe(true);
+    });
+
+    for (const make of [
+      { label: "new FlipperInput()", build: () => new FlipperInput() },
+      {
+        label: "new FlipperInput({ windowsShiftHeal: false })",
+        build: () => new FlipperInput({ windowsShiftHeal: false }),
+      },
+    ]) {
+      it(`C10 (${make.label}): with the heal off, the C1 timeline never latches the timed re-press`, () => {
+        const input = make.build();
+        input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+        expect(input.drainEdges().leftPress).toBe(true);
+        input.handleKeyDown(tev("ShiftRight", true, true, 100));
+        expect(input.drainEdges().rightPress).toBe(false);
+        for (const t of [600, 633, 666]) {
+          input.handleKeyDown(tev("ShiftRight", true, true, t));
+          input.drainEdges();
+        }
+        input.handleFocus();
+        input.drainEdges();
+        for (let i = 1; i <= 10; i++) {
+          input.handleKeyDown(tev("ShiftRight", true, true, 1000 + 33 * i));
+          input.drainEdges();
+        }
+
+        input.handleKeyDown(tev("ShiftRight", true, true, 1930));
+        expect(input.drainEdges().rightPress).toBe(false);
+        expect(input.isHeld("right")).toBe(false);
+      });
+    }
+
+    it("C11 (residual): a second Shift missed before the held Shift's first auto-repeat is taken on its own first auto-repeat", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+      expect(input.drainEdges().leftPress).toBe(true);
+      input.handleFocus();
+      expect(input.drainEdges().leftRelease).toBe(true);
+
+      // The 04-14 R3 residual: missed.
+      const second = tev("ShiftRight", true, true, 300);
+      input.handleKeyDown(second);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(second.preventDefault).not.toHaveBeenCalled();
+
+      // ShiftRight's own first auto-repeat after the 500 ms default delay.
+      const firstRepeat = tev("ShiftRight", true, true, 800);
+      input.handleKeyDown(firstRepeat);
+      expect(input.drainEdges().rightPress).toBe(true);
+      expect(firstRepeat.preventDefault).toHaveBeenCalledTimes(1);
+    });
+
+    it("I1 (IN-01): a non-Shift event reporting Shift up clears the repeat marker; a lone repeat-flagged ShiftRight is not a press", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(gev("ShiftLeft", true, false));
+      input.handleKeyDown(gev("ShiftLeft", true, true));
+      input.drainEdges();
+
+      input.handleKeyDown(gev("KeyX", false, false));
+      expect(input.drainEdges().leftRelease).toBe(true);
+
+      const rep = gev("ShiftRight", true, true);
+      input.handleKeyDown(rep);
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+      expect(rep.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("I2 (IN-01): a non-Shift event reporting Shift up clears the marker's time; a later ShiftLeft repeat is not a timed re-press", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+      input.handleKeyDown(tev("ShiftLeft", true, true, 500));
+      input.drainEdges();
+
+      input.handleKeyDown(tev("KeyX", false, false, 600));
+      expect(input.drainEdges().leftRelease).toBe(true);
+
+      input.handleKeyDown(tev("ShiftLeft", true, true, 1500));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("left")).toBe(false);
     });
   });
 });
