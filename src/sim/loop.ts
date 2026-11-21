@@ -6,6 +6,14 @@
  * states for smooth motion. It imports NO engine — only the interface — so it is
  * engine-agnostic (D-05).
  *
+ * Flipper-angle snapshots (RND-02, 05-08): beside the balls the loop keeps a
+ * pooled `previousFlipperAngles` / `currentFlipperAngles` pair, index-paired with
+ * `world.getFlippers()` mount order and refreshed at exactly the points the ball
+ * snapshots are (constructor seed, previous <- current before each
+ * `world.step()`, current refreshed right after it). They only READ the world,
+ * so the simulation and its determinism are untouched; the renderer lerps them
+ * at `alpha` so the bats move on every frame at 120/144 Hz instead of stepping.
+ *
  * Availability guard (threat T-01-02): on tab-blur the browser can hand us an
  * arbitrarily huge real delta; `advance()` clamps it to `MAX_FRAME_MS` so a
  * stalled frame produces a bounded catch-up burst instead of a spiral of death.
@@ -38,12 +46,18 @@ export class FixedStepLoop {
   private readonly previousStates: BallSnapshot[] = [];
   private readonly currentStates: BallSnapshot[] = [];
 
+  // Flipper-angle snapshot pair (getFlippers() order) — pooled, mutated in place.
+  private readonly previousAngles: number[] = [];
+  private readonly currentAngles: number[] = [];
+
   constructor(world: PhysicsWorld) {
     this.world = world;
     // Seed both snapshots with the pre-step state so interpolation is valid
     // before the first `advance()`.
     this.snapshotInto(this.currentStates);
     this.copyStates(this.currentStates, this.previousStates);
+    this.snapshotAnglesInto(this.currentAngles);
+    this.copyAngles(this.currentAngles, this.previousAngles);
   }
 
   /**
@@ -77,11 +91,13 @@ export class FixedStepLoop {
     while (this.accumulator >= FIXED_DT_MS) {
       // previous <- current (state before this step), then integrate.
       this.copyStates(this.currentStates, this.previousStates);
+      this.copyAngles(this.currentAngles, this.previousAngles);
       // Top of the fixed step (D-10): drain input + tick the FSM BEFORE the
       // physics that consumes the resulting motor command.
       if (onStep) onStep();
       this.world.step(FIXED_DT);
       this.snapshotInto(this.currentStates);
+      this.snapshotAnglesInto(this.currentAngles);
       // Account for the simulated step BEFORE the post-step hook (03-REVIEW
       // WR-04): if a consumer throws, the step it already ran is still
       // subtracted and counted, so the accumulator never re-runs it.
@@ -105,6 +121,22 @@ export class FixedStepLoop {
   /** State from AFTER the last fixed step (for render interpolation). */
   get current(): readonly BallState[] {
     return this.currentStates;
+  }
+
+  /**
+   * Flipper angles (rad) from BEFORE the last fixed step, in `getFlippers()`
+   * order. A pooled array that keeps its identity: read it, never retain it.
+   */
+  get previousFlipperAngles(): readonly number[] {
+    return this.previousAngles;
+  }
+
+  /**
+   * Flipper angles (rad) from AFTER the last fixed step, in `getFlippers()`
+   * order. A pooled array that keeps its identity: read it, never retain it.
+   */
+  get currentFlipperAngles(): readonly number[] {
+    return this.currentAngles;
   }
 
   /** Interpolation factor in [0,1): leftover accumulator / fixed step. */
@@ -168,6 +200,21 @@ export class FixedStepLoop {
         dst.push({ ...s });
       }
     }
+    dst.length = src.length;
+  }
+
+  /** Read-only: copy every flipper's current angle into `target` (pooled). */
+  private snapshotAnglesInto(target: number[]): void {
+    const flippers = this.world.getFlippers();
+    for (let i = 0; i < flippers.length; i++) {
+      const f = flippers[i];
+      target[i] = f ? f.angle : 0;
+    }
+    target.length = flippers.length;
+  }
+
+  private copyAngles(src: readonly number[], dst: number[]): void {
+    for (let i = 0; i < src.length; i++) dst[i] = src[i] ?? 0;
     dst.length = src.length;
   }
 }
