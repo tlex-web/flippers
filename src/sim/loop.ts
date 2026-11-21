@@ -83,8 +83,11 @@ export class FixedStepLoop {
    * engine-agnostic callback; pass a long-lived reference to stay allocation-free.
    */
   advance(realDeltaMs: number, onStep?: () => void, onPostStep?: () => void): number {
-    // Spiral-of-death clamp (T-01-02): bound the per-call catch-up work.
-    const clamped = Math.min(realDeltaMs, MAX_FRAME_MS);
+    // Spiral-of-death clamp (T-01-02): bound the per-call catch-up work. A
+    // negative or NaN delta (a first rAF timestamp earlier than the seeding
+    // performance.now()) counts as 0, so the accumulator and `alpha` never go
+    // below 0 and interpolation never extrapolates backwards.
+    const clamped = realDeltaMs > 0 ? Math.min(realDeltaMs, MAX_FRAME_MS) : 0;
     this.accumulator += clamped;
 
     let steps = 0;

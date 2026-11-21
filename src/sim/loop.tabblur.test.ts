@@ -164,3 +164,19 @@ describe("a throwing post-step hook leaves the accumulator consistent (03-REVIEW
     expect(loop.totalSteps).toBe(2);
   });
 });
+
+describe("FixedStepLoop negative delta (05-REVIEW IN-02)", () => {
+  it("a negative or NaN delta runs no step and keeps alpha in [0, 1)", () => {
+    const { loop } = makeRig();
+    expect(loop.advance(STEP_MS / 2)).toBe(0);
+    const before = loop.alpha;
+    for (const delta of [-5, -1000, Number.NaN]) {
+      expect(loop.advance(delta)).toBe(0);
+      expect(loop.alpha).toBe(before);
+      expect(loop.alpha).toBeGreaterThanOrEqual(0);
+      expect(loop.alpha).toBeLessThan(1);
+    }
+    // The next real frame still steps normally from the untouched accumulator.
+    expect(loop.advance(STEP_MS / 2)).toBe(1);
+  });
+});
