@@ -30,7 +30,7 @@
  * own layer end and the latest-ending one tears the whole voice down.
  */
 
-import type { Cue, CueQueue } from "../app/cue-queue";
+import type { Cue, CueKind, CueQueue } from "../app/cue-queue";
 import type {
   AudioBufferLike,
   AudioContextLike,
@@ -49,6 +49,9 @@ export const MASTER_GAIN = 0.6;
 
 /** Voices start this far after `currentTime` so their anchors are never late. */
 export const SCHEDULE_AHEAD_S = 0.005;
+
+/** RED stub (05-03 Task 3). */
+export const MUTE_RAMP_S = 0.05;
 
 /** A source keeps running this long after its envelope reaches the floor (s). */
 export const SOURCE_TAIL_S = 0.01;
@@ -83,6 +86,27 @@ export class AudioEngine {
   constructor(createContext: () => AudioContextLike, rng: () => number = Math.random) {
     this.createContext = createContext;
     this.rng = rng;
+  }
+
+  /** RED stub (05-03 Task 3). */
+  setMuted(muted: boolean): void {
+    void muted;
+  }
+
+  /** RED stub (05-03 Task 3). */
+  toggleMute(): boolean {
+    return false;
+  }
+
+  /** RED stub (05-03 Task 3). */
+  isMuted(): boolean {
+    return false;
+  }
+
+  /** RED stub (05-03 Task 3). */
+  activeVoices(kind?: CueKind): number {
+    void kind;
+    return 0;
   }
 
   /** The live context, or null before the first successful unlock. */

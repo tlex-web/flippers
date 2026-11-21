@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { CueQueue, type CueKind } from "../app/cue-queue";
 import { mulberry32 } from "../harness/prng";
-import { AudioEngine } from "./audio-engine";
+import { AudioEngine, MASTER_GAIN, MUTE_RAMP_S } from "./audio-engine";
 import { semitoneRatio } from "./mapping";
 import { FakeAudioContext, FakeGain, FakeOscillator } from "./test/fake-audio-context";
 
@@ -77,5 +77,60 @@ describe("bumper velocity and pitch (AUD-01 tracer, plan 05-03)", () => {
     expect(high / center).toBeLessThanOrEqual(bound);
     expect(low).toBeLessThan(center);
     expect(high).toBeGreaterThan(center);
+  });
+});
+
+describe("master mute (D-02 engine side)", () => {
+  /** The master gain is the first gain the engine creates. */
+  function masterOf(fake: FakeAudioContext): FakeGain {
+    const m = fake.nodes.find((n): n is FakeGain => n instanceof FakeGain);
+    if (!m) throw new Error("no master gain");
+    return m;
+  }
+
+  it("toggleMute returns true then false and isMuted reports the flag", () => {
+    const { engine } = rig(() => 0.5);
+    expect(engine.isMuted()).toBe(false);
+    expect(engine.toggleMute()).toBe(true);
+    expect(engine.isMuted()).toBe(true);
+    expect(engine.toggleMute()).toBe(false);
+    expect(engine.isMuted()).toBe(false);
+  });
+
+  it("muting ramps the master linearly to 0 over MUTE_RAMP_S; unmuting ramps back", () => {
+    const { fake, engine } = rig(() => 0.5);
+    const master = masterOf(fake);
+    expect(MUTE_RAMP_S).toBe(0.05);
+    fake.currentTime = 2;
+    engine.setMuted(true);
+    let ev = master.gain.events;
+    expect(ev[ev.length - 2]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: 2 });
+    expect(ev[ev.length - 1]).toEqual({ type: "linear", value: 0, time: 2 + MUTE_RAMP_S });
+    fake.currentTime = 3;
+    engine.setMuted(false);
+    ev = master.gain.events;
+    expect(ev[ev.length - 2]).toEqual({ type: "cancelAndHold", value: Number.NaN, time: 3 });
+    expect(ev[ev.length - 1]).toEqual({ type: "linear", value: MASTER_GAIN, time: 3 + MUTE_RAMP_S });
+  });
+
+  it("a mute set before unlock starts the master at 0", () => {
+    const fake = new FakeAudioContext();
+    const engine = new AudioEngine(() => fake, () => 0.5);
+    engine.setMuted(true);
+    engine.unlock();
+    const first = masterOf(fake).gain.events[0];
+    expect(first?.type).toBe("set");
+    expect(first?.value).toBe(0);
+  });
+
+  it("a flush while muted returns 0, creates no node and empties the queue", () => {
+    const { fake, engine, chain } = rig(() => 0.5);
+    engine.setMuted(true);
+    const q = new CueQueue();
+    q.push("bumper", 200, 1);
+    q.push("tilt", -1, 1);
+    expect(engine.flush(q)).toBe(0);
+    expect(fake.nodes.length).toBe(chain);
+    expect(q.size).toBe(0);
   });
 });
