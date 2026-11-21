@@ -21,15 +21,15 @@ findings:
     title: "`FixedStepLoop.advance` does not floor a negative delta, so `alpha` can go below 0 and interpolation extrapolates"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The mute key ignores modifiers and there is no on-screen mute state"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The asset-free gate has blind spots"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Per-element pitch offsets hard-code `TABLE_SPEC` ids inside the recipes"
   - id: IN-06
     severity: info
@@ -39,9 +39,9 @@ findings:
     severity: info
     disposition: open
     title: "A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites"
-open: 9
+open: 6
 total: 9
-recorded: 2026-11-21T20:25:10.653Z
+recorded: 2026-11-21T21:36:44.406Z
 ---
 
 # Phase 05: Code Review Disposition
@@ -52,9 +52,9 @@ recorded: 2026-11-21T20:25:10.653Z
 | WR-02 | warning | open | - |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
+| IN-03 | info | fixed | 05-REVIEW-FIX.md |
+| IN-04 | info | fixed | 05-REVIEW-FIX.md |
+| IN-05 | info | fixed | 05-REVIEW-FIX.md |
 | IN-06 | info | open | - |
 | IN-07 | info | open | - |
 
