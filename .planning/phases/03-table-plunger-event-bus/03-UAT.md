@@ -3,7 +3,7 @@ status: complete
 phase: 03-table-plunger-event-bus
 source: [03-VERIFICATION.md]
 started: 2026-11-20T00:00:00Z
-updated: 2026-11-21T21:52:00.000Z
+updated: 2026-11-21T21:53:54.092Z
 ---
 
 ## Current Test
@@ -49,14 +49,14 @@ evidence: "Live Planck fixtures: circles at local x 0.07/0.43 r0.07 plus a box a
 
 ### 7. Charge meter and plunger pullback in the procedural renderer. Run `npm run dev`, hold Space and release at several fill levels on the default (non-?debug=1) view.
 expected: The meter beside the chute fills bottom to top over about 0.67 s, red at full; the plunger tip retracts in step; release launches proportionally.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 7
-passed: 6
+passed: 7
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
