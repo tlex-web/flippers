@@ -46,3 +46,8 @@ export function playbackSemitones(
 export function semitoneRatio(st: number): number {
   return Math.pow(2, st / 12);
 }
+
+/** Linear gain for a level in dB: 10^(db / 20). */
+export function dbToGain(db: number): number {
+  return Math.pow(10, db / 20);
+}

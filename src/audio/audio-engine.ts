@@ -22,29 +22,36 @@
  * strictly positive values (Pitfall 5); every source is started and stopped
  * once and its voice disconnects itself on `onended` (Pattern 6).
  *
- * The bumper voice follows the hit: its peak is scaled by `strengthToGain`
- * and its pitch by `semitoneRatio(playbackSemitones(...))`, with the jitter
- * drawn from the constructor's `rng` (never a sim stream). The other cue kinds
- * are consumed without creating nodes until their recipes land (plan 05-03).
+ * Voices are data: `flush()` looks up `RECIPES[cue.kind]` and builds one
+ * source (plus an optional filter and its own envelope gain) per layer. The
+ * level follows the hit through `strengthToGain` and the pitch through
+ * `semitoneRatio(idSemitones + playbackSemitones(...))`, with the jitter drawn
+ * from the constructor's `rng` (never a sim stream). Every source stops at its
+ * own layer end and the latest-ending one tears the whole voice down.
  */
 
 import type { Cue, CueQueue } from "../app/cue-queue";
-import { playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 import type {
   AudioBufferLike,
   AudioContextLike,
   AudioNodeLike,
   GainNodeLike,
+  ScheduledSourceLike,
 } from "./audio-context-like";
+import { applyEnvelope, type EnvelopeSpec } from "./envelope";
+import { dbToGain, playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
+import { RECIPES, type LayerSpec } from "./recipes";
+
+export { ENV_FLOOR } from "./envelope";
 
 /** Master bus level before the compressor. */
 export const MASTER_GAIN = 0.6;
 
-/** Envelope floor: exponential ramps start and end here, never at 0. */
-export const ENV_FLOOR = 1e-4;
-
 /** Voices start this far after `currentTime` so their anchors are never late. */
 export const SCHEDULE_AHEAD_S = 0.005;
+
+/** A source keeps running this long after its envelope reaches the floor (s). */
+export const SOURCE_TAIL_S = 0.01;
 
 /** Length of the shared mono white-noise buffer (s). */
 export const NOISE_SECONDS = 1;
@@ -56,30 +63,6 @@ export const COMPRESSOR = {
   ratio: 12,
   attack: 0.003,
   release: 0.15,
-} as const;
-
-/**
- * Bumper recipe (research recipe table, A2 starting values): a triangle sweep
- * plus a band-passed noise click, 2 ms attack and 140 ms decay.
- */
-export const BUMPER_VOICE = {
-  peak: 0.8,
-  attack: 0.002,
-  decay: 0.14,
-  /** Tail after the envelope reaches the floor before the sources stop (s). */
-  tail: 0.01,
-  f0: 620,
-  f1: 300,
-  sweep: 0.06,
-  noiseFreq: 2200,
-  noiseQ: 1.2,
-  noisePeak: 0.5,
-  noiseAttack: 0.001,
-  noiseLength: 0.025,
-  /** Harder hits rise up to this many semitones (research bumper row). */
-  maxSemitones: 3,
-  /** Per-hit random detune bound, plus or minus (cents). */
-  jitterCents: 25,
 } as const;
 
 /** Default error report: one line, keep the game running. */
@@ -185,74 +168,34 @@ export class AudioEngine {
     return started;
   }
 
-  /** Build one cue's voice. False when the kind has no voice yet. */
+  /** Build one cue's voice from its recipe. Returns true when it started. */
   private play(ctx: AudioContextLike, master: AudioNodeLike, cue: Cue, t0: number): boolean {
-    switch (cue.kind) {
-      case "bumper":
-        this.playBumper(ctx, master, cue, t0);
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Bumper: triangle 620 -> 300 Hz plus a 2.2 kHz noise click (A2 values),
-   * louder and higher for a harder hit, slightly detuned every time.
-   */
-  private playBumper(ctx: AudioContextLike, master: AudioNodeLike, cue: Cue, t0: number): void {
-    const v = BUMPER_VOICE;
-    const noise = this.noise;
-    const peak = v.peak * strengthToGain(cue.strength);
+    const recipe = RECIPES[cue.kind];
+    const s = cue.strength;
+    const idSt = recipe.idSemitones?.[cue.elementId] ?? 0;
     const ratio = semitoneRatio(
-      playbackSemitones(cue.strength, this.rng, v.maxSemitones, v.jitterCents),
+      idSt + playbackSemitones(s, this.rng, recipe.maxSemitones, recipe.jitterCents),
     );
-    const end = t0 + v.attack + v.decay + v.tail;
+    const level = recipe.peak * (recipe.levelFromStrength ? strengthToGain(s) : 1);
     const nodes: AudioNodeLike[] = [];
     try {
-      const env = ctx.createGain();
-      nodes.push(env);
-      env.gain.setValueAtTime(ENV_FLOOR, t0);
-      env.gain.exponentialRampToValueAtTime(peak, t0 + v.attack);
-      env.gain.exponentialRampToValueAtTime(ENV_FLOOR, t0 + v.attack + v.decay);
-      env.connect(master);
-
-      const osc = ctx.createOscillator();
-      nodes.push(osc);
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(v.f0 * ratio, t0);
-      osc.frequency.exponentialRampToValueAtTime(v.f1 * ratio, t0 + v.sweep);
-      osc.connect(env);
-
-      const noiseEnv = ctx.createGain();
-      nodes.push(noiseEnv);
-      noiseEnv.gain.setValueAtTime(ENV_FLOOR, t0);
-      noiseEnv.gain.exponentialRampToValueAtTime(v.noisePeak, t0 + v.noiseAttack);
-      noiseEnv.gain.exponentialRampToValueAtTime(ENV_FLOOR, t0 + v.noiseLength);
-      noiseEnv.connect(env);
-
-      const bp = ctx.createBiquadFilter();
-      nodes.push(bp);
-      bp.type = "bandpass";
-      bp.frequency.setValueAtTime(v.noiseFreq, t0);
-      bp.Q.setValueAtTime(v.noiseQ, t0);
-      bp.connect(noiseEnv);
-
-      const src = ctx.createBufferSource();
-      nodes.push(src);
-      src.buffer = noise;
-      src.connect(bp);
-
-      // The first source's end tears down the whole voice.
-      osc.onended = () => {
+      let last: ScheduledSourceLike | null = null;
+      let lastStop = -Infinity;
+      for (let i = 0; i < recipe.layers.length; i++) {
+        const layer = recipe.layers[i];
+        if (!layer) continue;
+        const { source, stop } = this.buildLayer(ctx, master, layer, s, ratio, level, t0, nodes);
+        if (stop > lastStop) {
+          lastStop = stop;
+          last = source;
+        }
+      }
+      if (last === null) return false;
+      // The latest-ending source tears down the whole voice.
+      last.onended = () => {
         for (let i = 0; i < nodes.length; i++) nodes[i]?.disconnect();
       };
-
-      const room = Math.max(0, NOISE_SECONDS - (end - t0));
-      osc.start(t0);
-      src.start(t0, this.rng() * room);
-      osc.stop(end);
-      src.stop(end);
+      return true;
     } catch (error) {
       // Never leave a half-built voice attached to the master bus.
       for (let i = 0; i < nodes.length; i++) {
@@ -264,5 +207,71 @@ export class AudioEngine {
       }
       throw error;
     }
+  }
+
+  /**
+   * One layer: envelope gain into master, optional filter, then the source,
+   * started at t0 + offset and stopped just after its envelope reaches the
+   * floor. Every node created is pushed onto `nodes`.
+   */
+  private buildLayer(
+    ctx: AudioContextLike,
+    master: AudioNodeLike,
+    layer: LayerSpec,
+    strength: number,
+    ratio: number,
+    level: number,
+    t0: number,
+    nodes: AudioNodeLike[],
+  ): { source: ScheduledSourceLike; stop: number } {
+    const lt = t0 + layer.offset;
+    const envelope: EnvelopeSpec =
+      layer.decayPerStrength === undefined
+        ? layer.envelope
+        : { ...layer.envelope, decay: layer.envelope.decay + layer.decayPerStrength * strength };
+
+    const env = ctx.createGain();
+    nodes.push(env);
+    const end = applyEnvelope(env.gain, lt, envelope, level * dbToGain(layer.gainDb));
+    env.connect(master);
+    const stop = end + SOURCE_TAIL_S;
+
+    let input: AudioNodeLike = env;
+    const f = layer.filter;
+    if (f) {
+      const bq = ctx.createBiquadFilter();
+      nodes.push(bq);
+      bq.type = f.type;
+      bq.frequency.setValueAtTime(f.f0, lt);
+      if (f.f1 !== undefined) {
+        bq.frequency.exponentialRampToValueAtTime(f.f1 + (f.f1PerStrength ?? 0) * strength, end);
+      }
+      bq.Q.setValueAtTime(f.q, lt);
+      bq.connect(env);
+      input = bq;
+    }
+
+    if (layer.source === "noise") {
+      const src = ctx.createBufferSource();
+      nodes.push(src);
+      src.buffer = this.noise;
+      src.connect(input);
+      const room = Math.max(0, NOISE_SECONDS - (stop - lt));
+      src.start(lt, this.rng() * room);
+      src.stop(stop);
+      return { source: src, stop };
+    }
+
+    const osc = ctx.createOscillator();
+    nodes.push(osc);
+    osc.type = layer.wave ?? "sine";
+    osc.frequency.setValueAtTime(layer.f0 * ratio, lt);
+    if (layer.sweep > 0 && layer.f1 !== layer.f0) {
+      osc.frequency.exponentialRampToValueAtTime(layer.f1 * ratio, lt + layer.sweep);
+    }
+    osc.connect(input);
+    osc.start(lt);
+    osc.stop(stop);
+    return { source: osc, stop };
   }
 }

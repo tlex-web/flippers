@@ -164,7 +164,9 @@ describe("cue pipeline on the real table (AUD-01 tracer)", () => {
     const gains = voice.filter((n): n is FakeGain => n instanceof FakeGain);
     expect(gains.length).toBeGreaterThan(0);
     for (const g of gains) {
-      const first = g.gain.events[0];
+      // applyEnvelope clears pending automation first (05-03); the first
+      // scheduled value is still the ENV_FLOOR anchor.
+      const first = g.gain.events.find((e) => e.type !== "cancel");
       expect(first?.type).toBe("set");
       expect(first?.value).toBe(ENV_FLOOR);
     }
