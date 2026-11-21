@@ -49,7 +49,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 - [ ] **RND-01**: The entire table is rendered procedurally in code (Canvas) with no image assets
 - [ ] **RND-02**: The game holds a stable 60fps via render interpolation
-- [ ] **RND-03**: Elements flash on contact to confirm the hit registered
+- [x] **RND-03**: Elements flash on contact to confirm the hit registered
 
 ### Polish (PLSH — portfolio "juice", in scope for v1)
 
@@ -115,7 +115,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | GAME-03 | Phase 4 | Complete |
 | RND-01 | Phase 5 | Pending |
 | RND-02 | Phase 5 | Pending |
-| RND-03 | Phase 5 | Pending |
+| RND-03 | Phase 5 | Complete |
 | AUD-01 | Phase 5 | Pending |
 | PLSH-01 | Phase 6 | Pending |
 | PLSH-02 | Phase 6 | Pending |
