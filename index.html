@@ -3,13 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Physics Sandbox — Flippers</title>
+    <title>Flippers</title>
     <style>
+      /* Space theme (D-01): the HUD is DOM text over the procedural table, styled
+         with CSS only (gradients and shadows only; no image or font file).
+         Colors echo src/render/palette.ts: cyan frames and accents (the walls),
+         magenta for the status line (the bumper caps), light text. */
+      :root {
+        --space-center: #0b0420;
+        --space-edge: #03040a;
+        --panel-bg: rgba(8, 10, 32, 0.78);
+        --frame: rgba(76, 201, 240, 0.35);
+        --frame-glow: rgba(76, 201, 240, 0.18);
+        --inner-glow: rgba(76, 201, 240, 0.08);
+        --text: #e8f7ff;
+        --text-soft: #c3cbe6;
+        --text-muted: #8892b0;
+        --label: #7f8bd6;
+        --status: #f72585;
+        --mono: ui-monospace, Menlo, Consolas, monospace;
+      }
       html,
       body {
         margin: 0;
         height: 100%;
-        background: #05060d;
+        background: radial-gradient(ellipse at center, var(--space-center) 0%, var(--space-edge) 100%)
+          fixed var(--space-edge);
       }
       #sandbox {
         display: flex;
@@ -19,7 +38,10 @@
       }
       #stage {
         display: block;
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--frame);
+        box-shadow:
+          0 0 24px var(--frame-glow),
+          0 0 60px rgba(0, 0, 0, 0.6);
       }
       /* Score HUD (GAME-01): system-font DOM text, crisp at any canvas fit. */
       .hud {
@@ -27,27 +49,32 @@
         top: 16px;
         left: 16px;
         padding: 12px 16px;
-        background: rgba(5, 6, 13, 0.72);
-        border: 1px solid rgba(138, 160, 255, 0.25);
+        background: var(--panel-bg);
+        border: 1px solid var(--frame);
         border-radius: 8px;
-        color: #e8eefc;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
+        box-shadow:
+          inset 0 0 12px var(--inner-glow),
+          0 0 16px rgba(76, 201, 240, 0.1);
+        color: var(--text);
+        font-family: var(--mono);
         pointer-events: none;
       }
       .hud-label {
         font-size: 11px;
-        letter-spacing: 0.18em;
-        color: #8892b0;
+        letter-spacing: 0.28em;
+        color: var(--label);
       }
       .hud-score {
         font-size: 32px;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
+        color: var(--text);
+        text-shadow: 0 0 10px rgba(76, 201, 240, 0.45);
       }
       .hud-ball {
         margin-top: 4px;
         font-size: 16px;
-        color: #c3cbe6;
+        color: var(--text-soft);
       }
       /* Game status (GAME-02/03): the one announced line; min-height keeps the
          panel from jumping when it empties. */
@@ -56,7 +83,8 @@
         font-size: 16px;
         font-weight: 700;
         letter-spacing: 0.12em;
-        color: #ffd166;
+        color: var(--status);
+        text-shadow: 0 0 8px rgba(247, 37, 133, 0.35);
       }
       /* Controls hint (G-04-6, 04-UI-REVIEW #6): a static key/action list, not
          announced. Each row's key caps stay on one line. */
@@ -68,7 +96,7 @@
         margin: 10px 0 0;
         font-size: 12px;
         line-height: 1.5;
-        color: #8892b0;
+        color: var(--text-muted);
       }
       .hud-controls dt {
         margin: 0;
@@ -86,20 +114,20 @@
         min-width: 1.2em;
         padding: 0 4px;
         text-align: center;
-        border: 1px solid rgba(138, 160, 255, 0.35);
+        border: 1px solid rgba(76, 201, 240, 0.4);
         border-radius: 3px;
-        background: rgba(138, 160, 255, 0.08);
-        color: #c3cbe6;
+        background: var(--inner-glow);
+        color: var(--text-soft);
       }
       /* Windows reliability note (G-04-17, UAT 18 decision A). contain:
          inline-size drops it from the panel's intrinsic width, so it wraps at
-         the width the five rows set and never widens the panel over the table. */
+         the width the six rows set and never widens the panel over the table. */
       .hud-controls-note {
         contain: inline-size;
         margin: 8px 0 0;
         font-size: 11px;
         line-height: 1.6;
-        color: #8892b0;
+        color: var(--text-muted);
       }
       /* Diagnosis readout (G-04-6): DOM text, legible at any canvas fit. A
          developer readout, so it is hidden from assistive tech. */
@@ -108,11 +136,12 @@
         left: 16px;
         bottom: 16px;
         padding: 6px 10px;
-        background: rgba(5, 6, 13, 0.72);
-        border: 1px solid rgba(138, 160, 255, 0.25);
+        background: var(--panel-bg);
+        border: 1px solid var(--frame);
         border-radius: 6px;
-        color: #8892b0;
-        font-family: ui-monospace, Menlo, Consolas, monospace;
+        box-shadow: inset 0 0 8px var(--inner-glow);
+        color: var(--text-muted);
+        font-family: var(--mono);
         font-size: 12px;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
@@ -121,8 +150,9 @@
     </style>
   </head>
   <body>
-    <!-- Throwaway diagnosis sandbox (D-06/D-07): live interpolated ball + HUD.
-         The real procedural renderer is Phase 5; do not build on this. -->
+    <!-- The canvas is the procedural table and paints no text. Per D-01 the HUD
+         is DOM text restyled to the space theme; ROADMAP SC1's "HUD on Canvas"
+         is met in intent (procedural, zero image assets). -->
     <main id="sandbox">
       <canvas id="stage" role="img" aria-label="Flippers pinball table"></canvas>
       <div id="hud" class="hud">
