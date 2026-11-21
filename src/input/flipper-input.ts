@@ -225,7 +225,7 @@ export class FlipperInput {
   handleKeyDown(e: KeyEventLike): void {
     const leftBefore = this.isSideHeld("left");
     const rightBefore = this.isSideHeld("right");
-    this.dropStaleShift(e);
+    this.dropStaleShift(e, false);
     if (e.repeat && !this.isSecondShiftPress(e.code)) {
       // auto-repeat suppression: never re-triggers a flip, never preventDefaults
       if (this.windowsShiftHeal) {
@@ -255,7 +255,7 @@ export class FlipperInput {
   handleKeyUp(e: KeyEventLike): void {
     const leftBefore = this.isSideHeld("left");
     const rightBefore = this.isSideHeld("right");
-    this.dropStaleShift(e);
+    this.dropStaleShift(e, true);
     if (CODE_TO_SIDE.has(e.code)) this.held.delete(e.code);
     if ((e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT) && e.shiftKey === false) {
       // On Windows VK_SHIFT is now fully up, so no Shift is repeating (G-04-21).
@@ -365,14 +365,20 @@ export class FlipperInput {
    * Stale-Shift reconciliation (G-04-11): when a NON-Shift key event reports
    * `shiftKey === false`, no Shift is down, so a held ShiftLeft/ShiftRight is a
    * code whose keyup the OS took; drop it. No-op for an absent `shiftKey`
-   * (unknown state) and for `true`. The Shift keys' own events reconcile only
-   * with `windowsShiftHeal` on (G-04-17: on Windows a Shift keyup reporting
-   * Shift up means VK_SHIFT is fully up); off, they never do (the D-09 cradle).
-   * Latches no edge itself: the caller commits the net transition.
+   * (unknown state) and for `true`. A Shift key's own event reconciles only on
+   * a KEYUP with `windowsShiftHeal` on (G-04-17): on Windows such a keyup
+   * arrives only once VK_SHIFT is fully up. A Shift keydown reporting Shift up
+   * proves nothing about the other Shift, so it never reconciles (G-04-21;
+   * sources include the fake Shift pairs Windows injects around NumLock numpad
+   * keys, remote desktop and IME injection). With the heal off, the Shift keys'
+   * own events never reconcile (the D-09 cradle). Non-Shift events reconcile on
+   * keydown and keyup alike. Latches no edge itself: the caller commits the net
+   * transition.
    */
-  private dropStaleShift(e: KeyEventLike): void {
+  private dropStaleShift(e: KeyEventLike, isKeyUp: boolean): void {
     if (e.shiftKey !== false) return;
-    if (!this.windowsShiftHeal && (e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT)) return;
+    const isShiftCode = e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT;
+    if (isShiftCode && !(this.windowsShiftHeal && isKeyUp)) return;
     this.held.delete(SHIFT_LEFT);
     this.held.delete(SHIFT_RIGHT);
   }
