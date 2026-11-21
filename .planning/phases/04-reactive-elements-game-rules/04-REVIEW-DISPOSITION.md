@@ -6,19 +6,19 @@ findings:
   - id: WR-01
     severity: warning
     disposition: open
-    title: "Cradle held across a force-clear: re-pressing the auto-repeating Shift is still dropped, so both bats stay dead until every Shift is released"
+    title: "Quick-tap sweep still has no timeout budget and now takes 4.2 s of the 5 s default under full-suite load (carry-over of `f3ab8be` WR-04)"
   - id: IN-01
     severity: info
     disposition: open
-    title: "`repeatingShift` survives the G-04-11 non-Shift reconciliation, breaking the \"lone repeat stays ignored\" invariant"
+    title: "The timed re-press also fires for a SINGLE Shift held across a clear at slow typematic, which the `handleFocus` doc and header say cannot happen"
   - id: IN-02
     severity: info
     disposition: open
-    title: "`handleKeyDown` doc still says every event drops a stale Shift"
+    title: "The header residual names only two ways to recover from a missed fast re-press; a slower re-press of the same Shift also works"
   - id: IN-03
     severity: info
     disposition: open
-    title: "`anyEdge` test helper doc states the opposite of what it returns"
+    title: "The timed re-press text is spliced into heal item (1), leaving \"(2) a\" dangling mid-paragraph"
   - id: WR-02
     severity: warning
     disposition: open
@@ -57,7 +57,7 @@ findings:
     title: "The controls hint uses \"/\" both as a separator and as the Slash key"
 open: 13
 total: 13
-recorded: 2026-11-21T01:34:19.119Z
+recorded: 2026-11-21T03:03:14.663Z
 ---
 
 # Phase 04: Code Review Disposition
