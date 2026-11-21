@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "[new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph"
   - id: IN-01
     severity: info
@@ -39,16 +39,16 @@ findings:
     severity: info
     disposition: fixed
     title: "A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites"
-open: 5
+open: 4
 total: 9
-recorded: 2026-11-21T22:18:45.573Z
+recorded: 2026-11-21T22:36:18.341Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
+| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
