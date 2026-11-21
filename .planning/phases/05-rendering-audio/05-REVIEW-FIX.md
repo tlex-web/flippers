@@ -29,7 +29,7 @@ status: all_fixed
 
 ## Fixed Issues
 
-### WR-01: Mute ramp and Firefox voice-steal fade start from a stale event
+### WR-01: Mute ramp and Firefox voice-steal fade start from a stale event, so the 50 ms fade is effectively an instant cut
 
 **Files modified:** `src/audio/audio-engine.ts`, `src/audio/voice-pool.ts`, `src/audio/envelope.ts`, `src/audio/test/fake-audio-context.ts`, `src/audio/audio-engine.test.ts`, `src/audio/voice-pool.test.ts`
 **Commit:** 11ab06a
@@ -42,21 +42,21 @@ status: all_fixed
 
 `FakeParam` now evaluates the effective timeline (`valueAt`, applying cancel and cancelAndHold as the spec does). New tests assert the actual levels at `now`, mid-fade and the end, for mute, a mid-ramp toggle, a hold-segment steal and a Firefox mid-decay steal.
 
-### WR-02: Cues recorded before a new context reports "running" are dropped
+### WR-02: Cues recorded before a new context reports "running" are dropped, so the first "start" jingle can be lost
 
 **Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-engine.test.ts`
 **Commit:** c5d02e2
 **Status:** fixed: requires human verification (lifecycle logic, confirm the first "start" jingle sounds in Firefox and Safari)
 **Applied fix:** `unlock()` sets `resumePending` around `resume()` and clears it when the promise resolves or rejects. `flush()` now counts a context as playable when it is running, or when it is suspended with a resume in flight. Nodes are scheduled at the frozen `currentTime` and play when the context starts. Once the resume settles, a context that is still suspended drops cues again. New tests cover three cases: a suspended new context voices the "start" cue, a rejected resume returns to dropping, and an OS-level suspend with no resume pending drops. One limit: if a `resume()` promise never settles, voices keep being scheduled on the suspended context. The pool caps them at 16. `unlock()` only runs in trusted gestures, where the resume does settle.
 
-### IN-01: The flash clock runs one step ahead of the interpolated scene
+### IN-01: The flash clock runs one step ahead of the interpolated scene, and the first rendered frame of every flash is already past its hold
 
 **Files modified:** `src/render/flash.ts`, `src/render/flash.test.ts`, `src/render/table-renderer.test.ts`
 **Commit:** 2259d2e
 **Status:** fixed: requires human verification (visual timing, check the contact and sling flashes by eye)
 **Applied fix:** `record()` now stamps `stepCount + 1`, so the first render after the recording step's tick reads age `alpha` instead of `1 + alpha`. A read before that tick is clamped to age 0. FLASH_CONTACT is now drawn at its 0.35 peak, and a sling's one-step hold lasts the whole first frame. Two tests were changed to model the real record-then-tick order: the e^-1 decay test and the renderer's below-EPS test. A new test checks the first-frame peak.
 
-### IN-02: `FixedStepLoop.advance` does not floor a negative delta
+### IN-02: `FixedStepLoop.advance` does not floor a negative delta, so `alpha` can go below 0 and interpolation extrapolates
 
 **Files modified:** `src/sim/loop.ts`, `src/sim/loop.tabblur.test.ts`
 **Commit:** 6956600
@@ -87,13 +87,13 @@ I confirmed the `public/` check fails when a temporary `public/a.txt` is present
 **Commit:** 5d73335
 **Applied fix:** I took the review's test option rather than deriving the maps. New recipes tests require a distinct `idSemitones` entry for every bumper id in `TABLE_SPEC`, and for both flipper ids under flipperUp and flipperDown. A comment on the map points at the guard.
 
-### IN-06: `AudioEngine.unlock` edge cases
+### IN-06: `AudioEngine.unlock` edge cases: leaked context on a `build()` failure, and an error logged on every key with a closed context
 
 **Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-context-like.ts`, `src/audio/test/fake-audio-context.ts`, `src/audio/audio-engine.test.ts`
 **Commit:** 69129bd
 **Applied fix:** If `build()` throws after the context was created, the context is now closed with `close?.()`, and a close rejection is swallowed. `unlock()` on a closed context returns early and reports it once, so later gestures no longer flood the console with rejected `resume()` calls. `AudioContextLike` gains an optional `close()`, which the DOM `AudioContext` still satisfies (the A5 type test passes). The fake gains `close()` and `closeCalls`. There are two new tests.
 
-### IN-07: A global 30 s `testTimeout` applies to every test
+### IN-07: A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites
 
 **Files modified:** `vitest.config.ts` and 15 heavy suites: `src/sandbox/{game-e2e,flipper-e2e,plunger-e2e,game.determinism,presentation.determinism,cue-pipeline}.test.ts`, `src/sim/{loop.determinism,loop.flippers}.test.ts`, `src/game/reactive-table.test.ts`, `src/table/table-world.test.ts`, `src/harness/{soak,table-soak,reactive-soak,flipper-tunnel,stability}.test.ts`
 **Commit:** 023ded9
