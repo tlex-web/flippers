@@ -700,7 +700,7 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
     return { code, shiftKey, repeat, preventDefault: vi.fn() };
   }
 
-  /** True when a drained view carries no edge at all. */
+  /** True when a drained view carries at least one edge. */
   function anyEdge(e: {
     leftPress: boolean;
     leftRelease: boolean;

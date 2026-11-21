@@ -48,7 +48,15 @@
  *    other Shift is held counts as a press. G-04-21 extends it past a
  *    force-clear: the other Shift code also counts as a press once the Shift
  *    held across the clear has sent an ignored auto-repeat, a marker tracked
- *    until the next force-clear or a Shift keyup reporting Shift up; (2) a
+ *    until the next force-clear or any event that proves no Shift is down.
+ *    The timed re-press (G-04-21 cradle): with both Shifts held across a
+ *    clear, the Shift that auto-repeats can itself be re-pressed. Windows
+ *    flags the re-press as a repeat, but the typematic stream stops when the
+ *    key is released, so a repeat-flagged keydown of the marker's own code
+ *    arriving more than SHIFT_REPEAT_GAP_MS (450 ms) after its last ignored
+ *    auto-repeat counts as a fresh press. The time comes only from the
+ *    event's `timeStamp`; an event without a finite `timeStamp` never counts
+ *    this way; (2) a
  *    ShiftLeft/ShiftRight KEYUP (keyups only) reporting `shiftKey` strictly
  *    false drops BOTH Shift codes, because on Windows such a keyup only
  *    arrives once VK_SHIFT is fully up. Both are
@@ -61,7 +69,16 @@
  *    because the browser receives no event in between. After a force-clear, a
  *    second Shift pressed before the held Shift's first OS auto-repeat (the
  *    typematic delay, about 500 ms) is still missed, because no event before
- *    that repeat tells the page a Shift is down.
+ *    that repeat tells the page a Shift is down. With both Shifts held across
+ *    a clear, a faster re-press of the auto-repeating Shift, made within
+ *    SHIFT_REPEAT_GAP_MS of its previous auto-repeat, is still missed. If
+ *    that key stays down, its own first auto-repeat after the typematic delay
+ *    (about 500 ms by default) raises the bat late. So only a faster re-press
+ *    released before that delay, or any faster re-press with the shortest
+ *    Windows delay setting (about 250 ms), stays missed until the other Shift
+ *    is re-pressed or every Shift is released. A second Shift missed before
+ *    the held Shift's first OS auto-repeat is likewise taken on its own first
+ *    auto-repeat once it is held past the typematic delay.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -120,8 +137,10 @@ export interface FlipperInputOptions {
   /**
    * Heal the Windows both-Shift merge (G-04-17): accept the second Shift press
    * that Windows flags as a repeat, also after a force-clear once the held
-   * Shift has auto-repeated (G-04-21), and drop both Shift codes on a Shift
-   * keyup (never a keydown) reporting `shiftKey` false. Defaults to off.
+   * Shift has auto-repeated (G-04-21), including the timed re-press of the
+   * auto-repeating Shift after a force-clear (G-04-21 cradle), and drop both
+   * Shift codes on a Shift keyup (never a keydown) reporting `shiftKey`
+   * false. Defaults to off.
    * main.ts passes `isWindowsPlatform(navigator)`; tests choose a path
    * explicitly.
    */
@@ -217,8 +236,9 @@ export class FlipperInput {
    * The Shift code of the most recent ignored Shift auto-repeat since the last
    * force-clear (heal only). Windows flags the held Shift's typematic repeat as
    * a repeat, so this marker proves that Shift is physically down even when the
-   * clear removed it from `held` (G-04-21). Reset by forceClear and by a Shift
-   * keyup reporting Shift up. Holds only the module constants or null.
+   * clear removed it from `held` (G-04-21). Reset by every force-clear and by
+   * every event that drops both Shift codes in dropStaleShift. Its time lives
+   * in `lastShiftRepeatAt`. Holds only the module constants or null.
    */
   private repeatingShift: typeof SHIFT_LEFT | typeof SHIFT_RIGHT | null = null;
 
@@ -260,8 +280,11 @@ export class FlipperInput {
   }
 
   /**
-   * Genuine keydown. Drops a stale Shift first (every event, repeat or unbound
-   * included, carries valid modifier state), then ignores OS auto-repeat,
+   * Genuine keydown. Drops a stale Shift first only when a non-Shift keydown
+   * reports Shift up; a Shift keydown never reconciles (G-04-21). Then ignores
+   * OS auto-repeat, except the Windows second-Shift press and the timed
+   * re-press of the auto-repeating Shift, and records each ignored Shift
+   * auto-repeat (its code and timeStamp) for the Windows heal. Then
    * `preventDefault`s bound codes only, adds the code (the Set de-dupes) and
    * latches the NET per-side transition: a press when a side goes not-held ->
    * held, a release when a stale-Shift drop left it fully up.
@@ -296,7 +319,9 @@ export class FlipperInput {
    * Keyup. Drops a stale Shift, removes the code if it is bound, and latches the
    * NET per-side transition: a RELEASE only when a side becomes fully up (ALL of
    * its codes released). A keyup for a code that was never tracked (e.g. its
-   * keydown was an ignored auto-repeat) emits no phantom edge.
+   * keydown was an ignored auto-repeat) emits no phantom edge. With the heal
+   * on, a Shift keyup reporting Shift up also clears the repeat marker,
+   * through dropStaleShift.
    */
   handleKeyUp(e: KeyEventLike): void {
     const leftBefore = this.isSideHeld("left");
@@ -320,7 +345,9 @@ export class FlipperInput {
    * already cleared every key held before it. A key physically held across the
    * focus regain needs a fresh press, the same as after a blur. On Windows, the
    * other Shift still counts as a press once the held Shift's auto-repeat
-   * arrives (G-04-21).
+   * arrives (G-04-21). With both Shifts held, the auto-repeating one counts
+   * again once it is re-pressed after a pause longer than SHIFT_REPEAT_GAP_MS
+   * (G-04-21 cradle).
    */
   handleFocus(): void {
     this.forceClear();
@@ -416,8 +443,9 @@ export class FlipperInput {
    * sources include the fake Shift pairs Windows injects around NumLock numpad
    * keys, remote desktop and IME injection). With the heal off, the Shift keys'
    * own events never reconcile (the D-09 cradle). Non-Shift events reconcile on
-   * keydown and keyup alike. Latches no edge itself: the caller commits the net
-   * transition.
+   * keydown and keyup alike. Dropping both Shift codes also clears the repeat
+   * marker and its time, because the event proves no Shift is down (IN-01).
+   * Latches no edge itself: the caller commits the net transition.
    */
   private dropStaleShift(e: KeyEventLike, isKeyUp: boolean): void {
     if (e.shiftKey !== false) return;
@@ -436,7 +464,11 @@ export class FlipperInput {
    * G-04-21: the OTHER Shift also counts when it carried an ignored auto-repeat
    * since the last force-clear (`repeatingShift`), so a Shift held across a
    * clear no longer blocks the other Shift even though `held` is empty. A held
-   * Shift's own auto-repeat and a lone repeat stay ignored. Allocates nothing.
+   * Shift's own auto-repeat and a lone repeat stay ignored. G-04-21 cradle:
+   * the marker's own code also counts when the event's finite timeStamp is
+   * more than SHIFT_REPEAT_GAP_MS after `lastShiftRepeatAt` (the timed
+   * re-press). This is checked after the held check, so a held Shift's
+   * re-press stays a de-duped no-op. Allocates nothing.
    */
   private isSecondShiftPress(code: string, timeStamp: number | undefined): boolean {
     if (!this.windowsShiftHeal) return false;
