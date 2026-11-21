@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 5
+current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Phase 04 complete, ready to plan Phase 5
-last_updated: "2026-11-21T13:27:26.174Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-11-21T13:46:36.743Z"
 last_activity: 2026-11-21
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 62fcf400a0b6343e85bb43b9668bef2e89461763
+last_activity_desc: Phase 05 execution started
+state_head: a3852c5fb186b98d37d1654c5f199207c074977c
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 34
+  completed_plans: 35
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 5 — Rendering & Audio
+**Current focus:** Phase 05 — Rendering & Audio
 
 ## Current Position
 
-Phase: 5 (Rendering & Audio) — READY TO EXECUTE
-Plan: Not started
+Phase: 05 (Rendering & Audio) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-11-21 — Phase 04 complete, transitioned to Phase 5
+Last activity: 2026-11-21 — Phase 05 execution started
 
 Progress: [███████░░░] 67%
 
@@ -95,6 +95,7 @@ Progress: [███████░░░] 67%
 | Phase 04 P13 | 5 min | 2 tasks | 4 files |
 | Phase 04 P14 | 7 min | 3 tasks | 4 files |
 | Phase 04 P15 | 37 min | 3 tasks | 3 files |
+| Phase 05 P01 | 7 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-14: accepted residual pinned by R3 - a second Shift pressed before the held Shift's first OS auto-repeat (~500 ms) after a clear is still missed
 - [Phase 04]: 04-15: G-04-21 cradle closed with option A (timing). SHIFT_REPEAT_GAP_MS = 450 ms (above the slowest ~400 ms Windows repeat, below the 500 ms default delay); the auto-repeating Shift re-pressed after a longer gap counts as a press; time read only from the event timeStamp, finite-checked, after the held check
 - [Phase 04]: 04-15: IN-01: dropStaleShift clears repeatingShift and lastShiftRepeatAt whenever it drops both Shift codes; the redundant handleKeyUp marker reset was removed
+- [Phase 05]: 05-01: ReactiveFeedback (optional 4th ReactiveElements arg) reports registered hits last in each branch; CueQueue (64 preallocated, drop-newest) records on step, AudioEngine.flush() creates nodes once per frame through master gain 0.6 -> compressor
+- [Phase 05]: 05-01: AudioContext created only in the first trusted keydown/pointerdown (AudioUnlock, capture, ignores untrusted and Escape); cues without a running context are dropped, never replayed; A5 proven by the cast-free DOM factory in main.ts
+- [Phase 05]: 05-01: bumper noise click has its own 25 ms gain envelope so every source stops at the common voice end; vitest testTimeout 30000
 
 ### Pending Todos
 
@@ -212,6 +216,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T11:50:00Z
-Stopped at: Phase 04 complete, ready to plan Phase 5
+Last session: 2026-11-21T13:46:35.445Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
