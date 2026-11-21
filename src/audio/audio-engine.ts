@@ -28,6 +28,11 @@
  * `semitoneRatio(idSemitones + playbackSemitones(...))`, with the jitter drawn
  * from the constructor's `rng` (never a sim stream). Every source stops at its
  * own layer end and the latest-ending one tears the whole voice down.
+ *
+ * Every voice is admitted through a `VoicePool` first (16 voices, per-kind
+ * recipe caps, oldest stolen with a 5 ms fade), so bumper spam cannot flood
+ * the mix. `setMuted` / `toggleMute` ramp the master gain (D-02); while muted
+ * `flush()` drops cues, so nothing bursts out on unmute.
  */
 
 import type { Cue, CueKind, CueQueue } from "../app/cue-queue";
@@ -41,6 +46,7 @@ import type {
 import { applyEnvelope, type EnvelopeSpec } from "./envelope";
 import { dbToGain, playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 import { RECIPES, type LayerSpec } from "./recipes";
+import { VoicePool, holdAt, type VoiceHandle } from "./voice-pool";
 
 export { ENV_FLOOR } from "./envelope";
 
@@ -50,7 +56,7 @@ export const MASTER_GAIN = 0.6;
 /** Voices start this far after `currentTime` so their anchors are never late. */
 export const SCHEDULE_AHEAD_S = 0.005;
 
-/** RED stub (05-03 Task 3). */
+/** Master gain ramp for mute and unmute (s, D-02). Linear, so 0 is a legal target. */
 export const MUTE_RAMP_S = 0.05;
 
 /** A source keeps running this long after its envelope reaches the floor (s). */
@@ -82,31 +88,42 @@ export class AudioEngine {
   private noise: AudioBufferLike | null = null;
   /** Set when creation threw; later gestures do not retry. */
   private failed = false;
+  private muted = false;
+  private readonly pool = new VoicePool();
 
   constructor(createContext: () => AudioContextLike, rng: () => number = Math.random) {
     this.createContext = createContext;
     this.rng = rng;
   }
 
-  /** RED stub (05-03 Task 3). */
+  /**
+   * Mute or unmute the master bus (D-02): a linear ramp to 0, or back to
+   * MASTER_GAIN, over MUTE_RAMP_S from now. Before unlock it only sets the
+   * flag, and the master is then built at 0. While muted, `flush()` drops cues.
+   */
   setMuted(muted: boolean): void {
-    void muted;
+    this.muted = muted;
+    const ctx = this.ctx;
+    const master = this.master;
+    if (ctx === null || master === null) return;
+    const now = ctx.currentTime;
+    holdAt(master.gain, now);
+    master.gain.linearRampToValueAtTime(muted ? 0 : MASTER_GAIN, now + MUTE_RAMP_S);
   }
 
-  /** RED stub (05-03 Task 3). */
+  /** Flip the mute flag; returns the new state (true = muted). */
   toggleMute(): boolean {
-    return false;
+    this.setMuted(!this.muted);
+    return this.muted;
   }
 
-  /** RED stub (05-03 Task 3). */
   isMuted(): boolean {
-    return false;
+    return this.muted;
   }
 
-  /** RED stub (05-03 Task 3). */
+  /** Voices the pool still counts as sounding, of one kind or in total. */
   activeVoices(kind?: CueKind): number {
-    void kind;
-    return 0;
+    return this.pool.activeCount(kind);
   }
 
   /** The live context, or null before the first successful unlock. */
@@ -146,7 +163,7 @@ export class AudioEngine {
   private build(ctx: AudioContextLike): void {
     const now = ctx.currentTime;
     const master = ctx.createGain();
-    master.gain.setValueAtTime(MASTER_GAIN, now);
+    master.gain.setValueAtTime(this.muted ? 0 : MASTER_GAIN, now);
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.setValueAtTime(COMPRESSOR.threshold, now);
     comp.knee.setValueAtTime(COMPRESSOR.knee, now);
@@ -166,14 +183,15 @@ export class AudioEngine {
   }
 
   /**
-   * Play every queued cue in FIFO order, then empty the queue. Returns the
-   * number of voices started. Without a running context it creates nothing,
-   * empties the queue and returns 0. Call once per render frame.
+   * Play every queued cue in FIFO order, all at the same t0, then empty the
+   * queue. Returns the number of voices started. Muted or without a running
+   * context it creates nothing, empties the queue and returns 0 (a cue is never
+   * replayed later). Call once per render frame.
    */
   flush(cues: CueQueue): number {
     const ctx = this.ctx;
     const master = this.master;
-    if (ctx === null || master === null || ctx.state !== "running") {
+    if (this.muted || ctx === null || master === null || ctx.state !== "running") {
       cues.clear();
       return 0;
     }
@@ -201,22 +219,36 @@ export class AudioEngine {
       idSt + playbackSemitones(s, this.rng, recipe.maxSemitones, recipe.jitterCents),
     );
     const level = recipe.peak * (recipe.levelFromStrength ? strengthToGain(s) : 1);
+    this.pool.admit(cue.kind, recipe.cap, t0);
     const nodes: AudioNodeLike[] = [];
+    const envs: GainNodeLike[] = [];
+    const sources: ScheduledSourceLike[] = [];
     try {
       let last: ScheduledSourceLike | null = null;
       let lastStop = -Infinity;
       for (let i = 0; i < recipe.layers.length; i++) {
         const layer = recipe.layers[i];
         if (!layer) continue;
-        const { source, stop } = this.buildLayer(ctx, master, layer, s, ratio, level, t0, nodes);
-        if (stop > lastStop) {
-          lastStop = stop;
-          last = source;
+        const built = this.buildLayer(ctx, master, layer, s, ratio, level, t0, nodes);
+        envs.push(built.env);
+        sources.push(built.source);
+        if (built.stop > lastStop) {
+          lastStop = built.stop;
+          last = built.source;
         }
       }
       if (last === null) return false;
+      const handle: VoiceHandle = {
+        kind: cue.kind,
+        startedAt: t0,
+        endsAt: lastStop,
+        envs,
+        sources,
+      };
+      this.pool.add(handle);
       // The latest-ending source tears down the whole voice.
       last.onended = () => {
+        this.pool.release(handle);
         for (let i = 0; i < nodes.length; i++) nodes[i]?.disconnect();
       };
       return true;
@@ -247,7 +279,7 @@ export class AudioEngine {
     level: number,
     t0: number,
     nodes: AudioNodeLike[],
-  ): { source: ScheduledSourceLike; stop: number } {
+  ): { env: GainNodeLike; source: ScheduledSourceLike; stop: number } {
     const lt = t0 + layer.offset;
     const envelope: EnvelopeSpec =
       layer.decayPerStrength === undefined
@@ -283,7 +315,7 @@ export class AudioEngine {
       const room = Math.max(0, NOISE_SECONDS - (stop - lt));
       src.start(lt, this.rng() * room);
       src.stop(stop);
-      return { source: src, stop };
+      return { env, source: src, stop };
     }
 
     const osc = ctx.createOscillator();
@@ -296,6 +328,6 @@ export class AudioEngine {
     osc.connect(input);
     osc.start(lt);
     osc.stop(stop);
-    return { source: osc, stop };
+    return { env, source: osc, stop };
   }
 }
