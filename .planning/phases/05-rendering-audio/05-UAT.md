@@ -3,7 +3,7 @@ status: complete
 phase: 05-rendering-audio
 source: [05-VERIFICATION.md]
 started: 2026-11-21T00:00:00Z
-updated: 2026-11-21T23:23:54.986Z
+updated: 2026-11-21T23:53:27.524Z
 ---
 
 ## Current Test
@@ -40,10 +40,14 @@ result: pass
 expected: The three-note start figure plays on that Enter, same as on a direct first Enter; holding Shift for a few seconds before Enter changes nothing; no clicks
 result: pass
 
+### 8. Re-check after review round 2 (660e019 one reopen per stuck resume, 23f874d no reopen while rendering): fresh load, press Shift, wait 1 s, press Enter; then fresh load again, press Shift, wait 1 s, tap Z or Slash a few times, then press Enter
+expected: Both runs play the three-note start figure on Enter; in the second run the flipper taps sound normally; no clicks or cut-off sounds in either run
+result: pass
+
 ## Summary
 
-total: 7
-passed: 7
+total: 8
+passed: 8
 issues: 0
 pending: 0
 skipped: 0
