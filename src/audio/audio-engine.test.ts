@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CueQueue, type CueKind } from "../app/cue-queue";
 import { mulberry32 } from "../harness/prng";
-import { AudioEngine, MASTER_GAIN, MUTE_RAMP_S } from "./audio-engine";
+import { AudioEngine, MASTER_GAIN, MUTE_RAMP_S, SCHEDULE_AHEAD_S } from "./audio-engine";
 import { semitoneRatio } from "./mapping";
 import { FakeAudioContext, FakeGain, FakeOscillator } from "./test/fake-audio-context";
 
@@ -161,5 +161,70 @@ describe("master mute (D-02 engine side)", () => {
     expect(engine.flush(q)).toBe(0);
     expect(fake.nodes.length).toBe(chain);
     expect(q.size).toBe(0);
+  });
+});
+
+describe("a starting context is playable (WR-02)", () => {
+  /** An engine over a fake that, like a browser, reports "suspended" when new. */
+  function startingRig(): { fake: FakeAudioContext; engine: AudioEngine } {
+    const fake = new FakeAudioContext();
+    fake.state = "suspended";
+    return {
+      fake,
+      engine: new AudioEngine(
+        () => fake,
+        () => 0.5,
+      ),
+    };
+  }
+
+  it("a 'start' cue flushed right after unlock, before the context runs, is scheduled", () => {
+    const { fake, engine } = startingRig();
+    engine.unlock();
+    expect(fake.resumeCalls).toBe(1);
+    expect(fake.state).toBe("suspended");
+    const q = new CueQueue();
+    q.push("start", 0, 1);
+    expect(engine.flush(q)).toBe(1);
+    expect(q.size).toBe(0);
+    const started = fake.sources().filter((s) => s.startTime !== null);
+    expect(started.length).toBeGreaterThan(0);
+    for (const s of started) expect(s.startTime ?? -1).toBeGreaterThanOrEqual(SCHEDULE_AHEAD_S);
+  });
+
+  it("once the resume has settled, a context still suspended drops cues again", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { fake, engine } = startingRig();
+      fake.resume = () => {
+        fake.resumeCalls++;
+        return Promise.reject(new Error("device unavailable"));
+      };
+      engine.unlock();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errors).toHaveBeenCalledTimes(1);
+      const chain = fake.nodes.length;
+      const q = new CueQueue();
+      q.push("bumper", 200, 1);
+      expect(engine.flush(q)).toBe(0);
+      expect(q.size).toBe(0);
+      expect(fake.nodes.length).toBe(chain);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("a suspended context with no resume in flight drops cues", async () => {
+    const { fake, engine } = startingRig();
+    engine.unlock();
+    await Promise.resolve();
+    fake.state = "running";
+    fake.state = "suspended"; // an OS-level suspend after the start
+    const chain = fake.nodes.length;
+    const q = new CueQueue();
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
+    expect(fake.nodes.length).toBe(chain);
   });
 });

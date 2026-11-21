@@ -5,16 +5,21 @@
  *
  * Lifecycle (research Pattern 5):
  * - no context exists until `unlock()` runs inside the player's first trusted
- *   gesture (`AudioUnlock`); a context created there starts running, one created
- *   at boot would start suspended;
+ *   gesture (`AudioUnlock`); a context created there is allowed to start, but
+ *   it reports "suspended" until the audio device is up (tens of ms on some
+ *   engines), so `unlock()` calls `resume()` and the context counts as starting
+ *   until that settles;
  * - a later gesture while the context is not running calls `resume()`;
  * - a creation failure is reported once and never retried; a rejected
  *   `resume()` is reported and the game keeps running (T-05-04).
  *
  * Pull-then-play, the collision-router split: the step path only records cues
  * into the `CueQueue`; `flush()` runs once per render frame and is the only
- * place audio nodes are created. Without a running context `flush()` drops the
- * queued cues: a stale cue is never replayed after a resume.
+ * place audio nodes are created. A starting context (suspended with a resume in
+ * flight) is playable: nodes scheduled on it at the frozen `currentTime` sound
+ * as soon as it runs, so the first "start" figure is not lost. Otherwise,
+ * without a running context, `flush()` drops the queued cues: a stale cue is
+ * never replayed after a resume.
  *
  * Every voice goes through the master chain (master gain, then a dynamics
  * compressor, then the destination), so no sound can bypass the limiter.
@@ -89,6 +94,8 @@ export class AudioEngine {
   private noise: AudioBufferLike | null = null;
   /** Set when creation threw; later gestures do not retry. */
   private failed = false;
+  /** A `resume()` is in flight: a suspended context is about to run. */
+  private resumePending = false;
   private muted = false;
   /**
    * The master gain's latest linear segment (audio clock), tracked so a mute
@@ -181,8 +188,18 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (ctx === null || ctx.state === "running") return;
     try {
-      ctx.resume().catch((error: unknown) => report("resume() was rejected", error));
+      this.resumePending = true;
+      ctx.resume().then(
+        () => {
+          this.resumePending = false;
+        },
+        (error: unknown) => {
+          this.resumePending = false;
+          report("resume() was rejected", error);
+        },
+      );
     } catch (error) {
+      this.resumePending = false;
       report("resume() threw", error);
     }
   }
@@ -217,14 +234,18 @@ export class AudioEngine {
 
   /**
    * Play every queued cue in FIFO order, all at the same t0, then empty the
-   * queue. Returns the number of voices started. Muted or without a running
-   * context it creates nothing, empties the queue and returns 0 (a cue is never
-   * replayed later). Call once per render frame.
+   * queue. Returns the number of voices started. Muted or without a playable
+   * context (running, or suspended with a resume in flight) it creates
+   * nothing, empties the queue and returns 0 (a cue is never replayed later).
+   * Call once per render frame.
    */
   flush(cues: CueQueue): number {
     const ctx = this.ctx;
     const master = this.master;
-    if (this.muted || ctx === null || master === null || ctx.state !== "running") {
+    const playable =
+      ctx !== null &&
+      (ctx.state === "running" || (this.resumePending && ctx.state === "suspended"));
+    if (this.muted || ctx === null || master === null || !playable) {
       cues.clear();
       return 0;
     }
