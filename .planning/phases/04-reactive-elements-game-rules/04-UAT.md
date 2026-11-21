@@ -3,7 +3,7 @@ status: diagnosed
 phase: 04-reactive-elements-game-rules
 source: [04-VERIFICATION.md]
 started: 2026-11-20T18:36:39Z
-updated: "2026-11-20T23:16:56Z"
+updated: "2026-11-21T00:26:38Z"
 ---
 
 ## Current Test
@@ -111,12 +111,24 @@ expected: A recorded user decision. Bindings are unchanged in the code today.
 result: pass
 note: "Presented: recommendation A (keep Shift as a default binding, add a controls-list hint that Z, / and the arrow keys are the most reliable on Windows) vs B (drop Shift). User answered 'pass': recorded as A. The hint can ride along with the G-04-17 fix."
 
+### 19. UAT test 17 re-test on the real Windows keyboard (04-12 Task 3 human-check). Sticky Keys OFF, `npm run dev`, press Enter. Hold Left Shift, then also press Right Shift: both bats must be up. Release Left Shift first, then Right Shift. Repeat with the other three orders (LD RD RU LU; RD LD LU RU; RD LD RU LU). Then tap each Shift alone a few times, and finally hold Left Shift and tap the key printed Y while also tapping X.
+expected: In every order both bats rise while both Shifts are held and both drop the moment the second Shift comes up. No bat is left raised after both Shifts are up, and none rises again on the next serve. Single Shift taps flip and drop as before. Known residual, not a failure: after releasing the first Shift while the other is held, that bat stays up until the second Shift is released (Windows sends the page nothing).
+result: [pending]
+
+### 20. UAT 18 decision A visual check (04-13 Task 2 human-check). Chrome, German QWERTZ, 1280x684 window at 150% scaling. Press Enter, read the controls panel, then press the key printed Y and the key printed - . Optionally open in Firefox.
+expected: Chrome: Left flipper row reads Y <- Left Shift, Right flipper row reads - -> Right Shift, Nudge reads X . up-arrow. Under the list a small note reads 'On Windows, <- -> Y - are the most reliable flipper keys. Shift can stick.' wrapped inside the panel; panel no wider than before and covering neither table nor plunger meter. Y raises the left bat and - raises the right. Firefox: note reads 'On Windows, <- -> are the most reliable flipper keys. Shift can stick.' and the rows keep their markup labels.
+result: [pending]
+
+### 21. Decide disposition of open review findings WR-01 (second-Shift press after a force-clear is dropped on Windows) and WR-02 (Shift keydown reporting shiftKey false drops the other Shift).
+expected: A recorded user decision: fix in a follow-up gap plan, or accept as residual.
+result: [pending]
+
 ## Summary
 
-total: 18
+total: 21
 passed: 14
 issues: 4
-pending: 0
+pending: 3
 skipped: 0
 blocked: 0
 
