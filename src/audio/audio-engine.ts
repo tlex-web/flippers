@@ -104,8 +104,11 @@ function wallClockMs(): number {
 /**
  * Default activation probe: whether the page has transient user activation
  * now, i.e. whether a `resume()` issued from this gesture can start the
- * context. A modifier-only keydown (Shift, a flipper key) is not activation
- * in Chromium. Engines without `navigator.userActivation` count every gesture.
+ * context. A modifier-only keydown (Shift) is not activation in Chromium, but
+ * the non-modifier flipper keys (Z, /, the arrows) are, auto-repeat included,
+ * and activation stays live for seconds after any such input. Engines without
+ * `navigator.userActivation` count every gesture. So this probe alone cannot
+ * bound reopening; `unlock()` allows one reopen per stuck resume (WR-01).
  */
 function hasTransientActivation(): boolean {
   if (typeof navigator === "undefined") return true;
