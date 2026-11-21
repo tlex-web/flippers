@@ -177,6 +177,15 @@ export class FlipperInput {
   /** Long-lived set of currently-down bound `event.code`s (never re-created). */
   private readonly held = new Set<string>();
 
+  /**
+   * The Shift code of the most recent ignored Shift auto-repeat since the last
+   * force-clear (heal only). Windows flags the held Shift's typematic repeat as
+   * a repeat, so this marker proves that Shift is physically down even when the
+   * clear removed it from `held` (G-04-21). Reset by forceClear and by a Shift
+   * keyup reporting Shift up. Holds only the module constants or null.
+   */
+  private repeatingShift: typeof SHIFT_LEFT | typeof SHIFT_RIGHT | null = null;
+
   /** The latch handlers write into; copied out and reset on every drain. */
   private readonly pending: MutableEdges = {
     leftPress: false,
@@ -219,6 +228,11 @@ export class FlipperInput {
     this.dropStaleShift(e);
     if (e.repeat && !this.isSecondShiftPress(e.code)) {
       // auto-repeat suppression: never re-triggers a flip, never preventDefaults
+      if (this.windowsShiftHeal) {
+        // G-04-21: remember which Shift is auto-repeating (physically down).
+        if (e.code === SHIFT_LEFT) this.repeatingShift = SHIFT_LEFT;
+        else if (e.code === SHIFT_RIGHT) this.repeatingShift = SHIFT_RIGHT;
+      }
       this.commitTransitions(leftBefore, rightBefore);
       return;
     }
@@ -243,6 +257,10 @@ export class FlipperInput {
     const rightBefore = this.isSideHeld("right");
     this.dropStaleShift(e);
     if (CODE_TO_SIDE.has(e.code)) this.held.delete(e.code);
+    if ((e.code === SHIFT_LEFT || e.code === SHIFT_RIGHT) && e.shiftKey === false) {
+      // On Windows VK_SHIFT is now fully up, so no Shift is repeating (G-04-21).
+      this.repeatingShift = null;
+    }
     this.commitTransitions(leftBefore, rightBefore);
   }
 
@@ -362,15 +380,18 @@ export class FlipperInput {
   /**
    * Windows second Shift press (G-04-17): with the heal on, a repeat keydown for
    * a Shift code that is not held while the OTHER Shift is held is the second
-   * physical Shift, which Windows flags as a repeat of the shared VK_SHIFT. A
-   * held Shift's own auto-repeat and a lone repeat stay ignored. Allocates
-   * nothing.
+   * physical Shift, which Windows flags as a repeat of the shared VK_SHIFT.
+   * G-04-21: the OTHER Shift also counts when it carried an ignored auto-repeat
+   * since the last force-clear (`repeatingShift`), so a Shift held across a
+   * clear no longer blocks the other Shift even though `held` is empty. A held
+   * Shift's own auto-repeat and a lone repeat stay ignored. Allocates nothing.
    */
   private isSecondShiftPress(code: string): boolean {
     if (!this.windowsShiftHeal) return false;
-    if (code === SHIFT_LEFT) return !this.held.has(SHIFT_LEFT) && this.held.has(SHIFT_RIGHT);
-    if (code === SHIFT_RIGHT) return !this.held.has(SHIFT_RIGHT) && this.held.has(SHIFT_LEFT);
-    return false;
+    if (code !== SHIFT_LEFT && code !== SHIFT_RIGHT) return false;
+    if (this.held.has(code)) return false;
+    const other = code === SHIFT_LEFT ? SHIFT_RIGHT : SHIFT_LEFT;
+    return this.held.has(other) || this.repeatingShift === other;
   }
 
   /**
@@ -398,6 +419,7 @@ export class FlipperInput {
     const leftBefore = this.isSideHeld("left");
     const rightBefore = this.isSideHeld("right");
     this.held.clear();
+    this.repeatingShift = null;
     this.commitTransitions(leftBefore, rightBefore);
   }
 }
