@@ -5,28 +5,28 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "Mute ramp and Firefox voice-steal fade start from a stale event, so the 50 ms fade is effectively an instant cut"
+    disposition: open
+    title: "[new, WR-02 fix code] Voices queued on a frozen-clock suspended context are never torn down, so the 16-voice bound does not hold for the audio graph"
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "[new, WR-02 fix code] The sandbox header still says cues are dropped while the context is not running"
+  - id: IN-02
+    severity: info
+    disposition: open
+    title: "[new, IN-03 fix code] A second live region contradicts the \"only announced line\" documentation, and unmuting is silent to assistive tech"
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "[new, IN-04 fix code] The asset gate still misses remote stylesheets, fonts and scripts"
+  - id: IN-04
+    severity: info
+    disposition: open
+    title: "[new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step"
   - id: WR-02
     severity: warning
     disposition: fixed
     title: "Cues recorded before a new context reports \"running\" are dropped, so the first \"start\" jingle can be lost"
-  - id: IN-01
-    severity: info
-    disposition: fixed
-    title: "The flash clock runs one step ahead of the interpolated scene, and the first rendered frame of every flash is already past its hold"
-  - id: IN-02
-    severity: info
-    disposition: fixed
-    title: "`FixedStepLoop.advance` does not floor a negative delta, so `alpha` can go below 0 and interpolation extrapolates"
-  - id: IN-03
-    severity: info
-    disposition: fixed
-    title: "The mute key ignores modifiers and there is no on-screen mute state"
-  - id: IN-04
-    severity: info
-    disposition: fixed
-    title: "The asset-free gate has blind spots"
   - id: IN-05
     severity: info
     disposition: fixed
@@ -39,24 +39,24 @@ findings:
     severity: info
     disposition: fixed
     title: "A global 30 s `testTimeout` applies to every test, not just the heavy simulation suites"
-open: 0
+open: 5
 total: 9
-recorded: 2026-11-21T21:37:11.441Z
+recorded: 2026-11-21T22:18:45.573Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 05-REVIEW-FIX.md |
-| IN-01 | info | fixed | 05-REVIEW-FIX.md |
-| IN-02 | info | fixed | 05-REVIEW-FIX.md |
-| IN-03 | info | fixed | 05-REVIEW-FIX.md |
-| IN-04 | info | fixed | 05-REVIEW-FIX.md |
-| IN-05 | info | fixed | 05-REVIEW-FIX.md |
-| IN-06 | info | fixed | 05-REVIEW-FIX.md |
-| IN-07 | info | fixed | 05-REVIEW-FIX.md |
+| WR-01 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | open | - |
+| IN-04 | info | open | - |
+| WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-06 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-07 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
