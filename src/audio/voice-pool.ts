@@ -94,10 +94,12 @@ export class VoicePool {
    * Make room for one new voice of `kind` starting at `now`: drop voices that
    * have ended, steal the oldest of this kind while the kind is at or above
    * `cap`, then the oldest overall while the pool is full. `rendering` is
-   * false when the context is not running: a voice stolen then is torn down
-   * at once, because its `onended` will not fire.
+   * false when the context is not rendering: a voice stolen then is torn down
+   * at once, because its `onended` will not fire. Required, not defaulted, so
+   * a caller that forgets it gets a type error rather than a quiet leak on a
+   * context that never renders (05-REVIEW IN-07).
    */
-  admit(kind: CueKind, cap: number, now: number, rendering: boolean = true): void {
+  admit(kind: CueKind, cap: number, now: number, rendering: boolean): void {
     this.prune(now);
     const limit = Math.max(1, Math.floor(cap));
     while (this.activeCount(kind) >= limit && this.steal(this.oldest(kind), now, rendering));
@@ -107,8 +109,13 @@ export class VoicePool {
     );
   }
 
-  /** Track a voice built after `admit`. Never grows past the cap. */
-  add(v: VoiceHandle, rendering: boolean = true): void {
+  /**
+   * Track a voice built after `admit`. Never grows past the cap: the engine
+   * always admits first, so its steal loop only runs for a caller that skips
+   * `admit` (a public-API invariant, kept on purpose). `rendering` as in
+   * `admit`, required for the same reason.
+   */
+  add(v: VoiceHandle, rendering: boolean): void {
     while (
       this.active.length >= this.maxVoices &&
       this.steal(this.oldest(undefined), v.startedAt, rendering)

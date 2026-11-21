@@ -58,8 +58,8 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     expect(MAX_VOICES).toBe(16);
     for (let i = 0; i < 200; i++) {
       const now = i * 0.001;
-      pool.admit("bumper", RECIPES.bumper.cap, now);
-      pool.add(handle("bumper", now));
+      pool.admit("bumper", RECIPES.bumper.cap, now, true);
+      pool.add(handle("bumper", now), true);
       expect(pool.activeCount("bumper")).toBeLessThanOrEqual(4);
       expect(pool.activeCount()).toBeLessThanOrEqual(MAX_VOICES);
     }
@@ -71,8 +71,8 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     for (let i = 0; i < 200; i++) {
       const kind = CUE_KINDS[i % CUE_KINDS.length] as CueKind;
       const now = i * 0.001;
-      pool.admit(kind, RECIPES[kind].cap, now);
-      pool.add(handle(kind, now, now + 10));
+      pool.admit(kind, RECIPES[kind].cap, now, true);
+      pool.add(handle(kind, now, now + 10), true);
       expect(pool.activeCount()).toBeLessThanOrEqual(MAX_VOICES);
       for (const k of CUE_KINDS) expect(pool.activeCount(k)).toBeLessThanOrEqual(RECIPES[k].cap);
     }
@@ -81,9 +81,9 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
   it("a stolen voice fades every envelope gain over STEAL_FADE_S and stops every source", () => {
     const pool = new VoicePool();
     const first = handle("bumper", 0.5);
-    pool.add(first);
+    pool.add(first, true);
     const now = 0.7;
-    pool.admit("bumper", 1, now);
+    pool.admit("bumper", 1, now, true);
     expect(pool.activeCount("bumper")).toBe(0);
     for (const e of first.envs) {
       const ev = e.gain.events;
@@ -103,12 +103,12 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     const a = handle("bumper", 1, 10);
     const b = handle("bumper", 1, 10);
     const c = handle("bumper", 0.5, 10);
-    pool.add(a);
-    pool.add(b);
-    pool.add(c);
-    pool.admit("bumper", 3, 2);
+    pool.add(a, true);
+    pool.add(b, true);
+    pool.add(c, true);
+    pool.admit("bumper", 3, 2, true);
     expect(wasStolen(c)).toBe(true);
-    pool.admit("bumper", 2, 2);
+    pool.admit("bumper", 2, 2, true);
     expect(wasStolen(a)).toBe(true);
     expect(wasStolen(b)).toBe(false);
   });
@@ -116,8 +116,8 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
   it("prunes voices whose endsAt has passed at the next admission, without fading them", () => {
     const pool = new VoicePool();
     const done = handle("drain", 0, 1);
-    pool.add(done);
-    pool.admit("drain", 1, 1);
+    pool.add(done, true);
+    pool.admit("drain", 1, 1, true);
     expect(pool.activeCount()).toBe(0);
     expect(wasStolen(done)).toBe(false);
   });
@@ -125,8 +125,8 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
   it("a steal on a rendering context leaves teardown to onended (the fade must play)", () => {
     const pool = new VoicePool();
     const first = handle("bumper", 0.5);
-    pool.add(first);
-    pool.admit("bumper", 1, 0.7);
+    pool.add(first, true);
+    pool.admit("bumper", 1, 0.7, true);
     expect(wasStolen(first)).toBe(true);
     expect(first.torn.count).toBe(0);
   });
@@ -151,7 +151,7 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
   it("discardAll fades, stops, tears down and forgets every voice", () => {
     const pool = new VoicePool();
     const hs = [handle("bumper", 0.5), handle("lane", 0.6), handle("drain", 0.7)];
-    for (const h of hs) pool.add(h);
+    for (const h of hs) pool.add(h, true);
     pool.discardAll(0.8);
     expect(pool.activeCount()).toBe(0);
     for (const h of hs) {
@@ -168,7 +168,7 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
   it("release removes a handle once; releasing again is a no-op", () => {
     const pool = new VoicePool();
     const h = handle("lane", 0);
-    pool.add(h);
+    pool.add(h, true);
     pool.release(h);
     pool.release(h);
     expect(pool.activeCount()).toBe(0);
@@ -210,9 +210,9 @@ describe("steal fade starts at the live level (WR-01)", () => {
   it("a steal during a hold segment fades from the held peak, not from a stale event", () => {
     const pool = new VoicePool();
     const v = envelopedHandle("tilt", 0, HOLD_ENV, 0.8, false);
-    pool.add(v);
+    pool.add(v, true);
     const now = 0.3;
-    pool.admit("tilt", 1, now);
+    pool.admit("tilt", 1, now, true);
     const g = v.envs[0]?.gain;
     if (!g) throw new Error("no gain");
     expect(g.valueAt(now)).toBeCloseTo(0.8, 9);
@@ -227,9 +227,9 @@ describe("steal fade starts at the live level (WR-01)", () => {
     if (!g) throw new Error("no gain");
     const points = v.envs[0]?.points ?? [];
     const before = g.valueAt(0.05);
-    pool.add(v);
+    pool.add(v, true);
     const now = 0.1;
-    pool.admit("bumper", 1, now);
+    pool.admit("bumper", 1, now, true);
     expect(g.events.some((e) => e.type === "cancel")).toBe(true);
     // Between the render point and `now` the level still follows the decay.
     expect(g.valueAt(0.05)).toBeCloseTo(before, 9);
