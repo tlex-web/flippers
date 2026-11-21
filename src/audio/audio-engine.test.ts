@@ -248,6 +248,7 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     fake: FakeAudioContext;
     engine: AudioEngine;
     clock: { ms: number };
+    activation: { active: boolean };
     chain: number;
   } {
     const fake = new FakeAudioContext();
@@ -257,13 +258,16 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
       return new Promise<void>(() => {});
     };
     const clock = { ms: 1000 };
+    // Re-gestures default to non-activating (a modifier-only keydown).
+    const activation = { active: false };
     const engine = new AudioEngine(
       () => fake,
       () => 0.5,
       () => clock.ms,
+      () => activation.active,
     );
     engine.unlock();
-    return { fake, engine, clock, chain: fake.nodes.length };
+    return { fake, engine, clock, activation, chain: fake.nodes.length };
   }
 
   /** Voice nodes (after the master chain) still connected. */
@@ -291,7 +295,7 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
       for (const k of CUE_KINDS) q.push(k, 200 + (f % 3), 0.8);
       q.push("bumper", 201, 1);
       q.push("bumper", 202, 1);
-      if (f === 60) engine.unlock(); // a re-gesture while the resume is still pending
+      if (f === 60) engine.unlock(); // a non-activating re-gesture while the resume is still pending
       const before = fake.nodes.length;
       const started = engine.flush(q);
       expect(q.size).toBe(0);
@@ -323,6 +327,51 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     q.push("start", 0, 1);
     expect(engine.flush(q)).toBe(1);
     expect(engine.activeVoices()).toBe(1);
+  });
+
+  it("a re-gesture with activation after the window expired reopens it, so the 'start' cue plays (WR-01)", () => {
+    // Shift first: the context is created, its resume stays pending, and the
+    // window expires. Then Enter (real activation) while still pending.
+    const { fake, engine, clock, activation, chain } = stuckRig();
+    const q = new CueQueue();
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(1); // inside the first window
+    clock.ms = 3000;
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0); // expired: dropped, held voice discarded
+    expect(connected(fake, chain)).toBe(0);
+
+    // A non-activating re-gesture (held Shift auto-repeat) does not reopen it.
+    engine.unlock();
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
+
+    activation.active = true;
+    engine.unlock();
+    expect(fake.resumeCalls).toBe(3);
+    clock.ms += 16; // the "start" cue lands on the next frame, context still suspended
+    expect(fake.state).toBe("suspended");
+    q.push("start", 0, 1);
+    expect(engine.flush(q)).toBe(1);
+    expect(engine.activeVoices()).toBe(1);
+
+    // The reopened window is bounded too.
+    clock.ms += STARTING_WINDOW_MS;
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
+    expect(engine.activeVoices()).toBe(0);
+    expect(connected(fake, chain)).toBe(0);
+  });
+
+  it("a re-gesture with activation inside a live window does not extend it", () => {
+    const { engine, clock, activation } = stuckRig();
+    const q = new CueQueue();
+    clock.ms += STARTING_WINDOW_MS - 10;
+    activation.active = true;
+    engine.unlock();
+    clock.ms += 20;
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
   });
 
   it("a context that starts inside the window keeps the voices scheduled while starting", () => {

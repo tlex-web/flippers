@@ -9,7 +9,10 @@
  *   it reports "suspended" until the audio device is up (tens of ms on some
  *   engines), so `unlock()` calls `resume()` and the context counts as starting
  *   until that settles or STARTING_WINDOW_MS has passed, whichever is first;
- * - a later gesture while the context is not running calls `resume()`;
+ * - a later gesture while the context is not running calls `resume()`; one
+ *   with transient user activation also reopens an expired starting window,
+ *   since its `resume()` can start a context an earlier non-activating
+ *   gesture (a modifier-only keydown) left stuck;
  * - a creation failure is reported once and never retried; a rejected
  *   `resume()` is reported and the game keeps running (T-05-04).
  *
@@ -88,6 +91,18 @@ function wallClockMs(): number {
   return performance.now();
 }
 
+/**
+ * Default activation probe: whether the page has transient user activation
+ * now, i.e. whether a `resume()` issued from this gesture can start the
+ * context. A modifier-only keydown (Shift, a flipper key) is not activation
+ * in Chromium. Engines without `navigator.userActivation` count every gesture.
+ */
+function hasTransientActivation(): boolean {
+  if (typeof navigator === "undefined") return true;
+  const nav = navigator as Partial<Pick<Navigator, "userActivation">>;
+  return nav.userActivation?.isActive ?? true;
+}
+
 /** Length of the shared mono white-noise buffer (s). */
 export const NOISE_SECONDS = 1;
 
@@ -118,6 +133,7 @@ export class AudioEngine {
   private readonly createContext: () => AudioContextLike;
   private readonly rng: () => number;
   private readonly clock: () => number;
+  private readonly isActivation: () => boolean;
 
   private ctx: AudioContextLike | null = null;
   private master: GainNodeLike | null = null;
@@ -129,7 +145,9 @@ export class AudioEngine {
   /**
    * Wall-clock deadline (ms, `clock`) of the starting window, set when a
    * `resume()` is issued with none already in flight. A later gesture while
-   * the first resume is still pending does not extend it.
+   * the first resume is still pending does not extend it, except that a
+   * gesture with transient activation reopens a window that has expired: its
+   * `resume()` can really start the context (05-REVIEW WR-01).
    */
   private startingUntilMs = 0;
   /** Set once a closed context has been reported; later gestures stay quiet. */
@@ -149,15 +167,20 @@ export class AudioEngine {
   /**
    * @param clock wall clock in ms bounding the starting window
    *   (`performance.now` by default; tests inject a fake one).
+   * @param isActivation whether the current gesture carries transient user
+   *   activation (`navigator.userActivation.isActive` by default; tests
+   *   inject one). Only such a gesture reopens an expired starting window.
    */
   constructor(
     createContext: () => AudioContextLike,
     rng: () => number = Math.random,
     clock: () => number = wallClockMs,
+    isActivation: () => boolean = hasTransientActivation,
   ) {
     this.createContext = createContext;
     this.rng = rng;
     this.clock = clock;
+    this.isActivation = isActivation;
   }
 
   /**
@@ -248,9 +271,19 @@ export class AudioEngine {
       return;
     }
     try {
-      // Open the starting window only for a fresh resume: re-gestures while a
-      // resume stays pending must not keep re-opening it.
-      if (!this.resumePending) this.startingUntilMs = this.clock() + STARTING_WINDOW_MS;
+      // Open the starting window for a fresh resume. While a resume stays
+      // pending, re-gestures do not keep re-opening it (held-Shift auto-repeat
+      // would bring back unbounded node growth), except a gesture with
+      // transient activation after the window expired: a first modifier-only
+      // keydown leaves the resume stuck, and the later Enter really starts the
+      // context, so its "start" cue must still be playable (WR-01).
+      const nowMs = this.clock();
+      const expired = nowMs >= this.startingUntilMs;
+      if (!this.resumePending || (expired && this.isActivation())) {
+        // Voices from an expired window must not ride into the new one.
+        if (this.resumePending) this.pool.discardAll(ctx.currentTime);
+        this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
+      }
       this.resumePending = true;
       ctx.resume().then(
         () => {
