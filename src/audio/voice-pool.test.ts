@@ -21,6 +21,8 @@ interface TestHandle extends VoiceHandle {
     readonly points: ReturnType<typeof envelopePoints>;
   }[];
   readonly sources: readonly FakeOscillator[];
+  /** How many times the pool called `teardown`. */
+  readonly torn: { count: number };
 }
 
 function handle(kind: CueKind, startedAt: number, endsAt: number = startedAt + 1): TestHandle {
@@ -29,6 +31,7 @@ function handle(kind: CueKind, startedAt: number, endsAt: number = startedAt + 1
     s.start(startedAt);
     s.stop(endsAt);
   }
+  const torn = { count: 0 };
   return {
     kind,
     startedAt,
@@ -38,6 +41,10 @@ function handle(kind: CueKind, startedAt: number, endsAt: number = startedAt + 1
       { gain: new FakeParam("gain", 1), points: [] },
     ],
     sources,
+    teardown: () => {
+      torn.count++;
+    },
+    torn,
   };
 }
 
@@ -115,6 +122,49 @@ describe("VoicePool caps (Pitfall 7, T-05-10)", () => {
     expect(wasStolen(done)).toBe(false);
   });
 
+  it("a steal on a rendering context leaves teardown to onended (the fade must play)", () => {
+    const pool = new VoicePool();
+    const first = handle("bumper", 0.5);
+    pool.add(first);
+    pool.admit("bumper", 1, 0.7);
+    expect(wasStolen(first)).toBe(true);
+    expect(first.torn.count).toBe(0);
+  });
+
+  it("a steal on a context that is not rendering tears the voice down at once (05-REVIEW WR-01)", () => {
+    const pool = new VoicePool();
+    const first = handle("bumper", 0.5);
+    pool.add(first, false);
+    pool.admit("bumper", 1, 0.5, false);
+    expect(wasStolen(first)).toBe(true);
+    expect(first.torn.count).toBe(1);
+    // add() steals the oldest when full; a 1-voice pool exercises that path.
+    const tiny = new VoicePool(1);
+    const a = handle("lane", 0.5);
+    const b = handle("lane", 0.5);
+    tiny.add(a, false);
+    tiny.add(b, false);
+    expect(a.torn.count).toBe(1);
+    expect(b.torn.count).toBe(0);
+  });
+
+  it("discardAll fades, stops, tears down and forgets every voice", () => {
+    const pool = new VoicePool();
+    const hs = [handle("bumper", 0.5), handle("lane", 0.6), handle("drain", 0.7)];
+    for (const h of hs) pool.add(h);
+    pool.discardAll(0.8);
+    expect(pool.activeCount()).toBe(0);
+    for (const h of hs) {
+      expect(wasStolen(h)).toBe(true);
+      expect(h.torn.count).toBe(1);
+      for (const s of h.sources) {
+        expect(s.stopTime ?? Infinity).toBeLessThan(0.8 + 2 * STEAL_FADE_S);
+      }
+    }
+    pool.discardAll(0.9); // empty pool: a no-op
+    for (const h of hs) expect(h.torn.count).toBe(1);
+  });
+
   it("release removes a handle once; releasing again is a no-op", () => {
     const pool = new VoicePool();
     const h = handle("lane", 0);
@@ -139,12 +189,17 @@ function envelopedHandle(
   const src = new FakeOscillator();
   src.start(t0);
   src.stop(end);
+  const torn = { count: 0 };
   return {
     kind,
     startedAt: t0,
     endsAt: end,
     envs: [{ gain, points: envelopePoints(t0, env, peak) }],
     sources: [src],
+    teardown: () => {
+      torn.count++;
+    },
+    torn,
   };
 }
 

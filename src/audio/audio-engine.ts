@@ -8,7 +8,7 @@
  *   gesture (`AudioUnlock`); a context created there is allowed to start, but
  *   it reports "suspended" until the audio device is up (tens of ms on some
  *   engines), so `unlock()` calls `resume()` and the context counts as starting
- *   until that settles;
+ *   until that settles or STARTING_WINDOW_MS has passed, whichever is first;
  * - a later gesture while the context is not running calls `resume()`;
  * - a creation failure is reported once and never retried; a rejected
  *   `resume()` is reported and the game keeps running (T-05-04).
@@ -16,16 +16,24 @@
  * Pull-then-play, the collision-router split: the step path only records cues
  * into the `CueQueue`; `flush()` runs once per render frame and is the only
  * place audio nodes are created. A starting context (suspended with a resume in
- * flight) is playable: nodes scheduled on it at the frozen `currentTime` sound
- * as soon as it runs, so the first "start" figure is not lost. Otherwise,
- * without a running context, `flush()` drops the queued cues: a stale cue is
- * never replayed after a resume.
+ * flight) is playable for at most STARTING_WINDOW_MS after the first `resume()`
+ * call (wall clock, from the injected `clock`): nodes scheduled on it at the
+ * frozen `currentTime` sound as soon as it runs, so the first "start" figure is
+ * not lost. A `resume()` can stay pending forever (no output device, or a
+ * gesture the browser does not count as activation), so the window is bounded.
+ * Otherwise, without a running context, `flush()` drops the queued cues and
+ * discards every voice still held (stopped and disconnected at once), so the
+ * voices of an expired window never burst out on a late start: a stale cue is
+ * at most STARTING_WINDOW_MS old when it sounds, never replayed after that.
  *
  * Every voice goes through the master chain (master gain, then a dynamics
  * compressor, then the destination), so no sound can bypass the limiter.
  * Envelopes are anchored with `setValueAtTime` and ramp exponentially between
  * strictly positive values (Pitfall 5); every source is started and stopped
- * once and its voice disconnects itself on `onended` (Pattern 6).
+ * once and its voice disconnects itself on `onended` (Pattern 6). A context
+ * that is not rendering never fires `onended`, so there a voice is torn down
+ * by the pool when it is stolen or discarded instead, and the audio graph
+ * stays bounded by the pool's 16 voices.
  *
  * Voices are data: `flush()` looks up `RECIPES[cue.kind]` and builds one
  * source (plus an optional filter and its own envelope gain) per layer. The
@@ -68,6 +76,18 @@ export const MUTE_RAMP_S = 0.05;
 /** A source keeps running this long after its envelope reaches the floor (s). */
 export const SOURCE_TAIL_S = 0.01;
 
+/**
+ * Longest a suspended context with a resume in flight counts as starting and
+ * playable (wall-clock ms, from the first `resume()` call). Normal start-up
+ * takes tens of ms; past this, cues are dropped until the context runs.
+ */
+export const STARTING_WINDOW_MS = 250;
+
+/** Default wall clock for the starting window (ms). */
+function wallClockMs(): number {
+  return performance.now();
+}
+
 /** Length of the shared mono white-noise buffer (s). */
 export const NOISE_SECONDS = 1;
 
@@ -97,14 +117,21 @@ function closeQuietly(ctx: AudioContextLike): void {
 export class AudioEngine {
   private readonly createContext: () => AudioContextLike;
   private readonly rng: () => number;
+  private readonly clock: () => number;
 
   private ctx: AudioContextLike | null = null;
   private master: GainNodeLike | null = null;
   private noise: AudioBufferLike | null = null;
   /** Set when creation threw; later gestures do not retry. */
   private failed = false;
-  /** A `resume()` is in flight: a suspended context is about to run. */
+  /** A `resume()` is in flight: a suspended context may be about to run. */
   private resumePending = false;
+  /**
+   * Wall-clock deadline (ms, `clock`) of the starting window, set when a
+   * `resume()` is issued with none already in flight. A later gesture while
+   * the first resume is still pending does not extend it.
+   */
+  private startingUntilMs = 0;
   /** Set once a closed context has been reported; later gestures stay quiet. */
   private closedReported = false;
   private muted = false;
@@ -119,9 +146,18 @@ export class AudioEngine {
   private masterToV = 0;
   private readonly pool = new VoicePool();
 
-  constructor(createContext: () => AudioContextLike, rng: () => number = Math.random) {
+  /**
+   * @param clock wall clock in ms bounding the starting window
+   *   (`performance.now` by default; tests inject a fake one).
+   */
+  constructor(
+    createContext: () => AudioContextLike,
+    rng: () => number = Math.random,
+    clock: () => number = wallClockMs,
+  ) {
     this.createContext = createContext;
     this.rng = rng;
+    this.clock = clock;
   }
 
   /**
@@ -212,6 +248,9 @@ export class AudioEngine {
       return;
     }
     try {
+      // Open the starting window only for a fresh resume: re-gestures while a
+      // resume stays pending must not keep re-opening it.
+      if (!this.resumePending) this.startingUntilMs = this.clock() + STARTING_WINDOW_MS;
       this.resumePending = true;
       ctx.resume().then(
         () => {
@@ -259,17 +298,27 @@ export class AudioEngine {
   /**
    * Play every queued cue in FIFO order, all at the same t0, then empty the
    * queue. Returns the number of voices started. Muted or without a playable
-   * context (running, or suspended with a resume in flight) it creates
-   * nothing, empties the queue and returns 0 (a cue is never replayed later).
+   * context (running, or starting: suspended with a resume in flight, within
+   * STARTING_WINDOW_MS) it creates nothing, empties the queue and returns 0
+   * (a cue is never replayed later). A context that is neither running nor
+   * starting also has every voice it still holds discarded: it cannot fire
+   * their `onended`, and they must not burst out if it starts late.
    * Call once per render frame.
    */
   flush(cues: CueQueue): number {
     const ctx = this.ctx;
     const master = this.master;
-    const playable =
-      ctx !== null &&
-      (ctx.state === "running" || (this.resumePending && ctx.state === "suspended"));
-    if (this.muted || ctx === null || master === null || !playable) {
+    if (ctx === null || master === null) {
+      cues.clear();
+      return 0;
+    }
+    const rendering = ctx.state === "running";
+    if (!rendering && !this.isStarting(ctx)) {
+      this.pool.discardAll(ctx.currentTime);
+      cues.clear();
+      return 0;
+    }
+    if (this.muted) {
       cues.clear();
       return 0;
     }
@@ -279,7 +328,7 @@ export class AudioEngine {
       const cue = cues.at(i);
       if (!cue) continue;
       try {
-        if (this.play(ctx, master, cue, t0)) started++;
+        if (this.play(ctx, master, cue, t0, rendering)) started++;
       } catch (error) {
         report("voice failed", error);
       }
@@ -288,8 +337,23 @@ export class AudioEngine {
     return started;
   }
 
-  /** Build one cue's voice from its recipe. Returns true when it started. */
-  private play(ctx: AudioContextLike, master: AudioNodeLike, cue: Cue, t0: number): boolean {
+  /** Suspended with a resume in flight, inside the bounded starting window. */
+  private isStarting(ctx: AudioContextLike): boolean {
+    return this.resumePending && ctx.state === "suspended" && this.clock() < this.startingUntilMs;
+  }
+
+  /**
+   * Build one cue's voice from its recipe. Returns true when it started.
+   * `rendering` is false on a starting context, where a stolen voice must be
+   * torn down by the pool because its `onended` cannot fire.
+   */
+  private play(
+    ctx: AudioContextLike,
+    master: AudioNodeLike,
+    cue: Cue,
+    t0: number,
+    rendering: boolean,
+  ): boolean {
     const recipe = RECIPES[cue.kind];
     const s = cue.strength;
     const idSt = recipe.idSemitones?.[cue.elementId] ?? 0;
@@ -297,7 +361,7 @@ export class AudioEngine {
       idSt + playbackSemitones(s, this.rng, recipe.maxSemitones, recipe.jitterCents),
     );
     const level = recipe.peak * (recipe.levelFromStrength ? strengthToGain(s) : 1);
-    this.pool.admit(cue.kind, recipe.cap, t0);
+    this.pool.admit(cue.kind, recipe.cap, t0, rendering);
     const nodes: AudioNodeLike[] = [];
     const envs: { gain: GainNodeLike["gain"]; points: readonly EnvPoint[] }[] = [];
     const sources: ScheduledSourceLike[] = [];
@@ -316,18 +380,24 @@ export class AudioEngine {
         }
       }
       if (last === null) return false;
+      // Disconnect the whole voice; repeating it is harmless.
+      const teardown = (): void => {
+        for (let i = 0; i < nodes.length; i++) nodes[i]?.disconnect();
+      };
       const handle: VoiceHandle = {
         kind: cue.kind,
         startedAt: t0,
         endsAt: lastStop,
         envs,
         sources,
+        teardown,
       };
-      this.pool.add(handle);
-      // The latest-ending source tears down the whole voice.
+      this.pool.add(handle, rendering);
+      // The latest-ending source tears down the whole voice; on a context
+      // that is not rendering the pool does it on a steal or discard instead.
       last.onended = () => {
         this.pool.release(handle);
-        for (let i = 0; i < nodes.length; i++) nodes[i]?.disconnect();
+        teardown();
       };
       return true;
     } catch (error) {

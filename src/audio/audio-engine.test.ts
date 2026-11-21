@@ -1,10 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
 
-import { CueQueue, type CueKind } from "../app/cue-queue";
+import { CUE_KINDS, CueQueue, type CueKind } from "../app/cue-queue";
 import { mulberry32 } from "../harness/prng";
-import { AudioEngine, MASTER_GAIN, MUTE_RAMP_S, SCHEDULE_AHEAD_S } from "./audio-engine";
+import {
+  AudioEngine,
+  MASTER_GAIN,
+  MUTE_RAMP_S,
+  SCHEDULE_AHEAD_S,
+  STARTING_WINDOW_MS,
+} from "./audio-engine";
 import { semitoneRatio } from "./mapping";
+import { RECIPES } from "./recipes";
 import { FakeAudioContext, FakeGain, FakeOscillator } from "./test/fake-audio-context";
+import { MAX_VOICES } from "./voice-pool";
 
 /** An unlocked engine over a fresh fake context. */
 function rig(rng: () => number): { fake: FakeAudioContext; engine: AudioEngine; chain: number } {
@@ -174,6 +182,7 @@ describe("a starting context is playable (WR-02)", () => {
       engine: new AudioEngine(
         () => fake,
         () => 0.5,
+        () => 0,
       ),
     };
   }
@@ -226,6 +235,120 @@ describe("a starting context is playable (WR-02)", () => {
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(0);
     expect(fake.nodes.length).toBe(chain);
+  });
+});
+
+describe("the starting window is bounded (05-REVIEW WR-01)", () => {
+  /**
+   * A browser-like new context whose `resume()` never settles (no output
+   * device, or a gesture that is not activation), on a fake wall clock. Its
+   * `currentTime` stays frozen at 0 and `onended` never fires.
+   */
+  function stuckRig(): {
+    fake: FakeAudioContext;
+    engine: AudioEngine;
+    clock: { ms: number };
+    chain: number;
+  } {
+    const fake = new FakeAudioContext();
+    fake.state = "suspended";
+    fake.resume = () => {
+      fake.resumeCalls++;
+      return new Promise<void>(() => {});
+    };
+    const clock = { ms: 1000 };
+    const engine = new AudioEngine(
+      () => fake,
+      () => 0.5,
+      () => clock.ms,
+    );
+    engine.unlock();
+    return { fake, engine, clock, chain: fake.nodes.length };
+  }
+
+  /** Voice nodes (after the master chain) still connected. */
+  function connected(fake: FakeAudioContext, chain: number): number {
+    return fake.nodes.slice(chain).filter((n) => !n.disconnected).length;
+  }
+
+  /** Most nodes one voice can create: per layer an envelope gain, a source and maybe a filter. */
+  const MAX_NODES_PER_VOICE = Math.max(
+    ...CUE_KINDS.map((k) =>
+      RECIPES[k].layers.reduce((n, layer) => n + 2 + (layer.filter ? 1 : 0), 0),
+    ),
+  );
+
+  it("cues stop being built after the window; stolen and leftover voices are torn down without onended", async () => {
+    const { fake, engine, clock, chain } = stuckRig();
+    await Promise.resolve();
+    const graphBound = MAX_VOICES * MAX_NODES_PER_VOICE;
+    const frameMs = 1000 / 60;
+    const q = new CueQueue();
+    let builtFrames = 0;
+    for (let f = 0; f < 120; f++) {
+      clock.ms = 1000 + f * frameMs;
+      const inWindow = f * frameMs < STARTING_WINDOW_MS;
+      for (const k of CUE_KINDS) q.push(k, 200 + (f % 3), 0.8);
+      q.push("bumper", 201, 1);
+      q.push("bumper", 202, 1);
+      if (f === 60) engine.unlock(); // a re-gesture while the resume is still pending
+      const before = fake.nodes.length;
+      const started = engine.flush(q);
+      expect(q.size).toBe(0);
+      if (inWindow) {
+        // (b) the pool's bound holds for the graph: every stolen voice was
+        // disconnected by the pool, since onended never fires here.
+        expect(started).toBe(CUE_KINDS.length + 2);
+        expect(engine.activeVoices()).toBeLessThanOrEqual(MAX_VOICES);
+        expect(connected(fake, chain)).toBeLessThanOrEqual(graphBound);
+        builtFrames++;
+      } else {
+        // (a) the window expired: nothing is built, and every voice from the
+        // window was discarded so it cannot burst out on a late start.
+        expect(started).toBe(0);
+        expect(fake.nodes.length).toBe(before);
+        expect(engine.activeVoices()).toBe(0);
+        expect(connected(fake, chain)).toBe(0);
+      }
+    }
+    expect(builtFrames).toBe(Math.ceil(STARTING_WINDOW_MS / frameMs));
+    expect(fake.resumeCalls).toBe(2);
+    expect(fake.currentTime).toBe(0);
+    // Far more nodes were built than the graph ever held at once, and
+    // fireAllEnded() was never called: every disconnection came from the pool.
+    expect(fake.nodes.length - chain).toBeGreaterThan(3 * graphBound);
+
+    // When the context finally starts, only fresh cues play.
+    fake.state = "running";
+    q.push("start", 0, 1);
+    expect(engine.flush(q)).toBe(1);
+    expect(engine.activeVoices()).toBe(1);
+  });
+
+  it("a context that starts inside the window keeps the voices scheduled while starting", () => {
+    const { fake, engine, clock, chain } = stuckRig();
+    const q = new CueQueue();
+    q.push("start", 0, 1);
+    expect(engine.flush(q)).toBe(1);
+    const firstVoice = fake.nodes.length - chain;
+    clock.ms += 40; // normal start-up: tens of ms
+    fake.state = "running";
+    fake.currentTime = 0.04;
+    q.push("bumper", 200, 0.5);
+    expect(engine.flush(q)).toBe(1);
+    expect(engine.activeVoices()).toBe(2);
+    expect(fake.nodes.slice(chain, chain + firstVoice).every((n) => !n.disconnected)).toBe(true);
+  });
+
+  it("on a running context a stolen voice stays connected until its onended (the fade plays)", () => {
+    const { fake, engine, chain } = rig(() => 0.5);
+    const q = new CueQueue();
+    for (let i = 0; i < RECIPES.bumper.cap + 1; i++) q.push("bumper", 200, 0.5);
+    engine.flush(q);
+    expect(engine.activeVoices("bumper")).toBe(RECIPES.bumper.cap);
+    expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
+    fake.fireAllEnded();
+    expect(connected(fake, chain)).toBe(0);
   });
 });
 

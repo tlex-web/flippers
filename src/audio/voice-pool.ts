@@ -11,9 +11,15 @@
  * steals the same voices (deterministic automation logs).
  *
  * Bookkeeping only: the engine builds and wires voices; the pool sees handles
- * (their envelope gains and sources). The active list is a plain array that
- * never grows past `maxVoices`; allocation stays event-rate (one handle per
- * voice), never per frame or per step.
+ * (their envelope gains, sources and a `teardown` the engine supplies). The
+ * active list is a plain array that never grows past `maxVoices`; allocation
+ * stays event-rate (one handle per voice), never per frame or per step.
+ *
+ * A voice normally detaches itself in its last source's `onended`. A context
+ * that is not rendering (still starting, or suspended) never fires `onended`,
+ * so a voice stolen there (`rendering` false) is torn down at once, and
+ * `discardAll` tears down every voice the engine will no longer let play. The
+ * 16-voice bound therefore holds for the audio graph, not only for this list.
  */
 
 import type { CueKind } from "../app/cue-queue";
@@ -43,6 +49,12 @@ export interface VoiceHandle {
   readonly envs: readonly { readonly gain: AudioParamLike; readonly points: readonly EnvPoint[] }[];
   /** Every source of the voice (each already started). */
   readonly sources: readonly ScheduledSourceLike[];
+  /**
+   * Disconnect every node of the voice from the master bus (the body of its
+   * `onended`, minus the pool release). Called when the voice is stolen on a
+   * context that is not rendering, or discarded; must be safe to call twice.
+   */
+  readonly teardown: () => void;
 }
 
 /**
@@ -81,19 +93,36 @@ export class VoicePool {
   /**
    * Make room for one new voice of `kind` starting at `now`: drop voices that
    * have ended, steal the oldest of this kind while the kind is at or above
-   * `cap`, then the oldest overall while the pool is full.
+   * `cap`, then the oldest overall while the pool is full. `rendering` is
+   * false when the context is not running: a voice stolen then is torn down
+   * at once, because its `onended` will not fire.
    */
-  admit(kind: CueKind, cap: number, now: number): void {
+  admit(kind: CueKind, cap: number, now: number, rendering: boolean = true): void {
     this.prune(now);
     const limit = Math.max(1, Math.floor(cap));
-    while (this.activeCount(kind) >= limit && this.steal(this.oldest(kind), now));
-    while (this.active.length >= this.maxVoices && this.steal(this.oldest(undefined), now));
+    while (this.activeCount(kind) >= limit && this.steal(this.oldest(kind), now, rendering));
+    while (
+      this.active.length >= this.maxVoices &&
+      this.steal(this.oldest(undefined), now, rendering)
+    );
   }
 
   /** Track a voice built after `admit`. Never grows past the cap. */
-  add(v: VoiceHandle): void {
-    while (this.active.length >= this.maxVoices && this.steal(this.oldest(undefined), v.startedAt));
+  add(v: VoiceHandle, rendering: boolean = true): void {
+    while (
+      this.active.length >= this.maxVoices &&
+      this.steal(this.oldest(undefined), v.startedAt, rendering)
+    );
     this.active.push(v);
+  }
+
+  /**
+   * Stop, tear down and forget every voice, for a context that will not
+   * render them (a starting window that expired, or a suspended context).
+   * Each voice is faded and stopped as in a steal, then disconnected at once.
+   */
+  discardAll(now: number): void {
+    for (let i = this.active.length - 1; i >= 0; i--) this.steal(i, now, false);
   }
 
   /** Forget a voice (its `onended`); a no-op if it is no longer tracked. */
@@ -135,9 +164,11 @@ export class VoicePool {
 
   /**
    * Fade the voice at `index` out over STEAL_FADE_S from `now`, stop it and
-   * forget it. False when `index` resolves to no voice (ends the caller's loop).
+   * forget it; when the context is not `rendering`, also tear it down now
+   * (it has no `onended` to do it). False when `index` resolves to no voice
+   * (ends the caller's loop).
    */
-  private steal(index: number, now: number): boolean {
+  private steal(index: number, now: number, rendering: boolean): boolean {
     const v = this.active[index];
     if (!v) return false;
     this.active.splice(index, 1);
@@ -150,6 +181,7 @@ export class VoicePool {
     }
     const stop = fadeEnd + STEAL_STOP_PAD_S;
     for (let i = 0; i < v.sources.length; i++) v.sources[i]?.stop(stop);
+    if (!rendering) v.teardown();
     return true;
   }
 }
