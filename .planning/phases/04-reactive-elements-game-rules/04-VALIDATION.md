@@ -24,7 +24,7 @@ updated: "2026-11-21"
 | **Config file** | `vitest.config.ts` (excludes `**/*.gate.test.ts`), `vitest.gate.config.ts` (soak gates) |
 | **Quick run command** | `npx vitest run src/game src/input src/control src/ui` |
 | **Full suite command** | `npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak` |
-| **Estimated runtime** | ~3-11 s fast suite (34 files, 502 tests after the 04-14 gap closure; 482 after 04-12/04-13; heavy simulation tests can hit the 5 s default timeout under host CPU load — pre-existing, tracked as a pending todo); ~4 s at 33 files, 416 tests after the 04-11 gap closure; 392 after 04-09/04-10; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
+| **Estimated runtime** | ~3-11 s fast suite (34 files, 521 tests after the 04-15 gap closure; 502 after 04-14; 482 after 04-12/04-13; heavy simulation tests can hit the 5 s default timeout under host CPU load — pre-existing, tracked as a pending todo); ~4 s at 33 files, 416 tests after the 04-11 gap closure; 392 after 04-09/04-10; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
 
 ---
 
@@ -76,6 +76,9 @@ updated: "2026-11-21"
 | 04-14-01 | 14 | G4 ⁵ | FLIP-01, GAME-02 | T-04-40/41 | with the heal on, a Shift held across a focus regain no longer blocks the other Shift: once the held Shift's ignored auto-repeat is seen (`repeatingShift`), the other Shift's repeat-flagged press raises its bat within 2 fixed steps, window event to Planck bat (WR-01) | tracer (unit + keyboard-to-Planck e2e) | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
 | 04-14-02 | 14 | G4 ⁵ | FLIP-01, GAME-02 | T-04-42 | a ShiftLeft/ShiftRight keydown reporting `shiftKey:false` never drops the other held Shift; a Shift key's own event reconciles only on keyup with the heal on; non-Shift keydown reconciliation and G-04-17 keyups unchanged (WR-02) | unit (TDD) + e2e | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
 | 04-14-03 | 14 | G4 ⁵ | FLIP-01, GAME-02 | T-04-41/43 | WR-01 matrix over every clear source (focus, blur, hidden tab) and the mirror; marker resets on force-clear and on a Shift keyup reporting Shift up; own and lone repeats stay ignored; heal-off guard; residual T-04-43 pinned by R3; five-mutation teeth check (not committed); IN-01 comment only | unit + e2e (teeth-checked) + human-check | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
+| 04-15-01 | 15 | G5 ⁶ | FLIP-01, GAME-02 | T-04-44 | both Shifts held across a force-clear: a repeat-flagged re-press of the marker's own Shift, arriving more than `SHIFT_REPEAT_GAP_MS` (450 ms) after its last ignored auto-repeat, raises that bat, window event to Planck bat (G-04-21 cradle, option A timing) | tracer (unit + keyboard-to-Planck e2e) | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
+| 04-15-02 | 15 | G5 ⁶ | FLIP-01, GAME-02 | T-04-45/46/47/48 | cradle matrix C1-C11 (focus, blur and hidden clears, mirror, 450 ms boundary, a steady 400 ms stream never misread, missing or non-finite `timeStamp` never counts, de-dupe, heal off, residual C5 pinned, late pickup C6/C11); IN-01: `dropStaleShift` clears the marker and its time (I1, I2) | unit (TDD) + e2e | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
+| 04-15-03 | 15 | G5 ⁶ | FLIP-01, GAME-02 | T-04-44/45/46/48 | six-mutation teeth check M1-M6, each reddening exactly its named cases (not committed); header residual T-04-47; IN-02/IN-03 doc fixes; `main.ts` already forwards the native `KeyboardEvent.timeStamp` | unit + e2e (teeth-checked) + human-check | `npx vitest run src/input/flipper-input.test.ts src/sandbox/flipper-e2e.test.ts && npm run typecheck && npm run lint && npm test` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -88,6 +91,8 @@ updated: "2026-11-21"
 ⁴ G3 = third gap-closure run (04-12 wave 1, 04-13 wave 2) closing UAT gap G-04-17: 04-12 heals the Windows both-Shift merge and WR-01, 04-13 adds layout-correct key caps and the Windows reliability note.
 
 ⁵ G4 = fourth gap-closure run, wave 1 (04-14 closes UAT gap G-04-21: review findings WR-01 and WR-02 in the Windows Shift heal, with IN-01 riding along).
+
+⁶ G5 = fifth gap-closure run, wave 2 (04-15 closes the last open part of UAT gap G-04-21: the both-Shift cradle across a force-clear, by the locked option A timing rule, with IN-01, IN-02 and IN-03 riding along).
 
 ### Requirement Coverage
 
@@ -103,7 +108,7 @@ updated: "2026-11-21"
 | (carry FLIP-01, G-04-10) | COVERED | `flipper-response.test.ts` adapter pin (TABLE_SPEC + PROOF_BOX_SPEC, both ids: release, press, held cradle), `flipper-e2e.test.ts` G-04-10 block (release/press latency, 192-tap sweep with per-step resting invariant), `flipper-controller.test.ts` rest-limit guard (4), `flipper-feel.test.ts` FLIP-02 on OPEN_PROOF_BOX |
 | (carry FLIP-01, G-04-11) | COVERED | `flipper-input.test.ts` "focus regain (G-04-11)" block + stale-Shift B1-B7, `flipper-e2e.test.ts` "a lost keyup never strands a bat (G-04-11)" block (focus-regain release per binding, stale-Shift release per side) + both-Shift cradle guard, `game-e2e.test.ts` serve does not re-raise a stale bat |
 | (carry FLIP-01, G-04-17) | COVERED | `flipper-input.test.ts` "Windows both-Shift merge (G-04-17)" block (unit matrix, non-Windows guard, `isWindowsPlatform` 8 cases) + "same-window release and press (WR-01)" W1-W6, `flipper-e2e.test.ts` "Windows both-Shift hold (G-04-17)" (orders A, B, D, D', E, F, tap, cradle) + WR-01 block, `key-labels.test.ts` (27: layout relabel, API-absent fallback, one-code-point guard, markup data-code and note) |
-| (carry FLIP-01, G-04-21) | COVERED | `flipper-input.test.ts` "Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)" block (17 cases: R1-R7 WR-01 matrix incl. focus/blur/hidden clears, residual R3 and heal-off R7; K1-K6 WR-02 incl. heal-off K6), `flipper-e2e.test.ts` "Windows Shift after a force-clear (G-04-21)" (3 keyboard-to-Planck cases: focus regain, mirror, WR-02 keydown) |
+| (carry FLIP-01, G-04-21) | COVERED | `flipper-input.test.ts` "Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)" block (17 cases: R1-R7 WR-01 matrix incl. focus/blur/hidden clears, residual R3 and heal-off R7; K1-K6 WR-02 incl. heal-off K6), `flipper-e2e.test.ts` "Windows Shift after a force-clear (G-04-21)" (3 keyboard-to-Planck cases: focus regain, mirror, WR-02 keydown); cradle (04-15): `flipper-input.test.ts` nested "G-04-21 cradle" block (17 cases: C1-C11 timed re-press matrix incl. 450 ms boundary, steady-stream guard, `timeStamp` fallbacks and residual C5; I1-I2 IN-01 marker reset), `flipper-e2e.test.ts` nested "G-04-21 cradle" block (2 keyboard-to-Planck cases, one per mirror) |
 
 ---
 
@@ -134,6 +139,7 @@ updated: "2026-11-21"
 | Both Shift keys work in every both-Shift order on the real Windows keyboard (G-04-17, UAT 17) | FLIP-01, GAME-02 | The heal is proven on captured SendInput sequences; whether physical keys produce identical sequences needs the user's real keyboard. Residual T-04-35 is accepted | On Windows with Sticky Keys OFF, `npm run dev`, Enter; try all four both-Shift orders, single Shift taps, and Left Shift held while tapping the KeyZ/KeyX keys. Both bats rise while both Shifts are held and drop on the second release; accepted residual: the first-released bat stays up until the other Shift is released |
 | Key caps and Windows note match the player's keyboard (G-04-17, UAT 18) | FLIP-01, GAME-01 | Perceptual layout plus a real Keyboard Map API on the user's German QWERTZ layout | Chrome, German keyboard, 1280x684 at 150%: rows read Y ← Left Shift and - → Right Shift; the note reads "On Windows, ← → Y - are the most reliable flipper keys. Shift can stick."; the panel is no wider than before; Y and - raise the bats; optionally Firefox shows the arrow-only note |
 | The other Shift raises its bat after a focus steal while one Shift is held (G-04-21, UAT 21) | FLIP-01, GAME-02 | The fix keys on Windows delivering the held Shift's OS auto-repeat after a focus regain; SendInput generates no typematic repeat, so only a real keyboard proves it. Residual T-04-43 (a second Shift within ~0.5 s of focus return) is accepted | Windows, Sticky Keys OFF, Chrome, `npm run dev`, Enter: hold Left Shift, click another window (not the taskbar), click back, keep holding ~1 s, press Right Shift: the right bat rises at once; mirror with Right Shift held; then re-run the four both-Shift orders, single taps, and one serve with no other key (UAT 19 unchanged) |
+| Both-Shift cradle survives a focus steal on the real keyboard (G-04-21 cradle, 04-15) | FLIP-01, GAME-02 | The timed rule keys on the real Windows typematic stream (KeyboardDelay 1, KeyboardSpeed 31 here); SendInput produces no auto-repeat, so only a physical keyboard proves the gap. Residuals T-04-47 (a re-press under ~0.45 s that is released again is missed) and T-04-43 are accepted | Windows, Sticky Keys OFF, Chrome, `npm run dev`, Enter: hold both Shifts, click another window and back, keep holding, release and re-press Right Shift after ~1 s: the right bat rises; mirror with Left Shift; a fast re-press held down rises ~0.5 s late; re-run the 04-14 focus-steal check and UAT 19 |
 | Kick liveliness, nudge size, tilt fairness | ELEM-01/02, GAME-03 | Tuning is by feel (research A2–A5) | `npm run dev`, play a full 3-ball game, nudge to WARNING and to TILT |
 | Lit rollovers read clearly on the table | ELEM-03 | Visual (light readability; drawing is not asserted) | `npm run dev`, roll through each top rollover, confirm it lights and the bank of three clears after the bonus |
 | TILT drops both bats visibly; flippers dead before Enter and after GAME OVER; a held flipper rises on the next serve | GAME-03 | By-feel confirmation of behavior already pinned headlessly in `game-e2e.test.ts` | `npm run dev`, press Z before Enter, over-nudge while holding Z, hold through the drain, finish the game and press Z again |
@@ -194,3 +200,12 @@ updated: "2026-11-21"
 | Resolved | 0 |
 | Escalated | 0 |
 | Tasks audited (gap closure 04-14) | 3 |
+
+## Validation Audit 2026-11-21
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Tasks audited (gap closure 04-15) | 3 |
