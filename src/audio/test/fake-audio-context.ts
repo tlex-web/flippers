@@ -230,8 +230,15 @@ export class FakeAudioContext implements AudioContextLike {
   readonly nodes: FakeNode[] = [];
   readonly buffers: FakeBuffer[] = [];
 
+  closeCalls = 0;
+
   resume(): Promise<void> {
     this.resumeCalls++;
+    return Promise.resolve();
+  }
+  close(): Promise<void> {
+    this.closeCalls++;
+    this.state = "closed";
     return Promise.resolve();
   }
   createGain(): FakeGain {

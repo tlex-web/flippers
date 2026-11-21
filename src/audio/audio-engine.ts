@@ -85,6 +85,15 @@ function report(message: string, error: unknown): void {
   console.error(`[audio] ${message}`, error);
 }
 
+/** Release a context that will not be used; a failure to close is ignored. */
+function closeQuietly(ctx: AudioContextLike): void {
+  try {
+    ctx.close?.().catch(() => {});
+  } catch {
+    // nothing more can be done
+  }
+}
+
 export class AudioEngine {
   private readonly createContext: () => AudioContextLike;
   private readonly rng: () => number;
@@ -96,6 +105,8 @@ export class AudioEngine {
   private failed = false;
   /** A `resume()` is in flight: a suspended context is about to run. */
   private resumePending = false;
+  /** Set once a closed context has been reported; later gestures stay quiet. */
+  private closedReported = false;
   private muted = false;
   /**
    * The master gain's latest linear segment (audio clock), tracked so a mute
@@ -173,20 +184,33 @@ export class AudioEngine {
   unlock(): void {
     if (this.ctx === null) {
       if (this.failed) return;
+      let created: AudioContextLike | null = null;
       try {
-        const ctx = this.createContext();
-        this.build(ctx);
-        this.ctx = ctx;
+        created = this.createContext();
+        this.build(created);
+        this.ctx = created;
       } catch (error) {
         this.failed = true;
         this.master = null;
         this.noise = null;
+        // A context that was created but could not be built still holds an
+        // audio device and counts against the browser's context limit.
+        if (created !== null) closeQuietly(created);
         report("could not create the AudioContext; the game stays silent", error);
         return;
       }
     }
     const ctx = this.ctx;
     if (ctx === null || ctx.state === "running") return;
+    if (ctx.state === "closed") {
+      // resume() always rejects on a closed context: report it once instead
+      // of logging on every later gesture (each flipper keydown).
+      if (!this.closedReported) {
+        this.closedReported = true;
+        report("the AudioContext is closed; the game stays silent", ctx.state);
+      }
+      return;
+    }
     try {
       this.resumePending = true;
       ctx.resume().then(

@@ -77,6 +77,8 @@ export interface AudioContextLike {
   readonly state: string;
   readonly destination: AudioNodeLike;
   resume(): Promise<void>;
+  /** Releases the audio device. Optional: only an unusable context is closed. */
+  close?(): Promise<void>;
   createGain(): GainNodeLike;
   createOscillator(): OscillatorNodeLike;
   createBiquadFilter(): BiquadFilterNodeLike;

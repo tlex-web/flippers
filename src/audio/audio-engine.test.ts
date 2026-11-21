@@ -228,3 +228,45 @@ describe("a starting context is playable (WR-02)", () => {
     expect(fake.nodes.length).toBe(chain);
   });
 });
+
+describe("unlock edge cases (05-REVIEW IN-06)", () => {
+  it("a context whose master chain fails to build is closed, reported once and never retried", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const fake = new FakeAudioContext();
+      fake.createDynamicsCompressor = () => {
+        throw new Error("no compressor");
+      };
+      let calls = 0;
+      const engine = new AudioEngine(
+        () => {
+          calls++;
+          return fake;
+        },
+        () => 0.5,
+      );
+      engine.unlock();
+      expect(fake.closeCalls).toBe(1);
+      expect(engine.context).toBeNull();
+      expect(errors).toHaveBeenCalledTimes(1);
+      engine.unlock();
+      expect(calls).toBe(1);
+      expect(errors).toHaveBeenCalledTimes(1);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("a closed context is reported once and never resumed on later gestures", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { fake, engine } = rig(() => 0.5);
+      fake.state = "closed";
+      for (let i = 0; i < 5; i++) engine.unlock();
+      expect(fake.resumeCalls).toBe(0);
+      expect(errors).toHaveBeenCalledTimes(1);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});
