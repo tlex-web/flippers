@@ -45,7 +45,12 @@ covered_files:
   - "vitest.config.ts"
 covered_digest: "v4:sha256:d14514c2f54a9af9a2e8319713105561d4110dade14cbde4a19e9fc76bf16e95"
 behavior_unverified: 0
-overrides_applied: 0
+overrides_applied: 1
+overrides:
+  - must_have: "SC1: Entire table (playfield, ball, flippers, lanes, plunger, HUD) rendered procedurally in code with zero image assets"
+    reason: "D-01: the HUD is DOM text (src/ui/hud.ts), not painted on the Canvas. ROADMAP SC1 says 'HUD ... rendered on Canvas'; the maintainer accepts 'procedural, zero image assets' as meeting it. The asset-free gate (src/render/asset-free.test.ts) still covers the HUD markup and CSS."
+    accepted_by: "maintainer (05-UAT test 4)"
+    accepted_at: "2026-11-22T00:00:00Z"
 re_verification:
   previous_status: human_needed
   previous_score: 5/7
