@@ -37,7 +37,7 @@ status: all_fixed
 
 ## Fixed Issues
 
-### WR-01: The starting window never reopens while the first resume is pending, so the "start" cue is dropped
+### WR-01: [new, f1b2a1e WR-01 fix code] The starting window never reopens while the first resume is pending, so the "start" cue is dropped when a real activation finally starts the context
 
 **Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-engine.test.ts`
 **Commit:** 9d1f3b1
@@ -52,13 +52,13 @@ status: all_fixed
 
 I did not take the alternative (making `AudioUnlock` ignore modifier-only keys). On its own it leaves the engine unable to recover, and the engine-level regression test the review asked for would still fail.
 
-### IN-01: The sandbox header still says cues are dropped while the context is not running
+### IN-01: [new, WR-02 fix code] The sandbox header still says cues are dropped while the context is not running
 
 **Files modified:** `src/sandbox/main.ts`
 **Commit:** 56df7b0
 **Applied fix:** I reworded the presentation paragraph as the review suggested. Cues are dropped only when the context is neither running nor starting (starting means suspended with a resume in flight, for at most STARTING_WINDOW_MS). Cues on a starting context are scheduled and sound once it runs.
 
-### IN-02: A second live region contradicts the "only announced line" documentation, and unmuting is silent
+### IN-02: [new, IN-03 fix code] A second live region contradicts the "only announced line" documentation, and unmuting is silent to assistive tech
 
 **Files modified:** `index.html`, `src/ui/hud.ts`, `src/ui/hud.test.ts`, `src/sandbox/main.ts`
 **Commit:** ad83a46
@@ -70,7 +70,7 @@ I did not take the alternative (making `AudioUnlock` ignore modifier-only keys).
 - I updated the `.hud-status` CSS comment and the `hud.ts` header to say there are two live regions.
 - New test: both the mute and the unmute are announced, a steady frame announces nothing, and the initial state is not announced.
 
-### IN-03: The asset gate still misses remote stylesheets, fonts and scripts
+### IN-03: [new, IN-04 fix code] The asset gate still misses remote stylesheets, fonts and scripts
 
 **Files modified:** `src/render/asset-free.test.ts`
 **Commit:** 3876b5b
@@ -83,7 +83,7 @@ I did not take the alternative (making `AudioUnlock` ignore modifier-only keys).
 
 A further test checks two things. The remote-URL pattern catches a CDN `<script src>` and a protocol-relative `<link href>`. It does not match the page's own `<script type="module" src="/src/sandbox/main.ts">`. The real tree still scans clean.
 
-### IN-04: Envelope points are built twice per layer
+### IN-04: [new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step
 
 **Files modified:** `src/audio/envelope.ts`, `src/audio/envelope.test.ts`, `src/audio/audio-engine.ts`
 **Commit:** 47d0caa
@@ -94,7 +94,7 @@ A further test checks two things. The remote-URL pattern catches a CDN `<script 
 - The determinism tests (identical automation logs) still pass.
 - New tests: the given points are scheduled exactly as passed, and an empty list is a no-op.
 
-### IN-05: `state === "running"` lags real rendering
+### IN-05: [new, f1b2a1e WR-01 fix code] `state === "running"` lags real rendering, so a steal or discard during start-up can cut a voice that is already sounding
 
 **Files modified:** `src/audio/audio-engine.ts`, `src/audio/audio-engine.test.ts`
 **Commit:** 60c34ac
@@ -106,7 +106,7 @@ A further test checks two things. The remote-URL pattern catches a CDN `<script 
 - A context suspended with no resume pending is still not rendering.
 - New test: the clock advances while the state still reads "suspended" and the wall-clock window has passed. The cue still plays, nothing is discarded, and the stolen voice stays connected until its `onended`.
 
-### IN-06: The "starts inside the window" test cannot detect a too-short window, and the double-teardown path has no test
+### IN-06: [new, f1b2a1e WR-01 fix code] The "starts inside the window" test cannot detect a too-short window, and the double-teardown path has no test
 
 **Files modified:** `src/audio/audio-engine.test.ts`
 **Commit:** de4923e
@@ -116,7 +116,7 @@ A further test checks two things. The remote-URL pattern catches a CDN `<script 
 - **Cleanup:** I removed the `await Promise.resolve()` that had no effect, and the `async` that went with it.
 - The WR-01 scenario is covered by the WR-01 commit.
 
-### IN-07: `add()`'s steal loop and its `rendering` flag never run from the engine (necessity)
+### IN-07: [new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine
 
 **Files modified:** `src/audio/voice-pool.ts`, `src/audio/voice-pool.test.ts`
 **Commit:** 7534110
