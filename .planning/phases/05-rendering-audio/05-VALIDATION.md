@@ -99,7 +99,7 @@ Seeded from 05-RESEARCH.md § Validation Architecture. Task IDs are filled in by
 - [x] Feedback latency < 120s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** approved 2026-11-21 (validate-phase audit: 21/21 tasks COVERED, full suite 52 files / 738 tests green)
+**Approval:** approved 2026-11-21 (validate-phase audit: 21/21 map rows (20 tasks) COVERED, full suite 52 files / 738 tests green)
 
 ## Validation Audit 2026-11-21
 
