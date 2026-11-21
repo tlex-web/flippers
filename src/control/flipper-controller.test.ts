@@ -422,3 +422,101 @@ describe("FlipperController enters resting only at the rest limit (G-04-10)", ()
     expect(world.lastMotor(0)).toBe(0);
   });
 });
+
+describe("FlipperController coil counters (05-05, AUD-01): read-only, no motor command", () => {
+  it("a press from resting raises the on count to 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    expect(ctrl.getCoilOnCount(0)).toBe(0);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a second press while flipping-up or held-up leaves the on count at 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onPressEdge(0); // still flipping-up
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    sweep(world, ctrl, 0, L_REST, L_UP, 4);
+    hold(world, ctrl, 0, L_UP, 2);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+  });
+
+  it("a release from up raises the off count to 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(1);
+  });
+
+  it("a release while resting leaves the off count at 0", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("setEnabled(false) raises an up bat's off count by 1 and leaves a resting bat's alone", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 1);
+    ctrl.setEnabled(false);
+    expect(ctrl.getCoilOffCount(1)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a press while disabled changes neither count", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.setEnabled(false);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a press then a release in the same step gives on 1 and off 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(1);
+  });
+
+  it("a press during returning raises the on count again", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    sweep(world, ctrl, 0, L_UP, 0, 2);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(2);
+  });
+
+  it("an unknown id reads 0 for both counts", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(99)).toBe(0);
+    expect(ctrl.getCoilOffCount(99)).toBe(0);
+  });
+
+  it("reading the counters issues no motor command", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    world.clearMotorCalls();
+    ctrl.getCoilOnCount(0);
+    ctrl.getCoilOffCount(0);
+    expect(world.motorCalls.length).toBe(0);
+  });
+});

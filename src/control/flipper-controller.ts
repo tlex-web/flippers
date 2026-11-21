@@ -135,6 +135,18 @@ export class FlipperController {
     return fsm ? fsm.phase : "resting";
   }
 
+  /** RED contract stub (05-05 Task 2): coil-on transitions for a flipper. */
+  getCoilOnCount(id: number): number {
+    void id;
+    return 0;
+  }
+
+  /** RED contract stub (05-05 Task 2): coil-off transitions for a flipper. */
+  getCoilOffCount(id: number): number {
+    void id;
+    return 0;
+  }
+
   /** Whether presses are honored right now (see {@link setEnabled}). */
   isEnabled(): boolean {
     return this.enabled;

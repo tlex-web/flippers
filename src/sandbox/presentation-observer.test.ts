@@ -4,6 +4,7 @@ import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
 import type { GameState } from "../game/game-session";
 import {
   PresentationObserver,
+  type ObserverFlippers,
   type ObserverPlunger,
   type ObserverSession,
 } from "./presentation-observer";
@@ -43,6 +44,20 @@ class FakePlunger implements ObserverPlunger {
   }
 }
 
+class FakeFlippers implements ObserverFlippers {
+  readonly on: number[] = [0, 0];
+  readonly off: number[] = [0, 0];
+  getCoilOnCount(id: number): number {
+    return this.on[id] ?? 0;
+  }
+  getCoilOffCount(id: number): number {
+    return this.off[id] ?? 0;
+  }
+}
+
+/** Flipper ids the observer watches (left 0, right 1). */
+const FLIPPER_IDS: readonly number[] = [0, 1];
+
 class SpyFlash implements FlashSink {
   readonly records: { id: number; strength: number }[] = [];
   record(elementId: number, strength: number): void {
@@ -53,6 +68,7 @@ class SpyFlash implements FlashSink {
 interface Rig {
   session: FakeSession;
   plunger: FakePlunger;
+  flippers: FakeFlippers;
   cues: CueQueue;
   flash: SpyFlash;
   observer: PresentationObserver;
@@ -63,10 +79,19 @@ function rig(state: GameState = "game-over", ball = 0): Rig {
   session.state = state;
   session.ball = ball;
   const plunger = new FakePlunger();
+  const flippers = new FakeFlippers();
   const cues = new CueQueue();
   const flash = new SpyFlash();
-  const observer = new PresentationObserver(cues, flash, session, plunger, DRAIN);
-  return { session, plunger, cues, flash, observer };
+  const observer = new PresentationObserver(
+    cues,
+    flash,
+    session,
+    plunger,
+    DRAIN,
+    flippers,
+    FLIPPER_IDS,
+  );
+  return { session, plunger, flippers, cues, flash, observer };
 }
 
 /** Run one observe() and return the kinds it pushed (then clear the ring). */
@@ -96,7 +121,15 @@ describe("PresentationObserver: game-event cues (05-05)", () => {
     plunger.releases = 5;
     plunger.lastCharge = 0.4;
     const cues = new CueQueue();
-    const observer = new PresentationObserver(cues, new SpyFlash(), session, plunger, DRAIN);
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      plunger,
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
     observer.observe();
     expect(cues.size).toBe(0);
   });
@@ -191,5 +224,79 @@ describe("PresentationObserver: game-event cues (05-05)", () => {
     r.plunger.releases = 1;
     r.plunger.lastCharge = 0.25;
     expect(step(r)).toEqual(["start", "launch"]);
+  });
+});
+
+/** Kinds and element ids of one step, as one flat string ("kind@id,..."). */
+function stepTagged(r: Rig): string {
+  r.cues.clear();
+  r.observer.observe();
+  const out: string[] = [];
+  for (let i = 0; i < r.cues.size; i++) {
+    const c = r.cues.at(i);
+    if (c) out.push(`${c.kind}@${String(c.elementId)}`);
+  }
+  return out.join(",");
+}
+
+describe("PresentationObserver: flipper coil cues (05-05 Task 2)", () => {
+  it("an on-count increment for flipper 0 pushes flipperUp on element 0", () => {
+    const r = rig("playing", 1);
+    r.flippers.on[0] = 1;
+    expect(stepTagged(r)).toBe("flipperUp@0");
+    expect(stepTagged(r)).toBe("");
+  });
+
+  it("an off-count increment for flipper 1 pushes flipperDown on element 1", () => {
+    const r = rig("playing", 1);
+    r.flippers.off[1] = 1;
+    expect(stepTagged(r)).toBe("flipperDown@1");
+  });
+
+  it("a same-step tap (both counts up by 1) pushes flipperUp then flipperDown", () => {
+    const r = rig("playing", 1);
+    r.flippers.on[0] = 1;
+    r.flippers.off[0] = 1;
+    expect(stepTagged(r)).toBe("flipperUp@0,flipperDown@0");
+  });
+
+  it("a tilt that drops both bats pushes flipperDown, flipperDown, tilt in that order", () => {
+    const r = rig("playing", 1);
+    r.session.state = "tilted";
+    r.flippers.off[0] = 1;
+    r.flippers.off[1] = 1;
+    expect(stepTagged(r)).toBe("flipperDown@0,flipperDown@1,tilt@-1");
+  });
+
+  it("flipper cues sit after start and before launch", () => {
+    const r = rig("game-over", 0);
+    r.session.state = "playing";
+    r.session.ball = 1;
+    r.flippers.on[1] = 1;
+    r.flippers.off[0] = 1;
+    r.plunger.releases = 1;
+    r.plunger.lastCharge = 0.5;
+    expect(stepTagged(r)).toBe("start@-1,flipperUp@1,flipperDown@0,launch@-1");
+  });
+
+  it("construction snapshots the coil counts, so the first observe pushes nothing", () => {
+    const session = new FakeSession();
+    const flippers = new FakeFlippers();
+    flippers.on[0] = 3;
+    flippers.off[0] = 2;
+    flippers.on[1] = 7;
+    flippers.off[1] = 7;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      flippers,
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
   });
 });

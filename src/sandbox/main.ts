@@ -203,7 +203,18 @@ function main(): void {
   // once per step by diffing read-only getters at the end of onPostStep; a drain
   // also flashes the drain apron. Resolved once: -1 when the table has no drain.
   const drainId = world.getElements().find((e) => e.kind === "drain")?.id ?? -1;
-  const observer = new PresentationObserver(cues, flash, session, plunger, drainId);
+  // Each flipper coil is heard going up and coming down (taps and the tilt drop
+  // included) from the controller's read-only coil counters. Built once.
+  const flipperIds: readonly number[] = [leftFlipperId, rightFlipperId];
+  const observer = new PresentationObserver(
+    cues,
+    flash,
+    session,
+    plunger,
+    drainId,
+    controller,
+    flipperIds,
+  );
 
   // Audio: the factory runs only inside the first trusted gesture (a context
   // built here at boot would start suspended). The DOM factory is handed to a

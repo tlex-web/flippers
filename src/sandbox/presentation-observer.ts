@@ -26,6 +26,7 @@
  */
 
 import type { CueQueue, FlashSink } from "../app/cue-queue";
+import type { FlipperController } from "../control/flipper-controller";
 import type { PlungerController } from "../control/plunger-controller";
 import type { GameSession, GameState } from "../game/game-session";
 
@@ -34,6 +35,9 @@ export type ObserverSession = Pick<GameSession, "getState" | "getBall" | "isWarn
 
 /** The plunger's read-only release counter. */
 export type ObserverPlunger = Pick<PlungerController, "getReleaseCount" | "getLastReleaseCharge">;
+
+/** The flipper controller's read-only coil counters. */
+export type ObserverFlippers = Pick<FlipperController, "getCoilOnCount" | "getCoilOffCount">;
 
 /** Element id for a cue that belongs to no table element. */
 const NO_ELEMENT = -1;
@@ -56,7 +60,11 @@ export class PresentationObserver {
     session: ObserverSession,
     plunger: ObserverPlunger,
     drainElementId: number,
+    flippers: ObserverFlippers,
+    flipperIds: readonly number[],
   ) {
+    void flippers; // RED contract stub (05-05 Task 2)
+    void flipperIds;
     this.cues = cues;
     this.flash = flash;
     this.session = session;
