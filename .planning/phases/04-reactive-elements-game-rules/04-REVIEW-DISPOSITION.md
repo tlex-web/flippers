@@ -6,23 +6,27 @@ findings:
   - id: WR-01
     severity: warning
     disposition: open
-    title: "A stale-Shift heal and a same-side press in one drain window drop the bat while the key is held"
+    title: "Windows heal ignores a genuine second-Shift press after any force-clear, so both Shift keys go dead while one Shift is held"
   - id: WR-02
     severity: warning
     disposition: open
-    title: "The Windows both-Shift lost keyup is never reconciled, because Shift-key events are excluded"
+    title: "\"Drop both Shift codes\" heal also runs on Shift keydowns, not only on the documented keyup"
   - id: IN-01
     severity: info
     disposition: open
-    title: "PlungerInput and GameInput lack the focus-regain clear, so the same late-keydown race strands a plunger charge"
+    title: "Stale comment on the flipper gate's healing sources"
   - id: IN-02
     severity: info
     disposition: open
-    title: "`handleFocus` doc says \"window focus only follows a blur\", which is not always true"
+    title: "Layout-only content is revealed when no coded cap exists"
   - id: IN-03
     severity: info
     disposition: open
-    title: "The game-e2e comment says Space reaches every input, but `g.gameInput` is not fed"
+    title: "The Windows reliability note shows on every platform"
+  - id: IN-04
+    severity: info
+    disposition: open
+    title: "`keyLabel` accepts whitespace and control characters as a cap label"
   - id: WR-03
     severity: warning
     disposition: open
@@ -47,17 +51,13 @@ findings:
     severity: info
     disposition: open
     title: "The controls list does not say which nudge key goes which way, and key alternatives have no separator"
-  - id: IN-04
-    severity: info
-    disposition: open
-    title: "A ball that never reaches the drain sensor soft-locks the game"
   - id: IN-05
     severity: info
     disposition: open
     title: "The controls hint uses \"/\" both as a separator and as the Slash key"
 open: 13
 total: 13
-recorded: 2026-11-20T22:45:53.783Z
+recorded: 2026-11-21T00:21:07.888Z
 ---
 
 # Phase 04: Code Review Disposition
@@ -69,13 +69,13 @@ recorded: 2026-11-20T22:45:53.783Z
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |
+| IN-04 | info | open | - |
 | WR-03 | warning | open | - (not in the current review) |
 | WR-04 | warning | open | - (not in the current review) |
 | IN-06 | info | open | - (not in the current review) |
 | IN-07 | info | open | - (not in the current review) |
 | IN-08 | info | open | - (not in the current review) |
 | IN-09 | info | open | - (not in the current review) |
-| IN-04 | info | open | - (not in the current review) |
 | IN-05 | info | open | - (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
