@@ -25,6 +25,12 @@
  * flipper or plunger control. Blur and a hidden tab clear every held flag and latch
  * nothing, since every edge is press-only.
  *
+ * A bound code pressed with Ctrl, Meta (Cmd) or Alt is left alone: no latch, no
+ * `preventDefault()`, not marked held. Ctrl+Shift+M (Firefox responsive mode)
+ * and Cmd+M (macOS minimize) stay browser and OS shortcuts and never toggle
+ * the sound, and a keyup lost to the minimize cannot leave KeyM held. Shift is
+ * a flipper key, so it never blocks an edge.
+ *
  * Space is the plunger and is deliberately not a start key.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
@@ -97,6 +103,7 @@ export class GameInput {
   handleKeyDown(e: KeyEventLike): void {
     const edge = BINDINGS.get(e.code);
     if (edge === undefined) return; // other codes: untouched
+    if (e.ctrlKey === true || e.metaKey === true || e.altKey === true) return; // a shortcut
     e.preventDefault();
     if (e.repeat) return; // OS auto-repeat never re-fires
     if (this.held.has(e.code)) return; // duplicate keydown while held

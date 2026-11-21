@@ -115,6 +115,14 @@ export interface KeyEventLike {
    * `exactOptionalPropertyTypes`.
    */
   readonly timeStamp?: number;
+  /**
+   * Whether Ctrl, Meta (Cmd) or Alt is down. `GameInput` leaves a bound code
+   * pressed with one of them to the browser or OS (Ctrl+Shift+M, Cmd+M).
+   * Optional for synthetic events; an omitted value counts as not pressed.
+   */
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly altKey?: boolean;
   preventDefault(): void;
 }
 

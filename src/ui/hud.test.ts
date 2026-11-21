@@ -7,6 +7,8 @@ import {
   diagText,
   formatScore,
   HudView,
+  MuteView,
+  muteText,
   statusText,
   type DiagData,
   type HudSource,
@@ -255,5 +257,30 @@ describe("DiagView write-on-change (G-04-6, T-04-25)", () => {
     view.update(d);
     expect(sink.writes).toBe(2);
     expect(sink.textContent).toBe(text);
+  });
+});
+
+describe("MuteView write-on-change (05-REVIEW IN-03)", () => {
+  it("shows MUTED only while muted", () => {
+    expect(muteText(true)).toBe("MUTED");
+    expect(muteText(false)).toBe("");
+  });
+
+  it("writes on the first update and on each change, never on a steady frame", () => {
+    const sink = new CountingSink();
+    const view = new MuteView(sink);
+    view.update(false);
+    expect(sink.writes).toBe(1);
+    expect(sink.textContent).toBe("");
+    view.update(false);
+    expect(sink.writes).toBe(1);
+    view.update(true);
+    expect(sink.writes).toBe(2);
+    expect(sink.textContent).toBe("MUTED");
+    view.update(true);
+    expect(sink.writes).toBe(2);
+    view.update(false);
+    expect(sink.writes).toBe(3);
+    expect(sink.textContent).toBe("");
   });
 });

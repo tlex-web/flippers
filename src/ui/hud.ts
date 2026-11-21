@@ -180,3 +180,32 @@ export class DiagView {
     this.lastKe = d.kineticEnergy;
   }
 }
+
+/** The mute marker's text: "MUTED" while the sound is off, empty otherwise. */
+export function muteText(muted: boolean): string {
+  return muted ? "MUTED" : "";
+}
+
+/**
+ * The mute marker (05-REVIEW IN-03): shows that M silenced the game, including
+ * a mute armed before the first gesture unlocked audio. Write-on-change like
+ * the other lines: a steady frame costs no DOM write. Text-only.
+ */
+export class MuteView {
+  private readonly sink: TextSink;
+  /** False so the first update writes. */
+  private written = false;
+  private lastMuted = false;
+
+  constructor(sink: TextSink) {
+    this.sink = sink;
+  }
+
+  /** Rewrite the marker only when the mute state changed since the last write. */
+  update(muted: boolean): void {
+    if (this.written && muted === this.lastMuted) return;
+    this.sink.textContent = muteText(muted);
+    this.written = true;
+    this.lastMuted = muted;
+  }
+}

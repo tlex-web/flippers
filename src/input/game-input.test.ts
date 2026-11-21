@@ -333,3 +333,33 @@ describe("GameInput: mute latch (05-06, D-02)", () => {
     }
   });
 });
+
+describe("GameInput: modifier shortcuts pass through (05-REVIEW IN-03)", () => {
+  const MODS = [{ ctrlKey: true }, { metaKey: true }, { altKey: true }] as const;
+
+  it("KeyM with Ctrl, Meta or Alt latches nothing, is not prevented and is not held", () => {
+    for (const mod of MODS) {
+      const input = new GameInput();
+      const down = { ...ev("KeyM"), ...mod };
+      input.handleKeyDown(down);
+      expect(down.preventDefault).not.toHaveBeenCalled();
+      expect(snapshot(input)).toEqual(NONE);
+      // Its keyup was lost (Cmd+M minimized the window): a plain M still latches.
+      input.handleKeyDown(ev("KeyM"));
+      expect(snapshot(input)).toEqual({ ...NONE, mute: true });
+    }
+  });
+
+  it("Shift never blocks an edge (it is a flipper key)", () => {
+    const input = new GameInput();
+    input.handleKeyDown({ ...ev("KeyM"), shiftKey: true });
+    input.handleKeyDown({ ...ev("KeyX"), shiftKey: true });
+    expect(snapshot(input)).toEqual({ ...NONE, nudgeLeft: true, mute: true });
+  });
+
+  it("explicit false modifiers latch as usual", () => {
+    const input = new GameInput();
+    input.handleKeyDown({ ...ev("Enter"), ctrlKey: false, metaKey: false, altKey: false });
+    expect(snapshot(input)).toEqual({ ...NONE, start: true });
+  });
+});

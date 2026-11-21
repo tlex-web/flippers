@@ -119,6 +119,18 @@
         background: var(--inner-glow);
         color: var(--text-soft);
       }
+      /* Mute marker (05-REVIEW IN-03): the status magenta, so a silenced game
+         reads at a glance next to its key. Empty (and zero-width) when on. */
+      .hud-mute {
+        margin-left: 4px; /* plus the row's 4px gap */
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--status);
+        text-shadow: 0 0 8px rgba(247, 37, 133, 0.35);
+      }
+      .hud-mute:empty {
+        display: none;
+      }
       /* Windows reliability note (G-04-17, UAT 18 decision A). contain:
          inline-size drops it from the panel's intrinsic width, so it wraps at
          the width the six rows set and never widens the panel over the table. */
@@ -172,7 +184,10 @@
           <dt>Nudge</dt>
           <dd><kbd data-code="KeyX">X</kbd><kbd data-code="Period">.</kbd><kbd>↑</kbd></dd>
           <dt>Mute</dt>
-          <dd><kbd data-code="KeyM">M</kbd></dd>
+          <dd>
+            <kbd data-code="KeyM">M</kbd>
+            <span id="hud-mute" class="hud-mute" role="status" aria-live="polite"></span>
+          </dd>
         </dl>
         <p class="hud-controls-note">
           On Windows, <kbd>←</kbd> <kbd>→</kbd

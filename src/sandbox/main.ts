@@ -79,7 +79,7 @@ import { PlungerInput } from "../input/plunger-input";
 import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
-import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
+import { DiagView, HudView, MuteView, type DiagData, type TextSink } from "../ui/hud";
 import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
 import { ContactFlash } from "../render/contact-flash";
@@ -350,6 +350,9 @@ function main(): void {
   // Diagnosis readout: DOM text in its own panel (G-04-6), written only when a
   // throttled number changes.
   const diagView = new DiagView(requireTextSink("hud-diag"));
+  // Mute marker (05-REVIEW IN-03): "MUTED" beside the M key cap while the
+  // sound is off, written only on change.
+  const muteView = new MuteView(requireTextSink("hud-mute"));
   // The key caps show the player's layout (G-04-17, UAT 18 decision A); the
   // markup labels stay where the Keyboard Map API is missing.
   void initKeyLabels(
@@ -462,6 +465,7 @@ function main(): void {
     // The score, ball and status land in the frame the session changes them
     // (each line written only on change).
     hudView.update(session);
+    muteView.update(audio.isMuted());
     diagView.update(diag);
   }
 
