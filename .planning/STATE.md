@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 05
 current_phase_name: Rendering & Audio
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-11-21T13:46:36.743Z"
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-11-21T13:55:43.225Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 05 execution started
-state_head: a3852c5fb186b98d37d1654c5f199207c074977c
+state_head: 5753ee113f9ad1c2b7a8d9b1396a5ac15f875e04
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 35
+  completed_plans: 36
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 05 execution started
 
@@ -96,6 +96,7 @@ Progress: [███████░░░] 67%
 | Phase 04 P14 | 7 min | 3 tasks | 4 files |
 | Phase 04 P15 | 37 min | 3 tasks | 3 files |
 | Phase 05 P01 | 7 min | 2 tasks | 9 files |
+| Phase 05 P08 | 7 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-01: ReactiveFeedback (optional 4th ReactiveElements arg) reports registered hits last in each branch; CueQueue (64 preallocated, drop-newest) records on step, AudioEngine.flush() creates nodes once per frame through master gain 0.6 -> compressor
 - [Phase 05]: 05-01: AudioContext created only in the first trusted keydown/pointerdown (AudioUnlock, capture, ignores untrusted and Escape); cues without a running context are dropped, never replayed; A5 proven by the cast-free DOM factory in main.ts
 - [Phase 05]: 05-01: bumper noise click has its own 25 ms gain envelope so every source stops at the common voice end; vitest testTimeout 30000
+- [Phase 05]: Asset gate reads sources via Vite raw imports (import.meta.glob ?raw + index.html?raw), not node:fs - no @types/node, no new dependency
+- [Phase 05]: Flipper angles are snapshotted in FixedStepLoop beside the balls and lerped shortest-arc at alpha via src/render/interpolate.ts; 05-02 wires them into the live frame
 
 ### Pending Todos
 
@@ -216,6 +219,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T13:46:35.445Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-11-21T13:55:42.193Z
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None
