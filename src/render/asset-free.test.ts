@@ -93,6 +93,28 @@ const PATTERNS: readonly AssetPattern[] = [
     sample: 'new WebSocket("wss://x");',
   },
   { name: "CSS image-set()", re: /\bimage-set\s*\(/i, sample: "background: image-set(x 1x);" },
+  // 05-REVIEW IN-03 (second pass): asset pulls from script. Vite leaves
+  // `https:` module specifiers external, so they are runtime fetches.
+  {
+    name: "remote ES module specifier",
+    re: /\bfrom\s*["'](https?:)?\/\/|\bimport\s*\(\s*["'](https?:)?\/\//,
+    sample: 'import confetti from "https://esm.sh/canvas-confetti";',
+  },
+  {
+    name: "media element created from script",
+    re: /\bcreateElement\s*\(\s*["'](img|audio|video|source)["']/i,
+    sample: 'const a = document.createElement("audio");',
+  },
+  {
+    name: "data: URI asset",
+    re: /["'`]data:(image|audio|font|video)\//i,
+    sample: 'img.src = "data:image/png;base64,iVBORw0KGgo=";',
+  },
+  {
+    name: "worker script load",
+    re: /\bnew\s+(Shared)?Worker\s*\(|\bimportScripts\s*\(/,
+    sample: 'new Worker("https://cdn.example/w.js");',
+  },
 ];
 
 /** Every (file, pattern) hit in the given sources, as "file: pattern". */
@@ -144,6 +166,30 @@ describe("asset-free tree (RND-01)", () => {
     expect(remote.re.test('<script type="module" src="/src/sandbox/main.ts"></script>')).toBe(
       false,
     );
+  });
+
+  it("the script patterns catch remote modules, created media, data: URIs and workers, not local imports", () => {
+    const byName = (name: string): RegExp => {
+      const p = PATTERNS.find((q) => q.name === name);
+      if (!p) throw new Error(`${name} pattern missing`);
+      return p.re;
+    };
+    const remote = byName("remote ES module specifier");
+    expect(remote.test('const m = await import("https://cdn.example/m.js");')).toBe(true);
+    expect(remote.test('import x from "//cdn.example/x.js";')).toBe(true);
+    expect(remote.test('import { CueQueue } from "../app/cue-queue";')).toBe(false);
+    expect(remote.test('const m = await import("./lazy");')).toBe(false);
+    const media = byName("media element created from script");
+    for (const tag of ["img", "video", "source"]) {
+      expect(media.test(`document.createElement('${tag}')`), tag).toBe(true);
+    }
+    expect(media.test('document.createElement("canvas")')).toBe(false);
+    const data = byName("data: URI asset");
+    expect(data.test("el.src = `data:audio/wav;base64,UklGR`;")).toBe(true);
+    expect(data.test("url('data:font/woff2;base64,d09G')")).toBe(true);
+    const worker = byName("worker script load");
+    expect(worker.test('new SharedWorker("w.js")')).toBe(true);
+    expect(worker.test('importScripts("https://cdn.example/w.js")')).toBe(true);
   });
 
   it("every pattern hits its own positive sample (no vacuous pass)", () => {
