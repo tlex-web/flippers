@@ -7,7 +7,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-20"
-updated: "2026-11-20"
+updated: "2026-11-21"
 ---
 
 # Phase 4 — Validation Strategy
@@ -24,7 +24,7 @@ updated: "2026-11-20"
 | **Config file** | `vitest.config.ts` (excludes `**/*.gate.test.ts`), `vitest.gate.config.ts` (soak gates) |
 | **Quick run command** | `npx vitest run src/game src/input src/control src/ui` |
 | **Full suite command** | `npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak` |
-| **Estimated runtime** | ~4 s fast suite (33 files, 416 tests after the 04-11 gap closure; 392 after 04-09/04-10; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
+| **Estimated runtime** | ~5-11 s fast suite (34 files, 482 tests after the 04-12/04-13 gap closure; heavy simulation tests can hit the 5 s default timeout under host CPU load — pre-existing, tracked as a pending todo); ~4 s at 33 files, 416 tests after the 04-11 gap closure; 392 after 04-09/04-10; 32 files, 338 tests at 04-08); soak gate ~5 s wall for 4 gate files (>= 630 s simulated) |
 
 ---
 
@@ -77,6 +77,8 @@ updated: "2026-11-20"
 
 ³ G2 = second gap-closure run, wave 1 (04-11 closes UAT gap G-04-11, a lost Shift keyup pinning a bat).
 
+⁴ G3 = third gap-closure run (04-12 wave 1, 04-13 wave 2) closing UAT gap G-04-17: 04-12 heals the Windows both-Shift merge and WR-01, 04-13 adds layout-correct key caps and the Windows reliability note.
+
 ### Requirement Coverage
 
 | Requirement | Status | Automated evidence |
@@ -90,6 +92,7 @@ updated: "2026-11-20"
 | (carry IN-01) | COVERED | `plunger-controller.test.ts` rest gate (3), `plunger-e2e.test.ts` falling-back release |
 | (carry FLIP-01, G-04-10) | COVERED | `flipper-response.test.ts` adapter pin (TABLE_SPEC + PROOF_BOX_SPEC, both ids: release, press, held cradle), `flipper-e2e.test.ts` G-04-10 block (release/press latency, 192-tap sweep with per-step resting invariant), `flipper-controller.test.ts` rest-limit guard (4), `flipper-feel.test.ts` FLIP-02 on OPEN_PROOF_BOX |
 | (carry FLIP-01, G-04-11) | COVERED | `flipper-input.test.ts` "focus regain (G-04-11)" block + stale-Shift B1-B7, `flipper-e2e.test.ts` "a lost keyup never strands a bat (G-04-11)" block (focus-regain release per binding, stale-Shift release per side) + both-Shift cradle guard, `game-e2e.test.ts` serve does not re-raise a stale bat |
+| (carry FLIP-01, G-04-17) | COVERED | `flipper-input.test.ts` "Windows both-Shift merge (G-04-17)" block (unit matrix, non-Windows guard, `isWindowsPlatform` 8 cases) + "same-window release and press (WR-01)" W1-W6, `flipper-e2e.test.ts` "Windows both-Shift hold (G-04-17)" (orders A, B, D, D', E, F, tap, cradle) + WR-01 block, `key-labels.test.ts` (27: layout relabel, API-absent fallback, one-code-point guard, markup data-code and note) |
 
 ---
 
@@ -117,6 +120,8 @@ updated: "2026-11-20"
 | Diagnostics readout and controls list legible (G-04-6) | GAME-01 | Perceptual layout (UAT test 6); structure is machine-checked | 1280x684 window at 150% scaling: the bottom-left FPS / PHYS / KE line reads clearly; the controls list shows five non-wrapping rows, Slash is visibly a key cap; neither panel overlaps the table or plunger meter |
 | Flippers feel instant after long cradles; no tap leaves a bat raised; TILT drop has no pause (G-04-10) | FLIP-01, GAME-03 | Core-value feel verdict (UAT tests 10 and 5); latencies are machine-proven | `npm run dev`, Enter; on all six bindings make quick taps of varied length, hold a long cradle and release, over-nudge once while holding a bat up |
 | Each bat answers its key on all six bindings after the Windows Sticky Keys prompt (G-04-11) | FLIP-01, GAME-02 | The real OS Sticky Keys dialog cannot be raised by synthetic events (UAT test 11); the self-heal logic is machine-proven. Residual T-04-29 (Sticky Keys turned ON) is accepted | On Windows, `npm run dev`, Enter; tap Left Shift five times to raise the Sticky Keys prompt, dismiss it, then confirm Z and Left Arrow raise and drop the left bat, no bat stays raised, and the next serve leaves both bats down |
+| Both Shift keys work in every both-Shift order on the real Windows keyboard (G-04-17, UAT 17) | FLIP-01, GAME-02 | The heal is proven on captured SendInput sequences; whether physical keys produce identical sequences needs the user's real keyboard. Residual T-04-35 is accepted | On Windows with Sticky Keys OFF, `npm run dev`, Enter; try all four both-Shift orders, single Shift taps, and Left Shift held while tapping the KeyZ/KeyX keys. Both bats rise while both Shifts are held and drop on the second release; accepted residual: the first-released bat stays up until the other Shift is released |
+| Key caps and Windows note match the player's keyboard (G-04-17, UAT 18) | FLIP-01, GAME-01 | Perceptual layout plus a real Keyboard Map API on the user's German QWERTZ layout | Chrome, German keyboard, 1280x684 at 150%: rows read Y ← Left Shift and - → Right Shift; the note reads "On Windows, ← → Y - are the most reliable flipper keys. Shift can stick."; the panel is no wider than before; Y and - raise the bats; optionally Firefox shows the arrow-only note |
 | Kick liveliness, nudge size, tilt fairness | ELEM-01/02, GAME-03 | Tuning is by feel (research A2–A5) | `npm run dev`, play a full 3-ball game, nudge to WARNING and to TILT |
 | Lit rollovers read clearly on the table | ELEM-03 | Visual (light readability; drawing is not asserted) | `npm run dev`, roll through each top rollover, confirm it lights and the bank of three clears after the bonus |
 | TILT drops both bats visibly; flippers dead before Enter and after GAME OVER; a held flipper rises on the next serve | GAME-03 | By-feel confirmation of behavior already pinned headlessly in `game-e2e.test.ts` | `npm run dev`, press Z before Enter, over-nudge while holding Z, hold through the drain, finish the game and press Z again |
@@ -159,3 +164,12 @@ updated: "2026-11-20"
 | Resolved | 0 |
 | Escalated | 0 |
 | Tasks audited (gap closure 04-11) | 2 |
+
+## Validation Audit 2026-11-21
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Tasks audited (gap closure 04-12/04-13) | 5 |
