@@ -43,21 +43,24 @@ Seeded from 05-RESEARCH.md § Validation Architecture. Task IDs are filled in by
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | 0 | RND-01 | — | No image, audio or font assets in `src/` or `index.html` | unit (fs grep) | `npx vitest run src/render/asset-free.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-01 | — | N/A | unit (recording ctx) | `npx vitest run src/render/static-layer.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-02 | — | N/A | unit | `npx vitest run src/render/view-transform.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-02 | — | N/A | unit | `npx vitest run src/sim/loop.flippers.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-02 | — | N/A | unit | `npx vitest run src/render/interpolate.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-02 | — | N/A | unit (recording ctx) | `npx vitest run src/render/table-renderer.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-02 | — | Presentation layer is read-only: sim bit-identical with it attached | integration | `npx vitest run src/sandbox/presentation.determinism.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-03 | — | N/A | unit | `npx vitest run src/render/flash.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RND-03 | — | Feedback fires only for counted hits | unit | `npx vitest run src/game/reactive-elements.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | RND-03 | — | N/A | unit | `npx vitest run src/render/contact-flash.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUD-01 | — | N/A | unit | `npx vitest run src/audio/envelope.test.ts src/audio/mapping.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUD-01 | — | Every node stopped and disconnected (no leak) | unit (fake ctx) | `npx vitest run src/audio/audio-engine.test.ts src/audio/recipes.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUD-01 | — | Voice caps bound concurrent nodes under spam | unit | `npx vitest run src/audio/voice-pool.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUD-01 | — | No AudioContext before a trusted gesture | unit | `npx vitest run src/audio/audio-unlock.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | AUD-01 | — | N/A | unit | `npx vitest run src/sandbox/presentation-observer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-01-T1 | 05-01 | 1 | AUD-01 | T-05-01, T-05-03 | Registered bumper kick -> cue -> master-routed voice; empty and suspended edges create nothing | integration (real table + fake ctx) | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ❌ W0 | ⬜ pending |
+| 05-01-T2 | 05-01 | 1 | RND-03, AUD-01 | T-05-02 | Feedback fires only for counted hits, after award; throwing sink leaves rule state intact | unit | `npx vitest run src/game/reactive-elements.test.ts src/app/cue-queue.test.ts` | ✅ extend | ⬜ pending |
+| 05-01-T3 | 05-01 | 1 | AUD-01 | T-05-04, T-05-05 | No AudioContext before a trusted gesture | unit | `npx vitest run src/audio/audio-unlock.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T1 | 05-02 | 2 | RND-02 | T-05-06 | Backing store sized from the display | unit | `npx vitest run src/render/view-transform.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T2 | 05-02 | 2 | RND-02 | T-05-09 | N/A | unit | `npx vitest run src/sim/loop.flippers.test.ts src/render/interpolate.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T3 | 05-02 | 2 | RND-01 | — | No image, audio or font assets in `src/` or `index.html` | unit (fs scan) | `npx vitest run src/render/asset-free.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T3 | 05-02 | 2 | RND-01 | — | N/A | unit (recording ctx) | `npx vitest run src/render/static-layer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T3 | 05-02 | 2 | RND-02 | T-05-08 | N/A | unit (recording ctx) | `npx vitest run src/render/table-renderer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-03-T1 | 05-03 | 2 | AUD-01 | — | N/A | unit | `npx vitest run src/audio/mapping.test.ts src/audio/audio-engine.test.ts` | ❌ W0 | ⬜ pending |
+| 05-03-T2 | 05-03 | 2 | AUD-01 | T-05-11, T-05-12 | Every node stopped and disconnected (no leak) | unit (fake ctx) | `npx vitest run src/audio/envelope.test.ts src/audio/recipes.test.ts` | ❌ W0 | ⬜ pending |
+| 05-03-T3 | 05-03 | 2 | AUD-01 | T-05-10 | Voice caps bound concurrent nodes under spam | unit | `npx vitest run src/audio/voice-pool.test.ts src/audio/audio-engine.test.ts` | ❌ W0 | ⬜ pending |
+| 05-04-T1 | 05-04 | 3 | RND-03 | T-05-14 | N/A | unit | `npx vitest run src/render/flash.test.ts` | ❌ W0 | ⬜ pending |
+| 05-04-T2 | 05-04 | 3 | RND-03 | T-05-13, T-05-15 | Walls flash, never cue (D-03) | unit | `npx vitest run src/render/contact-flash.test.ts src/render/table-renderer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-05-T1 | 05-05 | 4 | AUD-01 | T-05-16, T-05-17 | N/A | unit | `npx vitest run src/sandbox/presentation-observer.test.ts src/control/plunger-controller.test.ts` | ❌ W0 | ⬜ pending |
+| 05-05-T2 | 05-05 | 4 | AUD-01 | T-05-16 | Counters change no behavior | unit | `npx vitest run src/control/flipper-controller.test.ts src/sandbox/presentation-observer.test.ts` | ✅ extend | ⬜ pending |
+| 05-06-T1 | 05-06 | 5 | AUD-01 | T-05-19 | KeyM never swallows another control | unit | `npx vitest run src/input/game-input.test.ts src/ui/key-labels.test.ts` | ✅ extend | ⬜ pending |
+| 05-06-T2 | 05-06 | 5 | RND-02 | T-05-18 | Presentation layer is read-only: sim bit-identical with it attached | integration | `npx vitest run src/sandbox/presentation.determinism.test.ts` | ❌ W0 | ⬜ pending |
+| 05-06-T3 | 05-06 | 5 | RND-01 | T-05-20 | HUD restyle is CSS-only, textContent-only | phase gate | `npx tsc --noEmit && npx eslint src && npx vitest run && npm run soak && npm run build` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
