@@ -3,7 +3,7 @@ status: complete
 phase: 03-table-plunger-event-bus
 source: [03-VERIFICATION.md]
 started: 2026-11-20T00:00:00Z
-updated: 2026-11-20T13:22:15.093Z
+updated: 2026-11-21T21:52:00.000Z
 ---
 
 ## Current Test
@@ -47,12 +47,16 @@ result: pass
 source: automated
 evidence: "Live Planck fixtures: circles at local x 0.07/0.43 r0.07 plus a box at x 0.07..0.43, ±0.07 — identical to the drawn stadium (x 0..0.5, ±0.07). Resting cradle contact sits 0.005 m off the drawn surface (≈0.5 px); tip contacts are within −0.013..+0.015 m. Resting tip-to-tip gap is 0.588 m vs a 0.40 m ball."
 
+### 7. Charge meter and plunger pullback in the procedural renderer. Run `npm run dev`, hold Space and release at several fill levels on the default (non-?debug=1) view.
+expected: The meter beside the chute fills bottom to top over about 0.67 s, red at full; the plunger tip retracts in step; release launches proportionally.
+result: [pending]
+
 ## Summary
 
-total: 6
+total: 7
 passed: 6
 issues: 0
-pending: 0
+pending: 1
 skipped: 0
 blocked: 0
 
