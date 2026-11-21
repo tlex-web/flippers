@@ -5,6 +5,7 @@ import {
   applyEnvelope,
   envelopeEnd,
   envelopePoints,
+  scheduleEnvelope,
   type EnvelopeSpec,
 } from "./envelope";
 import { FakeParam } from "./test/fake-audio-context";
@@ -80,5 +81,23 @@ describe("applyEnvelope", () => {
       time: e.time,
     }));
     expect(param.events.slice(1)).toEqual(expected);
+  });
+});
+
+describe("scheduleEnvelope (05-REVIEW IN-04)", () => {
+  it("schedules the given points as-is, after a cancel at the first point", () => {
+    const param = new FakeParam("gain");
+    const points = envelopePoints(0.4, HELD, 0.6);
+    scheduleEnvelope(param, points);
+    expect(param.events[0]).toEqual({ type: "cancel", value: Number.NaN, time: 0.4 });
+    expect(param.events.slice(1)).toEqual(
+      points.map((e) => ({ type: e.kind, value: e.value, time: e.time })),
+    );
+  });
+
+  it("does nothing for an empty point list", () => {
+    const param = new FakeParam("gain");
+    scheduleEnvelope(param, []);
+    expect(param.events).toEqual([]);
   });
 });

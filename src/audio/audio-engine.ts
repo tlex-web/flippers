@@ -60,7 +60,13 @@ import type {
   GainNodeLike,
   ScheduledSourceLike,
 } from "./audio-context-like";
-import { applyEnvelope, envelopePoints, type EnvPoint, type EnvelopeSpec } from "./envelope";
+import {
+  envelopeEnd,
+  envelopePoints,
+  scheduleEnvelope,
+  type EnvPoint,
+  type EnvelopeSpec,
+} from "./envelope";
 import { dbToGain, playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 import { RECIPES, type LayerSpec } from "./recipes";
 import { VoicePool, type VoiceHandle } from "./voice-pool";
@@ -475,8 +481,11 @@ export class AudioEngine {
     const env = ctx.createGain();
     nodes.push(env);
     const peak = level * dbToGain(layer.gainDb);
-    const end = applyEnvelope(env.gain, lt, envelope, peak);
+    // Built once: the handle stores the very points scheduled on the gain, so
+    // a steal's live-level anchor cannot drift from the automation (IN-04).
     const points = envelopePoints(lt, envelope, peak);
+    scheduleEnvelope(env.gain, points);
+    const end = envelopeEnd(lt, envelope);
     env.connect(master);
     const stop = end + SOURCE_TAIL_S;
 

@@ -102,6 +102,24 @@ export function envelopeValueAt(points: readonly EnvPoint[], t: number): number 
 }
 
 /**
+ * Schedule already-built points on `param`: cancel anything pending from the
+ * first point's time, then each point. A caller that keeps the points (the
+ * engine stores them for a steal's live-level anchor) schedules that same
+ * array, so what it stores is exactly what was scheduled (05-REVIEW IN-04).
+ */
+export function scheduleEnvelope(param: AudioParamLike, points: readonly EnvPoint[]): void {
+  const first = points[0];
+  if (!first) return;
+  param.cancelScheduledValues(first.time);
+  for (let i = 0; i < points.length; i++) {
+    const e = points[i];
+    if (!e) continue;
+    if (e.kind === "set") param.setValueAtTime(e.value, e.time);
+    else param.exponentialRampToValueAtTime(e.value, e.time);
+  }
+}
+
+/**
  * Schedule the envelope on `param`: cancel anything pending from t0, then the
  * points. Returns the time the envelope reaches the floor.
  */
@@ -111,13 +129,6 @@ export function applyEnvelope(
   env: EnvelopeSpec,
   peak: number,
 ): number {
-  param.cancelScheduledValues(t0);
-  const points = envelopePoints(t0, env, peak);
-  for (let i = 0; i < points.length; i++) {
-    const e = points[i];
-    if (!e) continue;
-    if (e.kind === "set") param.setValueAtTime(e.value, e.time);
-    else param.exponentialRampToValueAtTime(e.value, e.time);
-  }
+  scheduleEnvelope(param, envelopePoints(t0, env, peak));
   return envelopeEnd(t0, env);
 }
