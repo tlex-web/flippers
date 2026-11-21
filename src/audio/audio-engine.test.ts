@@ -367,6 +367,65 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(connected(fake, chain)).toBe(0);
   });
 
+  it("a held activating key on a resume that never settles reopens the window once, so nodes stay bounded (WR-01)", () => {
+    // A held flipper key (Z, an arrow): every keydown, auto-repeat included,
+    // carries transient activation, but the resume stays stuck for 60 s.
+    const { fake, engine, clock, activation, chain } = stuckRig();
+    activation.active = true;
+    const frameMs = 1000 / 60;
+    const framesPerWindow = Math.ceil(STARTING_WINDOW_MS / frameMs) + 1;
+    const q = new CueQueue();
+    let started = 0;
+    let lastBuiltFrame = -1;
+    for (let f = 0; f < 60 * 60; f++) {
+      clock.ms = 1000 + f * frameMs;
+      if (f % 2 === 0) engine.unlock(); // key auto-repeat
+      q.push("bumper", 200 + (f % 3), 1);
+      const n = engine.flush(q);
+      if (n > 0) lastBuiltFrame = f;
+      started += n;
+      expect(engine.activeVoices()).toBeLessThanOrEqual(MAX_VOICES);
+    }
+    // The first window plus exactly one activation reopen, nothing after.
+    expect(started).toBeGreaterThan(framesPerWindow);
+    expect(started).toBeLessThanOrEqual(2 * framesPerWindow);
+    expect(lastBuiltFrame).toBeLessThan(3 * framesPerWindow);
+    expect(fake.nodes.length - chain).toBeLessThanOrEqual(2 * framesPerWindow * MAX_NODES_PER_VOICE);
+    expect(engine.activeVoices()).toBe(0);
+    expect(connected(fake, chain)).toBe(0);
+    expect(fake.resumeCalls).toBe(1 + 60 * 30);
+  });
+
+  it("once the stuck resume settles, the next stuck resume may be reopened once again (WR-01)", async () => {
+    const { fake, engine, clock, activation } = stuckRig();
+    const pending: { settle: (() => void) | null } = { settle: null };
+    fake.resume = () => {
+      fake.resumeCalls++;
+      return new Promise<void>((resolve) => {
+        pending.settle = resolve;
+      });
+    };
+    const q = new CueQueue();
+    activation.active = true;
+    clock.ms += STARTING_WINDOW_MS;
+    engine.unlock(); // the one reopen for the first stuck resume
+    clock.ms += STARTING_WINDOW_MS;
+    engine.unlock(); // spent: does not reopen
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
+    // Every pending resume settles together, but the context stays suspended.
+    pending.settle?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    engine.unlock(); // a fresh resume: a fresh window
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(1);
+    clock.ms += STARTING_WINDOW_MS;
+    engine.unlock(); // its own single reopen
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(1);
+  });
+
   it("a re-gesture with activation inside a live window does not extend it", () => {
     const { engine, clock, activation } = stuckRig();
     const q = new CueQueue();

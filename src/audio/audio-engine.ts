@@ -151,11 +151,17 @@ export class AudioEngine {
   /**
    * Wall-clock deadline (ms, `clock`) of the starting window, set when a
    * `resume()` is issued with none already in flight. A later gesture while
-   * the first resume is still pending does not extend it, except that a
-   * gesture with transient activation reopens a window that has expired: its
-   * `resume()` can really start the context (05-REVIEW WR-01).
+   * the first resume is still pending does not extend it, except that the
+   * first gesture with transient activation after it expired reopens it
+   * once: its `resume()` can really start the context (05-REVIEW WR-01).
    */
   private startingUntilMs = 0;
+  /**
+   * Set when an activating re-gesture has reopened an expired window for the
+   * resume now in flight; cleared when that resume settles or rejects. At
+   * most one activation reopen per stuck resume (05-REVIEW WR-01).
+   */
+  private activationReopened = false;
   /**
    * The audio clock (`currentTime`) when the starting window opened. Once it
    * has moved, the context is rendering even if `state` still reads
@@ -285,33 +291,52 @@ export class AudioEngine {
     }
     try {
       // Open the starting window for a fresh resume. While a resume stays
-      // pending, re-gestures do not keep re-opening it (held-Shift auto-repeat
-      // would bring back unbounded node growth), except a gesture with
-      // transient activation after the window expired: a first modifier-only
-      // keydown leaves the resume stuck, and the later Enter really starts the
-      // context, so its "start" cue must still be playable (WR-01).
+      // pending, re-gestures do not keep re-opening it (key auto-repeat would
+      // bring back unbounded node growth). The one exception: the first
+      // gesture with transient activation after the window expired reopens it
+      // once. A first modifier-only keydown can leave the resume stuck, and
+      // the later Enter really starts the context, so its "start" cue must
+      // still be playable (WR-01). If that activating resume() does not start
+      // the context either, no later gesture can (all pending resumes settle
+      // together), so the reopen is spent until the resume settles (05-REVIEW
+      // WR-01, second pass).
       const nowMs = this.clock();
-      const expired = nowMs >= this.startingUntilMs;
-      if (!this.resumePending || (expired && this.isActivation())) {
+      if (!this.resumePending) {
+        this.activationReopened = false;
+        this.openStartingWindow(ctx, nowMs);
+      } else if (
+        !this.activationReopened &&
+        nowMs >= this.startingUntilMs &&
+        this.isActivation()
+      ) {
+        this.activationReopened = true;
         // Voices from an expired window must not ride into the new one.
-        if (this.resumePending) this.pool.discardAll(ctx.currentTime);
-        this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
-        this.startAudioT = ctx.currentTime;
+        this.pool.discardAll(ctx.currentTime);
+        this.openStartingWindow(ctx, nowMs);
       }
       this.resumePending = true;
       ctx.resume().then(
         () => {
           this.resumePending = false;
+          this.activationReopened = false;
         },
         (error: unknown) => {
           this.resumePending = false;
+          this.activationReopened = false;
           report("resume() was rejected", error);
         },
       );
     } catch (error) {
       this.resumePending = false;
+      this.activationReopened = false;
       report("resume() threw", error);
     }
+  }
+
+  /** (Re)open the bounded starting window at wall-clock `nowMs`. */
+  private openStartingWindow(ctx: AudioContextLike, nowMs: number): void {
+    this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
+    this.startAudioT = ctx.currentTime;
   }
 
   /** Build the master chain and the shared noise buffer on a new context. */
