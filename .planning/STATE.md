@@ -177,7 +177,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- [2026-11-21] [testing] Give heavy simulation tests an explicit timeout so the suite is load-stable — [todo file](.planning/todos/pending/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md)
 
 ### Blockers/Concerns
 
