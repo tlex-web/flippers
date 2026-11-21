@@ -28,6 +28,14 @@
  * every rollover is lit the bank bonus is paid and all of them go dark.
  * Lights persist across balls and are cleared by `resetLights()` (new game).
  *
+ * Presentation feedback (Phase 5, AUD-01/RND-03): an optional `ReactiveFeedback`
+ * hook reports every REGISTERED hit (a kick or sensor pass that cleared the
+ * cooldown, impulse, face and `isLive()` gates) to the presentation layer. It
+ * is called as the last statement of each registered branch, after the award
+ * and after the cooldown and pending kick are set, so a throwing sink can never
+ * leave a rule half-applied (Pitfall 8). It receives scalars only and never
+ * mutates rules or the world. The default is a frozen no-op.
+ *
  * Engine-agnostic: the world is a type-only `PhysicsWorld` slice. Steady state
  * allocates nothing (fixed kicker array, Map lookup, index loops).
  */
@@ -58,6 +66,23 @@ export interface RulesGate {
   isLive(): boolean;
   award(points: number): void;
 }
+
+/**
+ * Where registered hits are reported for presentation (sound and flash). Called
+ * only for hits that scored; never for a contact rejected by the cooldown, the
+ * impulse threshold, the face distance or a not-live gate. Implementations must
+ * not allocate per call and must not touch the world or the rules.
+ */
+export interface ReactiveFeedback {
+  onKick(kind: "bumper" | "slingshot", elementId: number, normalImpulse: number): void;
+  onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void;
+}
+
+/** Default feedback: does nothing. Module-level and frozen, shared by all. */
+const NO_FEEDBACK: ReactiveFeedback = Object.freeze({
+  onKick(): void {},
+  onSensor(): void {},
+});
 
 /** The world slice the reactive elements need. */
 export type ReactiveWorld = Pick<PhysicsWorld, "getElements" | "getBalls" | "applyImpulse">;
@@ -180,6 +205,7 @@ interface SensorRule {
 export class ReactiveElements {
   private readonly world: ReactiveWorld;
   private readonly gate: RulesGate;
+  private readonly feedback: ReactiveFeedback;
   private readonly kickers: Kicker[] = [];
   private readonly kickerById = new Map<number, Kicker>();
   private readonly sensors: SensorRule[] = [];
@@ -190,9 +216,15 @@ export class ReactiveElements {
   /** Fixed steps serviced so far: the only clock. */
   private step = 0;
 
-  constructor(world: ReactiveWorld, router: CollisionRouter, gate: RulesGate) {
+  constructor(
+    world: ReactiveWorld,
+    router: CollisionRouter,
+    gate: RulesGate,
+    feedback: ReactiveFeedback = NO_FEEDBACK,
+  ) {
     this.world = world;
     this.gate = gate;
+    this.feedback = feedback;
     const elements = world.getElements();
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
@@ -313,16 +345,24 @@ export class ReactiveElements {
     rule.armedAtStep = this.step + SENSOR_REARM_STEPS;
     if (rule.kind === "lane") {
       this.gate.award(INLANE_POINTS);
+      this.feedback.onSensor("lane", rule.id, false);
       return;
     }
     this.gate.award(ROLLOVER_POINTS);
     rule.lit = true;
     const rollovers = this.rollovers;
+    let bank = true;
     for (let i = 0; i < rollovers.length; i++) {
-      if (!rollovers[i]?.lit) return;
+      if (!rollovers[i]?.lit) {
+        bank = false;
+        break;
+      }
     }
-    this.gate.award(ROLLOVER_BANK_BONUS);
-    this.resetLights();
+    if (bank) {
+      this.gate.award(ROLLOVER_BANK_BONUS);
+      this.resetLights();
+    }
+    this.feedback.onSensor("rollover", rule.id, bank);
   }
 
   /** Bus listener, bound once: record and award, never touch the world here. */
@@ -349,5 +389,6 @@ export class ReactiveElements {
     k.armedAtStep = this.step + KICKER_REARM_STEPS;
     k.pendingBall = e.ballId;
     this.gate.award(k.points);
+    this.feedback.onKick(kind, e.elementId, e.normalImpulse);
   };
 }
