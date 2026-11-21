@@ -81,6 +81,7 @@ import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { DiagView, HudView, type DiagData, type TextSink } from "../ui/hud";
 import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
+import { ContactFlash } from "../render/contact-flash";
 import { FlashTracker, maxElementId } from "../render/flash";
 import type { LayerFactory } from "../render/static-layer";
 import { TableRenderer, type FlashReader, type LightState } from "../render/table-renderer";
@@ -193,6 +194,9 @@ function main(): void {
   const flash = new FlashTracker(maxElementId(world.getElements()));
   const cueFeedback = new CueFeedback(cues, flash);
   const reactive = new ReactiveElements(world, router, session, cueFeedback);
+  // Walls, the chute and the bats flash on a real hit straight off the bus,
+  // silently (D-03): ContactFlash holds only the flash sink, never the cues.
+  new ContactFlash(router, flash);
 
   // Audio: the factory runs only inside the first trusted gesture (a context
   // built here at boot would start suspended). The DOM factory is handed to a
