@@ -5,24 +5,28 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "[new, f1b2a1e WR-01 fix code] The starting window never reopens while the first resume is pending, so the \"start\" cue is dropped when a real activation finally starts the context"
+    disposition: open
+    title: "[new, 9d1f3b1 WR-01 fix] Any activating gesture after expiry reopens the window, so a resume that never settles is unbounded again (regression of the previous WR-01 bound)"
+  - id: WR-02
+    severity: warning
+    disposition: open
+    title: "[new, 9d1f3b1 x 60c34ac] The reopen path discards and hard-cuts voices on a context that IN-05 already treats as rendering"
   - id: IN-01
     severity: info
-    disposition: fixed
-    title: "[new, WR-02 fix code] The sandbox header still says cues are dropped while the context is not running"
+    disposition: open
+    title: "[new, 56df7b0 / 9d1f3b1 / 60c34ac] The window documentation still says \"at most STARTING_WINDOW_MS after the first resume()\""
   - id: IN-02
     severity: info
-    disposition: fixed
-    title: "[new, IN-03 fix code] A second live region contradicts the \"only announced line\" documentation, and unmuting is silent to assistive tech"
+    disposition: open
+    title: "[new, 47d0caa] `applyEnvelope` is now test-only, and the envelope header still describes \"one thin applier\""
   - id: IN-03
     severity: info
-    disposition: fixed
-    title: "[new, IN-04 fix code] The asset gate still misses remote stylesheets, fonts and scripts"
+    disposition: open
+    title: "[new, 3876b5b] The asset gate still misses a few ways to pull assets into the page from script"
   - id: IN-04
     severity: info
-    disposition: fixed
-    title: "[new, WR-01 fix code] Envelope points are built twice per layer; the steal anchor relies on two independent calls staying in step"
+    disposition: open
+    title: "[new, 60c34ac] IN-05's \"suspended with no resume pending stays not-rendering\" branch has no clock-advanced test"
   - id: IN-05
     severity: info
     disposition: fixed
@@ -35,28 +39,24 @@ findings:
     severity: info
     disposition: fixed
     title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
-  - id: WR-02
-    severity: warning
-    disposition: fixed
-    title: "Cues recorded before a new context reports \"running\" are dropped, so the first \"start\" jingle can be lost"
-open: 0
+open: 6
 total: 9
-recorded: 2026-11-21T23:05:52.848Z
+recorded: 2026-11-21T23:31:53.209Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
-| IN-01 | info | fixed | 05-REVIEW-FIX.md |
-| IN-02 | info | fixed | 05-REVIEW-FIX.md |
-| IN-03 | info | fixed | 05-REVIEW-FIX.md |
-| IN-04 | info | fixed | 05-REVIEW-FIX.md |
-| IN-05 | info | fixed | 05-REVIEW-FIX.md |
-| IN-06 | info | fixed | 05-REVIEW-FIX.md |
-| IN-07 | info | fixed | 05-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| WR-01 | warning | open | - |
+| WR-02 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | open | - |
+| IN-04 | info | open | - |
+| IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-06 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-07 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
