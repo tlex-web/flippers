@@ -192,14 +192,16 @@ Plans:
   3. Every element flashes on contact to confirm the hit registered.
   4. Each element (bumper, flipper, slingshot, drain, launch, tilt) produces a distinct runtime-synthesized sound with velocity/pitch variation and no audio files, played through a shared, gesture-resumed audio context with enveloped one-shots.
 
-**Plans**: 6 plans (5 waves)
+**Plans**: 8 plans (5 waves)
 Plans:
-**Wave 1**
-- [ ] 05-01-PLAN.md — Tracer: a bumper hit is heard. ReactiveFeedback hook, CueQueue/CueFeedback, Web Audio seam, AudioEngine (bumper voice), gesture unlock, fake AudioContext, testTimeout fix [wave 1]
+**Wave 1** *(both plans run in parallel)*
+- [ ] 05-01-PLAN.md — Tracer: a bumper hit is heard in the live game. ReactiveFeedback hook, CueQueue/CueFeedback, Web Audio seam, AudioEngine (bumper voice), fake AudioContext, gesture unlock + live wiring (A5 at the composition root), testTimeout fix [wave 1]
+- [ ] 05-08-PLAN.md — Smooth-motion groundwork: loop flipper-angle snapshots and interpolation helpers (real-table 144 Hz proof), RND-01 asset gate [wave 1]
 
-**Wave 2** *(blocked on Wave 1 completion; both plans run in parallel)*
-- [ ] 05-02-PLAN.md — The real table on screen: display-sized backing store, static bake, TableRenderer, flipper interpolation, ?debug=1 escape hatch, asset gate (D-01 interpretation recorded) [wave 2]
+**Wave 2** *(blocked on Wave 1 completion; three plans run in parallel)*
+- [ ] 05-02-PLAN.md — The real table on screen: display-sized backing store, static bake, TableRenderer wired with interpolated balls and bats, ?debug=1 escape hatch, canvas recorder + bake/frame contract tests (D-01 interpretation recorded) [wave 2]
 - [ ] 05-03-PLAN.md — Every element's voice: velocity/pitch mapping, envelopes, 13 distinct recipes, voice pool, ramped master mute (D-02 engine, D-03 no wall voice) [wave 2]
+- [ ] 05-07-PLAN.md — Presentation seams hold every edge: throwing-sink real-table proof, hook/ring contract cases, unlock rules + A5 guard, closes the load-timeout todo [wave 2]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-04-PLAN.md — Every hit flashes: FlashTracker on the step clock, baked halo sprites, flash pass, silent wall/chute/flipper ContactFlash (D-03) [wave 3]

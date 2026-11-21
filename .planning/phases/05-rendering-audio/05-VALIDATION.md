@@ -43,14 +43,17 @@ Seeded from 05-RESEARCH.md § Validation Architecture. Task IDs are filled in by
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-01-T1 | 05-01 | 1 | AUD-01 | T-05-01, T-05-03 | Registered bumper kick -> cue -> master-routed voice; empty and suspended edges create nothing | integration (real table + fake ctx) | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ❌ W0 | ⬜ pending |
-| 05-01-T2 | 05-01 | 1 | RND-03, AUD-01 | T-05-02 | Feedback fires only for counted hits, after award; throwing sink leaves rule state intact | unit | `npx vitest run src/game/reactive-elements.test.ts src/app/cue-queue.test.ts` | ✅ extend | ⬜ pending |
-| 05-01-T3 | 05-01 | 1 | AUD-01 | T-05-04, T-05-05 | No AudioContext before a trusted gesture | unit | `npx vitest run src/audio/audio-unlock.test.ts` | ❌ W0 | ⬜ pending |
+| 05-01-T1 | 05-01 | 1 | AUD-01 | T-05-01, T-05-03 | Registered bumper kick -> cue -> master-routed voice; empty, clamped and suspended edges create nothing | integration (real table + fake ctx) | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ❌ W0 | ⬜ pending |
+| 05-01-T2 | 05-01 | 1 | AUD-01 | T-05-04, T-05-05 | No AudioContext before a trusted gesture; untrusted and Escape create nothing (gesture cases g-i) | integration (real table + fake ctx) | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ❌ W0 | ⬜ pending |
+| 05-08-T1 | 05-08 | 1 | RND-02 | T-05-09 | Drawn bat angle advances every 144 Hz frame of a swing | integration (real table) | `npx vitest run src/sim/loop.flippers.test.ts` | ❌ W0 | ⬜ pending |
+| 05-08-T2 | 05-08 | 1 | RND-02 | T-05-09 | Snapshots read-only; determinism unchanged | unit | `npx vitest run src/sim/loop.flippers.test.ts src/render/interpolate.test.ts` | ❌ W0 | ⬜ pending |
+| 05-08-T3 | 05-08 | 1 | RND-01 | T-05-22 | No image, audio or font assets in `src/` or `index.html` | unit (fs scan) | `npx vitest run src/render/asset-free.test.ts` | ❌ W0 | ⬜ pending |
 | 05-02-T1 | 05-02 | 2 | RND-02 | T-05-06 | Backing store sized from the display | unit | `npx vitest run src/render/view-transform.test.ts` | ❌ W0 | ⬜ pending |
-| 05-02-T2 | 05-02 | 2 | RND-02 | T-05-09 | N/A | unit | `npx vitest run src/sim/loop.flippers.test.ts src/render/interpolate.test.ts` | ❌ W0 | ⬜ pending |
-| 05-02-T3 | 05-02 | 2 | RND-01 | — | No image, audio or font assets in `src/` or `index.html` | unit (fs scan) | `npx vitest run src/render/asset-free.test.ts` | ❌ W0 | ⬜ pending |
-| 05-02-T3 | 05-02 | 2 | RND-01 | — | N/A | unit (recording ctx) | `npx vitest run src/render/static-layer.test.ts` | ❌ W0 | ⬜ pending |
-| 05-02-T3 | 05-02 | 2 | RND-02 | T-05-08 | N/A | unit (recording ctx) | `npx vitest run src/render/table-renderer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T2 | 05-02 | 2 | RND-01 | — | N/A | unit (recording ctx) | `npx vitest run src/render/static-layer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-02-T2 | 05-02 | 2 | RND-02 | T-05-08 | N/A | unit (recording ctx) | `npx vitest run src/render/table-renderer.test.ts` | ❌ W0 | ⬜ pending |
+| 05-07-T1 | 05-07 | 2 | AUD-01 | T-05-02 | A throwing presentation sink leaves the real-table sim bit-identical | integration (real table) | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ✅ extend | ⬜ pending |
+| 05-07-T2 | 05-07 | 2 | RND-03, AUD-01 | T-05-01, T-05-02, T-05-21 | Feedback fires only for counted hits, after award; ring never grows | unit | `npx vitest run src/game/reactive-elements.test.ts src/app/cue-queue.test.ts` | ✅ extend | ⬜ pending |
+| 05-07-T3 | 05-07 | 2 | AUD-01 | T-05-04, T-05-05 | Unlock rules; context creation failure logs once; A5 type guard | unit | `npx vitest run src/audio/audio-unlock.test.ts` | ❌ W0 | ⬜ pending |
 | 05-03-T1 | 05-03 | 2 | AUD-01 | — | N/A | unit | `npx vitest run src/audio/mapping.test.ts src/audio/audio-engine.test.ts` | ❌ W0 | ⬜ pending |
 | 05-03-T2 | 05-03 | 2 | AUD-01 | T-05-11, T-05-12 | Every node stopped and disconnected (no leak) | unit (fake ctx) | `npx vitest run src/audio/envelope.test.ts src/audio/recipes.test.ts` | ❌ W0 | ⬜ pending |
 | 05-03-T3 | 05-03 | 2 | AUD-01 | T-05-10 | Voice caps bound concurrent nodes under spam | unit | `npx vitest run src/audio/voice-pool.test.ts src/audio/audio-engine.test.ts` | ❌ W0 | ⬜ pending |
@@ -68,11 +71,11 @@ Seeded from 05-RESEARCH.md § Validation Architecture. Task IDs are filled in by
 
 ## Wave 0 Requirements
 
-- [ ] `vitest.config.ts` — `testTimeout: 30000` (closes the pending load-flake todo; baseline has 3 timeouts)
-- [ ] `src/render/test/recording-context.ts` — Proxy-based `CanvasRenderingContext2D` recorder (method calls + property sets)
-- [ ] `src/audio/test/fake-audio-context.ts` — implements `AudioContextLike`; records nodes, param automation, start/stop, connections; manual `fireEnded()`
-- [ ] `src/render/asset-free.test.ts` — the RND-01 grep gate
-- [ ] Typecheck fixture proving the real `AudioContext` is assignable to `AudioContextLike` (research assumption A5)
+- [ ] `vitest.config.ts` — `testTimeout: 30000` (05-01, wave 1; baseline has 3 timeouts). The pending load-flake todo is closed by 05-07 after two back-to-back clean full runs
+- [ ] `src/render/test/recording-context.ts` — Proxy-based `CanvasRenderingContext2D` recorder (method calls + property sets) (05-02, wave 2)
+- [ ] `src/audio/test/fake-audio-context.ts` — implements `AudioContextLike`; records nodes, param automation, start/stop, connections; manual `fireEnded()` (05-01, wave 1)
+- [ ] `src/render/asset-free.test.ts` — the RND-01 grep gate (05-08, wave 1)
+- [ ] A5 proof that the real `AudioContext` is assignable to `AudioContextLike` — proven at the composition root by main.ts's cast-free factory (05-01), guarded by a type-level case in `src/audio/audio-unlock.test.ts` (05-07)
 
 ---
 
