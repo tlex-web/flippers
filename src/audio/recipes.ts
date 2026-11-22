@@ -105,6 +105,29 @@ const GAME_OVER_ENV: EnvelopeSpec = { attack: 0.004, hold: 0, decay: 0.35 };
 const TILT_ENV: EnvelopeSpec = { attack: 0.005, hold: 0.5, decay: 0.15 };
 /** 80 ms beep: 2 ms attack, 60 ms hold, 18 ms decay. */
 const BEEP_ENV: EnvelopeSpec = { attack: 0.002, hold: 0.06, decay: 0.018 };
+/** Phase-6 stings (D-25). The skill-shot top note rings a little longer than a figure note. */
+const STING_ENV: EnvelopeSpec = { attack: 0.003, hold: 0.03, decay: 0.3 };
+/** Fanfare notes: a short hold so the three notes read as brass-like stabs. */
+const FANFARE_ENV: EnvelopeSpec = { attack: 0.004, hold: 0.05, decay: 0.24 };
+/** Cabinet thump: about 0.12 s end to end. */
+const THUMP_ENV: EnvelopeSpec = { attack: 0.002, hold: 0, decay: 0.12 };
+/** Bonus tick: 30 ms. */
+const TICK_ENV: EnvelopeSpec = { attack: 0.001, hold: 0, decay: 0.03 };
+
+/** A sawtooth note through a fixed lowpass (the high-score fanfare). */
+function brassNote(freq: number, offset: number): LayerSpec {
+  return {
+    source: "osc",
+    wave: "sawtooth",
+    f0: freq,
+    f1: freq,
+    sweep: 0,
+    filter: { type: "lowpass", f0: 2400, q: 0.9 },
+    gainDb: -2,
+    offset,
+    envelope: FANFARE_ENV,
+  };
+}
 
 export const RECIPES: Readonly<Record<CueKind, CueRecipe>> = Object.freeze({
   /** Pop: triangle 620 -> 300 Hz over 60 ms plus a 2.2 kHz band-passed noise click. */
@@ -397,6 +420,118 @@ export const RECIPES: Readonly<Record<CueKind, CueRecipe>> = Object.freeze({
     maxSemitones: 0,
     jitterCents: 0,
     cap: 1,
+    levelFromStrength: false,
+  },
+
+  /**
+   * Nudge (Phase 6, D-25): a low cabinet thump, a 220 Hz lowpassed noise burst
+   * over a sine 65 -> 45 Hz. The elementId carries the direction (left 0,
+   * right 1, up 2); the voice is the same for all three.
+   */
+  nudge: {
+    peak: 0.7,
+    layers: [
+      {
+        source: "noise",
+        f0: 0,
+        f1: 0,
+        sweep: 0,
+        filter: { type: "lowpass", f0: 220, q: 0.8 },
+        gainDb: -2,
+        offset: 0,
+        envelope: THUMP_ENV,
+      },
+      {
+        source: "osc",
+        wave: "sine",
+        f0: 65,
+        f1: 45,
+        sweep: 0.1,
+        gainDb: 0,
+        offset: 0,
+        envelope: THUMP_ENV,
+      },
+    ],
+    maxSemitones: 0,
+    jitterCents: 20,
+    cap: 2,
+    levelFromStrength: false,
+  },
+
+  /**
+   * Skill shot (Phase 6, D-25): a bright rising two-note triangle sting, 880
+   * then 1319 Hz (a fifth up), led by the launch voice's band-passed noise
+   * swish so it reads as the launch family paying off.
+   */
+  skillShot: {
+    peak: 0.55,
+    layers: [
+      {
+        source: "noise",
+        f0: 0,
+        f1: 0,
+        sweep: 0,
+        filter: { type: "bandpass", f0: 1200, f1: 3200, q: 2 },
+        gainDb: -10,
+        offset: 0,
+        envelope: { attack: 0.003, hold: 0, decay: 0.1 },
+      },
+      note("triangle", 880, 0, FIGURE_ENV),
+      note("triangle", 1319, 0.09, STING_ENV),
+    ],
+    maxSemitones: 0,
+    jitterCents: 0,
+    cap: 1,
+    levelFromStrength: false,
+  },
+
+  /**
+   * Ball save (Phase 6, D-25): a short upward triangle sweep 440 -> 1320 Hz,
+   * then a high metallic ping, a 2093 Hz sine bell with its 2.76x partial.
+   */
+  ballSave: {
+    peak: 0.55,
+    layers: [
+      {
+        source: "osc",
+        wave: "triangle",
+        f0: 440,
+        f1: 1320,
+        sweep: 0.12,
+        gainDb: -3,
+        offset: 0,
+        envelope: { attack: 0.003, hold: 0.06, decay: 0.08 },
+      },
+      note("sine", 2093, 0.1, CHIME_ENV),
+      note("sine", 2093 * BELL_PARTIAL, 0.1, CHIME_ENV, -9),
+    ],
+    maxSemitones: 0,
+    jitterCents: 0,
+    cap: 1,
+    levelFromStrength: false,
+  },
+
+  /**
+   * High score (Phase 6, D-25): a three-note ascending fanfare, lowpassed
+   * sawtooth stabs at 587, 740 and 880 Hz (D major), unlike start's triangle
+   * C major figure.
+   */
+  highScore: {
+    peak: 0.45,
+    layers: [brassNote(587, 0), brassNote(740, 0.12), brassNote(880, 0.24)],
+    maxSemitones: 0,
+    jitterCents: 0,
+    cap: 1,
+    levelFromStrength: false,
+  },
+
+  /** Bonus tick (Phase 6, D-25): a quiet 30 ms sine tick at 2400 Hz, one per tally row. */
+  bonusTick: {
+    peak: 0.35,
+    layers: [note("sine", 2400, 0, TICK_ENV, -6)],
+    maxSemitones: 0,
+    jitterCents: 0,
+    cap: 2,
     levelFromStrength: false,
   },
 });

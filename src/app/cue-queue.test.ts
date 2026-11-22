@@ -162,9 +162,9 @@ describe("CueFeedback (AUD-01/RND-03)", () => {
     expect(q.size).toBe(2);
   });
 
-  it("CUE_KINDS holds 13 distinct kinds and none is wall or chute (D-03)", () => {
-    expect(CUE_KINDS).toHaveLength(13);
-    expect(new Set(CUE_KINDS).size).toBe(13);
+  it("CUE_KINDS holds 18 distinct kinds and none is wall or chute (D-03)", () => {
+    expect(CUE_KINDS).toHaveLength(18);
+    expect(new Set(CUE_KINDS).size).toBe(18);
     const kinds: readonly string[] = CUE_KINDS;
     expect(kinds).not.toContain("wall");
     expect(kinds).not.toContain("chute");

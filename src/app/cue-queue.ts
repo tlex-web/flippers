@@ -37,9 +37,14 @@ export type CueKind =
   | "tilt"
   | "warning"
   | "start"
-  | "gameOver";
+  | "gameOver"
+  | "nudge"
+  | "skillShot"
+  | "ballSave"
+  | "highScore"
+  | "bonusTick";
 
-/** All 13 cue kinds, for exhaustive tests. */
+/** All 18 cue kinds, for exhaustive tests. */
 export const CUE_KINDS: readonly CueKind[] = Object.freeze([
   "bumper",
   "slingshot",
@@ -54,6 +59,11 @@ export const CUE_KINDS: readonly CueKind[] = Object.freeze([
   "warning",
   "start",
   "gameOver",
+  "nudge",
+  "skillShot",
+  "ballSave",
+  "highScore",
+  "bonusTick",
 ]);
 
 /** One recorded cue, as the render frame reads it. */

@@ -18,6 +18,9 @@
  *   release ended at (a sub-window tap launches at 0, a cancel counts nothing);
  * - `"tilt"`: the state became tilted;
  * - `"warning"`: a false -> true edge of `isWarning()`;
+ * - `"skillShot"` (on the lane the shot went through): once per skill-shot
+ *   count increment, at strength value / `SKILL_SHOT_MAX_POINTS` (06-04, D-25;
+ *   a new game resets the count, which pushes nothing);
  * - `"drain"` (on the drain element, plus a drain-apron flash): the previous
  *   state was not game-over and either the ball number rose or the state became
  *   game-over;
@@ -27,16 +30,26 @@
  * Read-only by construction (T-05-16): it holds only `Pick<>` getter slices of
  * the session, the plunger and the flipper controller, never a world handle, and writes only scalars
  * into the cue ring and the flash sink. No allocation, no closures, no DOM, no
- * engine import (type-only imports).
+ * engine import (type-only imports, plus the plain `SKILL_SHOT_MAX_POINTS`
+ * tuning constant).
  */
 
 import type { CueQueue, FlashSink } from "../app/cue-queue";
 import type { FlipperController } from "../control/flipper-controller";
 import type { PlungerController } from "../control/plunger-controller";
 import type { GameSession, GameState } from "../game/game-session";
+import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
 
 /** The session getters the observer diffs. */
-export type ObserverSession = Pick<GameSession, "getState" | "getBall" | "isWarning">;
+export type ObserverSession = Pick<
+  GameSession,
+  | "getState"
+  | "getBall"
+  | "isWarning"
+  | "getSkillShotCount"
+  | "getLastSkillValue"
+  | "getLastSkillLane"
+>;
 
 /** The plunger's read-only release counter. */
 export type ObserverPlunger = Pick<PlungerController, "getReleaseCount" | "getLastReleaseCharge">;
@@ -60,6 +73,7 @@ export class PresentationObserver {
   private prevBall: number;
   private prevWarning: boolean;
   private prevReleases: number;
+  private prevSkillShots: number;
   /** Per watched flipper (same index as flipperIds), preallocated once. */
   private readonly prevCoilOn: number[];
   private readonly prevCoilOff: number[];
@@ -82,6 +96,7 @@ export class PresentationObserver {
     this.prevBall = session.getBall();
     this.prevWarning = session.isWarning();
     this.prevReleases = plunger.getReleaseCount();
+    this.prevSkillShots = session.getSkillShotCount();
     this.flippers = flippers;
     this.flipperIds = flipperIds;
     this.prevCoilOn = new Array<number>(flipperIds.length);
@@ -99,6 +114,7 @@ export class PresentationObserver {
     const ball = this.session.getBall();
     const warning = this.session.isWarning();
     const releases = this.plunger.getReleaseCount();
+    const skillShots = this.session.getSkillShotCount();
     const prev = this.prevState;
 
     if (prev === "game-over" && state === "playing") this.cues.push("start", NO_ELEMENT, 1);
@@ -127,6 +143,13 @@ export class PresentationObserver {
 
     if (warning && !this.prevWarning) this.cues.push("warning", NO_ELEMENT, 1);
 
+    if (skillShots > this.prevSkillShots) {
+      const lane = this.session.getLastSkillLane();
+      const strength = this.session.getLastSkillValue() / SKILL_SHOT_MAX_POINTS;
+      for (let n = this.prevSkillShots; n < skillShots; n++)
+        this.cues.push("skillShot", lane, strength);
+    }
+
     const becameGameOver = state === "game-over" && prev !== "game-over";
     if (prev !== "game-over" && (ball > this.prevBall || becameGameOver)) {
       this.cues.push("drain", this.drainElementId, 1);
@@ -139,5 +162,6 @@ export class PresentationObserver {
     this.prevBall = ball;
     this.prevWarning = warning;
     this.prevReleases = releases;
+    this.prevSkillShots = skillShots;
   }
 }

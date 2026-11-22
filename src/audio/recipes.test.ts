@@ -28,6 +28,11 @@ const ELEMENT_ID: Readonly<Record<CueKind, number>> = {
   warning: -1,
   start: -1,
   gameOver: -1,
+  nudge: 0,
+  skillShot: 401,
+  ballSave: -1,
+  highScore: -1,
+  bonusTick: -1,
 };
 
 interface Voiced {

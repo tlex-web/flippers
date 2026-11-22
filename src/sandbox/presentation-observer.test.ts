@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
+import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
 import type { GameState } from "../game/game-session";
 import {
   PresentationObserver,
@@ -22,6 +23,9 @@ class FakeSession implements ObserverSession {
   state: GameState = "game-over";
   ball = 0;
   warning = false;
+  skillShots = 0;
+  lastSkillValue = 0;
+  lastSkillLane = -1;
   getState(): GameState {
     return this.state;
   }
@@ -30,6 +34,15 @@ class FakeSession implements ObserverSession {
   }
   isWarning(): boolean {
     return this.warning;
+  }
+  getSkillShotCount(): number {
+    return this.skillShots;
+  }
+  getLastSkillValue(): number {
+    return this.lastSkillValue;
+  }
+  getLastSkillLane(): number {
+    return this.lastSkillLane;
   }
 }
 
@@ -298,5 +311,72 @@ describe("PresentationObserver: flipper coil cues (05-05 Task 2)", () => {
     );
     observer.observe();
     expect(cues.size).toBe(0);
+  });
+});
+
+describe("PresentationObserver: skill-shot sting (06-04, D-25)", () => {
+  it("a playing step with no skill-shot increment pushes nothing", () => {
+    const r = rig("playing", 1);
+    r.session.lastSkillValue = 5000;
+    r.session.lastSkillLane = 401;
+    expect(step(r)).toEqual([]);
+  });
+
+  it("an increment with value 5000 on lane 401 pushes one skillShot on 401 at strength 0.2", () => {
+    const r = rig("playing", 1);
+    r.session.skillShots = 1;
+    r.session.lastSkillValue = 5000;
+    r.session.lastSkillLane = 401;
+    r.cues.clear();
+    r.observer.observe();
+    expect(r.cues.size).toBe(1);
+    const c = r.cues.at(0);
+    expect(c?.kind).toBe("skillShot");
+    expect(c?.elementId).toBe(401);
+    expect(c?.strength).toBeCloseTo(0.2, 12);
+    expect(SKILL_SHOT_MAX_POINTS).toBe(25000);
+    expect(step(r)).toEqual([]);
+  });
+
+  it("a warning edge, a skill increment and a drain in one step push warning, skillShot, drain", () => {
+    const r = rig("playing", 1);
+    r.session.warning = true;
+    r.session.skillShots = 1;
+    r.session.lastSkillValue = 10000;
+    r.session.lastSkillLane = 400;
+    r.session.ball = 2;
+    expect(step(r)).toEqual(["warning", "skillShot", "drain"]);
+  });
+
+  it("construction with count 3 pushes nothing on the first observe", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    session.ball = 2;
+    session.skillShots = 3;
+    session.lastSkillValue = 15000;
+    session.lastSkillLane = 402;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
+  });
+
+  it("a new game resetting the count to 0 pushes no skillShot", () => {
+    const r = rig("game-over", 3);
+    r.session.skillShots = 2;
+    r.cues.clear();
+    r.observer.observe();
+    r.session.state = "playing";
+    r.session.ball = 1;
+    r.session.skillShots = 0;
+    expect(step(r)).toEqual(["start"]);
   });
 });
