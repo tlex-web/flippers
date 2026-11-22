@@ -5,11 +5,11 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Invariant 2 holds only for the episode's first two gestures. After a failed device start, the recovering Enter's \"start\" figure is dropped"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The rendering test compares the clock with a per-window anchor, so an unobserved run makes a frozen, suspended context count as \"rendering\" forever"
   - id: WR-02
     severity: warning
@@ -43,17 +43,17 @@ findings:
     severity: info
     disposition: fixed
     title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
-open: 2
+open: 0
 total: 10
-recorded: 2026-11-22T00:29:39.800Z
+recorded: 2026-11-22T00:37:53.029Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
-| IN-01 | info | open | - |
+| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
+| IN-01 | info | fixed | 05-REVIEW-FIX.md |
 | WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-02 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
