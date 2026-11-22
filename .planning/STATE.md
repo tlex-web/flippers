@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-11-22T21:07:23.399Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-11-22T21:20:37.359Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 7007b7d988fc23f002f2097fcb7d82097da43dc7
+state_head: 8d7606221f7f86091f96d3280717171b341d391f
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 45
+  completed_plans: 46
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 4 of 14
+Plan: 5 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -107,6 +107,7 @@ Progress: [████████░░] 83%
 | Phase 06 P01 | 13 min | 3 tasks | 9 files |
 | Phase 06 P02 | 46min | 2 tasks | 6 files |
 | Phase 06 P03 | 35 min | 3 tasks | 9 files |
+| Phase 06 P04 | 10min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -224,6 +225,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-03: lamp blink and attract chase count from their own entry step (blinkStart, attractStart), never a global modulo, so every blink cycle is exactly 60 steps
 - [Phase 06]: 06-03: one buildLampShapes table drives the live lamp pass, the per-colour halo bake and the unlit lens bake; a new lamp (06-10 save ring) is one row
 - [Phase 06]: 06-03: inlane flags live in GameSession, set by a lane switch while playing and cleared in serveBall(); the 06-07 backstop re-serve must not call serveBall()
+- [Phase 06]: 06-04: SKILL SHOT status is outranked only by TILT, never gated on playing; requires getSkillShotCount() > 0
+- [Phase 06]: 06-04: skillShot cue strength = value / SKILL_SHOT_MAX_POINTS, informational only (recipe ignores level)
+- [Phase 06]: 06-04: status line is a (StatusCode, value) resolver in HudView; later rows add a code and one branch
 
 ### Pending Todos
 
@@ -254,6 +258,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:07:21.929Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-11-22T21:20:35.950Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
