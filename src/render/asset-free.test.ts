@@ -94,15 +94,16 @@ const PATTERNS: readonly AssetPattern[] = [
   },
   { name: "CSS image-set()", re: /\bimage-set\s*\(/i, sample: "background: image-set(x 1x);" },
   // 05-REVIEW IN-03 (second pass): asset pulls from script. Vite leaves
-  // `https:` module specifiers external, so they are runtime fetches.
+  // `https:` module specifiers external, so they are runtime fetches. Side-
+  // effect imports and backtick specifiers count too (05-REVIEW IN-02).
   {
     name: "remote ES module specifier",
-    re: /\bfrom\s*["'](https?:)?\/\/|\bimport\s*\(\s*["'](https?:)?\/\//,
+    re: /\b(from|import)\s*["'`](https?:)?\/\/|\bimport\s*\(\s*["'`](https?:)?\/\//,
     sample: 'import confetti from "https://esm.sh/canvas-confetti";',
   },
   {
     name: "media element created from script",
-    re: /\bcreateElement\s*\(\s*["'](img|audio|video|source)["']/i,
+    re: /\bcreateElement\s*\(\s*["'`](img|audio|video|source)["'`]/i,
     sample: 'const a = document.createElement("audio");',
   },
   {
@@ -177,12 +178,16 @@ describe("asset-free tree (RND-01)", () => {
     const remote = byName("remote ES module specifier");
     expect(remote.test('const m = await import("https://cdn.example/m.js");')).toBe(true);
     expect(remote.test('import x from "//cdn.example/x.js";')).toBe(true);
+    expect(remote.test('import "https://x/y.js";')).toBe(true);
+    expect(remote.test("const m = await import(`https://x`);")).toBe(true);
     expect(remote.test('import { CueQueue } from "../app/cue-queue";')).toBe(false);
     expect(remote.test('const m = await import("./lazy");')).toBe(false);
+    expect(remote.test('import "./style.css";')).toBe(false);
     const media = byName("media element created from script");
     for (const tag of ["img", "video", "source"]) {
       expect(media.test(`document.createElement('${tag}')`), tag).toBe(true);
     }
+    expect(media.test("document.createElement(`img`)")).toBe(true);
     expect(media.test('document.createElement("canvas")')).toBe(false);
     const data = byName("data: URI asset");
     expect(data.test("el.src = `data:audio/wav;base64,UklGR`;")).toBe(true);
