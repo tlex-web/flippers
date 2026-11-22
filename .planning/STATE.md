@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-11-22T21:20:37.359Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-11-22T21:35:58.106Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 8d7606221f7f86091f96d3280717171b341d391f
+state_head: 6bd52bb198501d7bfd343c04dfdf3ae9b9bd5cdb
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 46
+  completed_plans: 47
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 5 of 14
+Plan: 6 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -108,6 +108,7 @@ Progress: [████████░░] 83%
 | Phase 06 P02 | 46min | 2 tasks | 6 files |
 | Phase 06 P03 | 35 min | 3 tasks | 9 files |
 | Phase 06 P04 | 10min | 2 tasks | 9 files |
+| Phase 06 P05 | 11 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-04: SKILL SHOT status is outranked only by TILT, never gated on playing; requires getSkillShotCount() > 0
 - [Phase 06]: 06-04: skillShot cue strength = value / SKILL_SHOT_MAX_POINTS, informational only (recipe ignores level)
 - [Phase 06]: 06-04: status line is a (StatusCode, value) resolver in HudView; later rows add a code and one branch
+- [Phase 06]: 06-05: every drain enters the "bonus" GameState (flippers off, activeBallId -1); the tally ends at step >= bonusEndsAt or on a latched onFlipperPress (a tilt forfeit ignores it and holds 120 steps), credits through private credit(), then serves or ends the game
+- [Phase 06]: 06-05: GameSession.onSwitch reads the bank flag (default false); bonus counters advance only while playing and reset on every serve
+- [Phase 06]: 06-05: isBonusForfeit() is true only in "bonus"; an all-zero tally shows BONUS 0 for its 60-step hold; HUD status rows TILT, TILT · NO BONUS, BONUS, SKILL SHOT, prompts, WARNING
 
 ### Pending Todos
 
@@ -258,6 +262,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:20:35.950Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-11-22T21:35:56.089Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None
