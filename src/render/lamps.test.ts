@@ -11,6 +11,8 @@ import {
   LAMP_COUNT,
   LAMP_FADE_IN_STEPS,
   LAMP_FADE_OUT_STEPS,
+  LAMP_INLANE_500,
+  LAMP_INLANE_501,
   LAMP_ROLLOVER_400,
   LAMP_ROLLOVER_401,
   LAMP_ROLLOVER_402,
@@ -21,7 +23,15 @@ import {
   type LampLights,
   type LampRules,
 } from "./lamps";
-import { ROLLOVER_LIT, ROLLOVER_UNLIT, RUBBER_LINE_M, SKILL_LIT, SKILL_UNLIT } from "./palette";
+import {
+  INLANE_LIT,
+  INLANE_UNLIT,
+  ROLLOVER_LIT,
+  ROLLOVER_UNLIT,
+  RUBBER_LINE_M,
+  SKILL_LIT,
+  SKILL_UNLIT,
+} from "./palette";
 import { SENSOR_HALO_M } from "./sprites";
 
 /**
@@ -51,6 +61,10 @@ class FakeRules implements LampRules {
   }
   getLastSkillLane(): number {
     return this.lastLane;
+  }
+  readonly inlanes = new Set<number>();
+  isInlaneScored(elementId: number): boolean {
+    return this.inlanes.has(elementId);
   }
 }
 
@@ -302,6 +316,36 @@ describe("LampTracker targets (D-21, D-22)", () => {
   });
 });
 
+describe("LampTracker inlane arrows (plan 06-03 Task 2, D-21)", () => {
+  it("arrow 500 follows isInlaneScored(500) and arrow 501 follows 501 while playing", () => {
+    const { rules, lamps } = makeRig();
+    rules.inlanes.add(500);
+    run(lamps, LAMP_FADE_IN_STEPS);
+    expect(lamps.level(LAMP_INLANE_500, 1)).toBe(1);
+    expect(lamps.level(LAMP_INLANE_501, 1)).toBe(0);
+    rules.inlanes.add(501);
+    run(lamps, LAMP_FADE_IN_STEPS);
+    expect(lamps.level(LAMP_INLANE_501, 1)).toBe(1);
+    // The next serve clears both: they fade out.
+    rules.inlanes.clear();
+    run(lamps, LAMP_FADE_OUT_STEPS);
+    expect(lamps.level(LAMP_INLANE_500, 1)).toBe(0);
+    expect(lamps.level(LAMP_INLANE_501, 1)).toBe(0);
+  });
+
+  it("a tilt leaves the arrows as they were (rule state)", () => {
+    const { rules, lamps } = makeRig();
+    rules.inlanes.add(501);
+    run(lamps, LAMP_FADE_IN_STEPS);
+    rules.state = "tilted";
+    for (let i = 0; i < 100; i++) {
+      lamps.update();
+      expect(lamps.level(LAMP_INLANE_501, 1)).toBe(1);
+      expect(lamps.level(LAMP_INLANE_500, 1)).toBe(0);
+    }
+  });
+});
+
 describe("buildLampShapes (D-21 lamp table)", () => {
   const elements = new PlanckWorld({ table: TABLE_SPEC }).getElements();
   const shapes = buildLampShapes(elements);
@@ -368,6 +412,52 @@ describe("buildLampShapes (D-21 lamp table)", () => {
       const innerApex =
         ys.filter((_, i) => Math.abs((xs[i] ?? 0) - cx) < 1e-9).sort((p, q) => p - q)[1] ?? 0;
       expect(innerApex - (ys[apex] ?? 0)).toBeCloseTo((0.05 * len) / dx, 9);
+    }
+  });
+
+  it("builds the two inlane arrows: a 0.16 x 0.12 head plus a 0.05 x 0.08 stem at (0.585, 4.72) and its mirror", () => {
+    for (const [lamp, cx] of [
+      [LAMP_INLANE_500, 0.585],
+      [LAMP_INLANE_501, 2.315],
+    ] as const) {
+      const s = shapes.find((x) => x.lamp === lamp);
+      expect(s).toBeDefined();
+      if (!s) continue;
+      expect(s.style).toBe("fill");
+      expect(s.closed).toBe(true);
+      expect(s.elementDrawn).toBe(false);
+      expect(s.lit).toBe(INLANE_LIT);
+      expect(s.unlit).toBe(INLANE_UNLIT);
+      expect(s.haloRadius).toBe(0.14);
+      expect(s.lensRadius).toBeCloseTo(0.08, 12);
+      expect(s.cx).toBeCloseTo(cx, 12);
+      expect(s.cy).toBeCloseTo(4.72, 12);
+      const xs = Array.from(s.xs);
+      const ys = Array.from(s.ys);
+      expect(xs.length).toBe(7);
+      // Head: 0.16 wide; whole arrow 0.12 + 0.08 tall, centered on (cx, 4.72).
+      expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.16, 12);
+      expect(Math.min(...ys)).toBeCloseTo(4.72 - 0.1, 12);
+      expect(Math.max(...ys)).toBeCloseTo(4.72 + 0.1, 12);
+      // Upward: the apex is the single top-most vertex, on the center line.
+      const top = Math.min(...ys);
+      expect(ys.filter((y) => Math.abs(y - top) < 1e-9).length).toBe(1);
+      expect(xs[ys.indexOf(top)]).toBeCloseTo(cx, 12);
+      // Stem: 0.05 wide over the bottom 0.08.
+      const bottom = Math.max(...ys);
+      const stemXs = xs.filter((_, i) => Math.abs((ys[i] ?? 0) - bottom) < 1e-9);
+      expect(stemXs.length).toBe(2);
+      expect(Math.abs((stemXs[0] ?? 0) - (stemXs[1] ?? 0))).toBeCloseTo(0.05, 12);
+      const headBase = ys.filter((y) => Math.abs(y - (top + 0.12)) < 1e-9);
+      expect(headBase.length).toBe(4);
+    }
+    // Mirror images about x = 1.45.
+    const l = shapes.find((x) => x.lamp === LAMP_INLANE_500);
+    const r = shapes.find((x) => x.lamp === LAMP_INLANE_501);
+    if (l && r) {
+      const lx = Array.from(l.xs).map((x) => 2.9 - x).sort((p, q) => p - q);
+      const rx = Array.from(r.xs).sort((p, q) => p - q);
+      for (let i = 0; i < lx.length; i++) expect(rx[i]).toBeCloseTo(lx[i] ?? 0, 12);
     }
   });
 
