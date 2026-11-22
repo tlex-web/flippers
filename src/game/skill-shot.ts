@@ -80,9 +80,12 @@ export class SkillShot {
         this.rotateSteps = 0;
         this.litIndex = (this.litIndex + 1) % SKILL_SHOT_LANES.length;
       }
+    } else if (this.phase === "frozen") {
+      if (plungerPhase === "idle" && restingInZone) {
+        this.phase = "rotating";
+        this.rotateSteps = 0;
+      }
     }
-    // The frozen branch (fall-back reopen) lands with the shared rest test.
-    void restingInZone;
   }
 
   /**

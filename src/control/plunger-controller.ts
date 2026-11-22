@@ -40,7 +40,7 @@ import {
   PLUNGER_MAX_IMPULSE,
   PLUNGER_MIN_IMPULSE,
 } from "../physics/constants";
-import type { BallId, PhysicsWorld } from "../physics/types";
+import type { BallId, BallState, PhysicsWorld } from "../physics/types";
 import { PLUNGER_ZONE } from "../table/spec";
 
 /**
@@ -50,9 +50,11 @@ import { PLUNGER_ZONE } from "../table/spec";
  * parked at PLUNGER_REST on TABLE_SPEC reads exactly 0 m/s from step 0 through
  * step 600, while a ball dropping back after a minimum tap passes through the
  * zone at several m/s, so 0.05 m/s sits far from both regimes. Strict
- * less-than: a ball at exactly this speed is not resting.
+ * less-than: a ball at exactly this speed is not resting. Shared with the
+ * skill shot's fall-back test through `isRestingInZone` (one threshold, one
+ * meaning).
  */
-const PLUNGER_REST_SPEED_EPS = 0.05;
+export const PLUNGER_REST_SPEED_EPS = 0.05;
 
 /** The slice of `PhysicsWorld` the plunger reads and drives. */
 export type PlungerWorld = Pick<PhysicsWorld, "applyImpulse" | "getBalls">;
@@ -66,6 +68,17 @@ export interface PlungerZone {
   readonly maxX: number;
   readonly minY: number;
   readonly maxY: number;
+}
+
+/**
+ * The plunger's rest test (IN-01), pure: `ball`'s center is inside `zone`
+ * (inclusive bounds) AND its speed is strictly below `PLUNGER_REST_SPEED_EPS`.
+ * The release gate and the skill shot's fall-back reopen both use it.
+ */
+export function isRestingInZone(ball: BallState, zone: PlungerZone): boolean {
+  const inZone =
+    ball.x >= zone.minX && ball.x <= zone.maxX && ball.y >= zone.minY && ball.y <= zone.maxY;
+  return inZone && Math.hypot(ball.vx, ball.vy) < PLUNGER_REST_SPEED_EPS;
 }
 
 export class PlungerController {
@@ -207,12 +220,10 @@ export class PlungerController {
   /** True when `ballId` is live, centered inside the zone, and at rest (IN-01). */
   private ballRestingInZone(ballId: BallId): boolean {
     const balls = this.world.getBalls();
-    const z = this.zone;
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i];
       if (!b || b.id !== ballId) continue;
-      const inZone = b.x >= z.minX && b.x <= z.maxX && b.y >= z.minY && b.y <= z.maxY;
-      return inZone && Math.hypot(b.vx, b.vy) < PLUNGER_REST_SPEED_EPS;
+      return isRestingInZone(b, this.zone);
     }
     return false;
   }

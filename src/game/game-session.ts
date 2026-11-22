@@ -58,20 +58,27 @@
  * Every serve (game start and each next ball) arms it; `onStart()` first
  * resets its value ladder (a new game). `tick()` feeds it the plunger phase
  * read through `GameSessionOptions.plunger` (default: always idle), so the lit
- * lane rotates on the step clock and freezes while the plunger charges. The
+ * lane rotates on the step clock and freezes while the plunger charges. A weak
+ * plunge that falls back and rests in `PLUNGER_ZONE` with the plunger idle
+ * (the shared `isRestingInZone` test) reopens the rotation. The
  * session implements `RuleHooks`: `ReactiveElements` reports every registered
  * scoring switch to `onSwitch()`, and the first one after the arm decides the
  * shot (the lit rollover awards through `award()`, anything else disarms). A
  * tilt and game over disarm it. `onSwitch()` only awards and records; the
  * world is still written only in `service()`.
  *
- * Engine-agnostic: type-only imports, talks to the `PhysicsWorld` interface
+ * Engine-agnostic: no engine import, talks to the `PhysicsWorld` interface
  * only. Steady state allocates nothing; remove/add run only on a start or drain.
  */
 
 import type { CollisionRouter } from "../app/collision-router";
-import type { PlungerController } from "../control/plunger-controller";
+import {
+  isRestingInZone,
+  type PlungerController,
+  type PlungerPhase,
+} from "../control/plunger-controller";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
+import { PLUNGER_ZONE } from "../table/spec";
 import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
 import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
@@ -159,6 +166,9 @@ export class GameSession implements RulesGate, RuleHooks {
 
   /** Value of the most recent skill-shot award, 0 before any. */
   private lastSkillValue = 0;
+
+  /** The plunger phase `tick()` saw on the previous step. */
+  private prevPlungerPhase: PlungerPhase = "idle";
 
   constructor(
     world: GameSessionWorld,
@@ -260,7 +270,28 @@ export class GameSession implements RulesGate, RuleHooks {
   tick(): void {
     this.step++;
     this.tilt.update();
-    this.skill.update(this.plunger.getPhase(), false);
+    const phase = this.plunger.getPhase();
+    // The ball snapshot is from the end of the previous world step, i.e. from
+    // BEFORE this step's plunger edges. On the step the plunger leaves
+    // "charging" (the release that may have just launched the ball) it still
+    // shows the ball at rest, and counting that would reopen the rotation under
+    // a ball that is leaving. So the rest test only counts once the plunger was
+    // already idle on the previous step.
+    const resting =
+      phase === "idle" && this.prevPlungerPhase === "idle" && this.activeRestingInZone();
+    this.prevPlungerPhase = phase;
+    this.skill.update(phase, resting);
+  }
+
+  /** Whether the ball in play is resting in the plunger zone (false with no ball). */
+  private activeRestingInZone(): boolean {
+    if (this.active === NO_BALL) return false;
+    const balls = this.world.getBalls();
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i];
+      if (b && b.id === this.active) return isRestingInZone(b, PLUNGER_ZONE);
+    }
+    return false;
   }
 
   /**
