@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-11-22T19:43:15.281Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-11-22T20:30:37.354Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 7f34b0c83a60abe41a3413fce900a577c66aa6fa
+state_head: 11d190322aecc61eb62b0e2e523ffb4d5da14716
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 43
+  completed_plans: 44
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -105,6 +105,7 @@ Progress: [████████░░] 83%
 | Phase 05 P05 | 18 min | 2 tasks | 7 files |
 | Phase 05 P06 | 15 min | 3 tasks | 6 files |
 | Phase 06 P01 | 13 min | 3 tasks | 9 files |
+| Phase 06 P02 | 46min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Skill-shot rest test is ignored on the plunger release step (pre-impulse snapshot would reopen rotation under a leaving ball)
 - [Phase 06]: RuleHooks.onSwitch runs after the award and before presentation feedback; GameSession implements it, main.ts passes the session as gate and hooks
 - [Phase 06]: isRestingInZone(ball, PlungerZone) is the single plunger rest test shared by the release gate and the skill-shot fall-back
+- [Phase 06]: 06-02: light pool fills tableBounds(elements) in world meters, not the whole backing, so the lift stays on the table
+- [Phase 06]: 06-02: vignette gradient inner radius 0.5 x half-diagonal, stops CLEAR 0 / EDGE 1; tests pin effective radii
 
 ### Pending Todos
 
@@ -247,6 +250,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T19:43:11.730Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-11-22T20:30:35.270Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
