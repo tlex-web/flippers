@@ -228,7 +228,40 @@ Plans:
   4. Scores count up with animation and an end-of-ball bonus tally, and a near-drain can trigger a simple center-post ball-save flourish.
   5. The local high score persists across browser sessions via `localStorage`.
 
-**Plans**: TBD
+**Plans**: 14 plans (9 waves)
+Plans:
+**Wave 1** *(both plans run in parallel)*
+- [ ] 06-01-PLAN.md — Tracer: skill shot rule live. SkillShot rotate/freeze/resolve, RuleHooks.onSwitch seam, GameSession composition, D-05 anchor on the real table, isRestingInZone, main.ts wiring [wave 1]
+- [ ] 06-02-PLAN.md — Depth: baked ball shadow, light pool, drop shadows, vignette; the Phase-6 palette token set; renderer frame-contract re-pins [wave 1]
+
+**Wave 2** *(blocked on Wave 1; both plans run in parallel)*
+- [ ] 06-03-PLAN.md — Lamps: LampTracker fade/blink, skill chevrons and rollover lenses lit, inlane arrows, baked unlit lenses and rims, attract chase [wave 2]
+- [ ] 06-04-PLAN.md — Skill shot heard and announced: the five Phase-6 stings (D-25), skillShot cue, status-line priority resolver with SKILL SHOT [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 06-05-PLAN.md — Bonus rules: "bonus" FSM state (D-12, costly), itemized counters, credit(), flipper skip, tilt forfeit, drain/nudge counters, HUD bonus rows [wave 3]
+
+**Wave 4** *(blocked on Wave 3; both plans run in parallel)*
+- [ ] 06-06-PLAN.md — Bonus presentation: tally overlay, live skip latch, score count-up, reduced-motion read, drain cue from the drain counter, bonusTick [wave 4]
+- [ ] 06-07-PLAN.md — Ball save rules: chute-exit timer, backstop re-serve, one save per ball, trySave, same-step kickback-drain [wave 4]
+
+**Wave 5** *(blocked on Wave 4; both plans run in parallel)*
+- [ ] 06-08-PLAN.md — Center-post kickback: "post" element 610, post kicker on the bumper law, armed energy bound + RED control, trough exclusion [wave 5]
+- [ ] 06-09-PLAN.md — Screen shake: trauma shake and nudge kick on the step clock, FxSink/EffectsTracker seam, nudge cue, resetWorld, zero under reduced motion [wave 5]
+
+**Wave 6** *(blocked on Wave 5)*
+- [ ] 06-10-PLAN.md — Save flourish: post rise/flash/hold/sink, ball-save ring lamp, ballSave sting, BALL SAVED status [wave 6]
+
+**Wave 7** *(blocked on Wave 6; both plans run in parallel)*
+- [ ] 06-11-PLAN.md — High score: guarded localStorage HighScore (flippers.hiscore.v1), submit at game over, HIGH SCORE line, NEW HIGH SCORE, fanfare [wave 7]
+- [ ] 06-12-PLAN.md — Impact particles: seeded 160-slot pool, bumper ring + sparks, sling sparks, contact point on the feedback path, particle pass [wave 7]
+
+**Wave 8** *(blocked on Wave 7)*
+- [ ] 06-13-PLAN.md — Reward particles: star glints and motes on rollovers/inlanes and the skill shot, kickback save sparks [wave 8]
+
+**Wave 9** *(blocked on Wave 8)*
+- [ ] 06-14-PLAN.md — Phase gates: rules replay at 60/120/144 Hz with every new rule exercised, full presentation read-only proof, armed save in the soak gate, build [wave 9]
+
 **UI hint**: yes
 
 ## Progress
@@ -243,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
-| 6. Juice & Polish | 0/TBD | Not started | - |
+| 6. Juice & Polish | 0/14 | Planned | - |
