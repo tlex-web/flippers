@@ -58,7 +58,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 - [ ] **PLSH-03**: Depth cues — a soft ball-drop shadow and playfield shading/vignette that imply 2.5D depth
 - [ ] **PLSH-04**: Glowing insert/lane lights with a lit-vs-unlit playfield state
 - [ ] **PLSH-05**: Skill shot on launch — a bonus for a precise plunger charge over a lit lane
-- [ ] **PLSH-06**: Score count-up animation and an end-of-ball bonus tally
+- [x] **PLSH-06**: Score count-up animation and an end-of-ball bonus tally
 - [ ] **PLSH-07**: Simple ball-save (center-post kickback flourish) on a near-drain
 - [ ] **PLSH-08**: Local high-score persisted in the browser (`localStorage`)
 
@@ -122,7 +122,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | PLSH-03 | Phase 6 | Pending |
 | PLSH-04 | Phase 6 | Pending |
 | PLSH-05 | Phase 6 | Pending |
-| PLSH-06 | Phase 6 | Pending |
+| PLSH-06 | Phase 6 | Complete |
 | PLSH-07 | Phase 6 | Pending |
 | PLSH-08 | Phase 6 | Pending |
 
