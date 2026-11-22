@@ -228,7 +228,7 @@ Plans:
   4. Scores count up with animation and an end-of-ball bonus tally, and a near-drain can trigger a simple center-post ball-save flourish.
   5. The local high score persists across browser sessions via `localStorage`.
 
-**Plans**: 7/14 plans executed (9 waves)
+**Plans**: 8/14 plans executed (9 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
 - [x] 06-01-PLAN.md — Tracer: skill shot rule live. SkillShot rotate/freeze/resolve, RuleHooks.onSwitch seam, GameSession composition, D-05 anchor on the real table, isRestingInZone, main.ts wiring [wave 1]
@@ -246,7 +246,7 @@ Plans:
 - [x] 06-07-PLAN.md — Ball save rules: chute-exit timer, backstop re-serve, one save per ball, trySave, same-step kickback-drain [wave 4]
 
 **Wave 5** *(blocked on Wave 4; both plans run in parallel)*
-- [ ] 06-08-PLAN.md — Center-post kickback: "post" element 610, post kicker on the bumper law, armed energy bound + RED control, trough exclusion [wave 5]
+- [x] 06-08-PLAN.md — Center-post kickback: "post" element 610, post kicker on the bumper law, armed energy bound + RED control, trough exclusion [wave 5]
 - [ ] 06-09-PLAN.md — Screen shake: trauma shake and nudge kick on the step clock, FxSink/EffectsTracker seam, nudge cue, resetWorld, zero under reduced motion [wave 5]
 
 **Wave 6** *(blocked on Wave 5)*
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
-| 6. Juice & Polish | 7/14 | In Progress | - |
+| 6. Juice & Polish | 8/14 | In Progress | - |

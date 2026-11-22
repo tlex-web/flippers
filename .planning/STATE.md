@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-11-22T22:08:14.855Z"
+stopped_at: Completed 06-08-PLAN.md
+last_updated: "2026-11-22T22:29:28.715Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 7a7d0eac57aa4bfd35e145f406019734f824a44e
+state_head: e177c6f5ba0fbd57cfd613bdea0c03587d0b2792
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 49
+  completed_plans: 50
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -111,6 +111,7 @@ Progress: [████████░░] 83%
 | Phase 06 P05 | 11 min | 2 tasks | 8 files |
 | Phase 06 P06 | 16min | 2 tasks | 6 files |
 | Phase 06 P07 | 10min | 2 tasks | 7 files |
+| Phase 06 P08 | 17min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,8 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-07: ball-save timer starts on the strict chute exit (x + BALL_RADIUS_M < CHUTE_X) and runs 840 usable steps; the start update does not count down
 - [Phase 06]: 06-07: a backstop save re-serves the same ball via reServe() (no serveBall), keeps counters/inlane/skill, no re-arm, no bonus state; it still increments getDrainCount so the 06-06 drain growl sounds on a save (06-10 to decide)
 - [Phase 06]: 06-07: trySave(ballId) is a public GameSession method; a drain on the same step as a kickback is re-served and counted once as the kickback; RuleHooks wiring left to 06-08
+- [Phase 06]: 06-08: center post is element 610, a 0.09 m circle sensor at (1.45, 5.80) whose collider and drawing share one radius; kick = bumper law at KICKBACK_SPEED 5.5 m/s, gated live -> ball above post center -> RuleHooks.trySave, no points/switch/feedback
+- [Phase 06]: 06-08: armed energy bound measured peak 7.66 m/s (bound 15) with RED control 19.99 m/s at kickbackSpeed 20; trough runners (released 0.47-0.62 m down walls 130/131, below the drooped bat) never reach the post
 
 ### Pending Todos
 
@@ -271,6 +274,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T22:08:13.457Z
-Stopped at: Completed 06-07-PLAN.md
+Last session: 2026-11-22T22:29:27.303Z
+Stopped at: Completed 06-08-PLAN.md
 Resume file: None
