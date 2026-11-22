@@ -11,6 +11,8 @@ import {
 } from "./game-session";
 import { bonusDurationSteps } from "./bonus";
 import {
+  BALL_SAVE_BLINK_STEPS,
+  BALL_SAVE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_IMPULSE,
   TILT_FORFEIT_HOLD_STEPS,
@@ -1012,5 +1014,252 @@ describe("GameSession ball save (plan 06-07 Task 1, PLSH-07, D-08, D-09)", () =>
     expect(r.session.getSaveCount()).toBe(1);
     finishBonus(r);
     expect(r.session.getBall()).toBe(2);
+  });
+});
+
+/** A spy-ball x inside the launch chute (the plunger lane centre). */
+const IN_CHUTE_X = 3.15;
+
+/** Start a game with the save on and tick once with the ball clear of the chute. */
+function startSaved(r: Rig): void {
+  r.session.onStart();
+  r.tick(1); // spy balls at x = 0: the save timer starts
+}
+
+describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, research A3, A4)", () => {
+  it("one save per ball: a drain inside the window is saved, the re-served ball's drain enters the bonus state, and the next serve re-arms the save", () => {
+    const r = makeRig();
+    startSaved(r);
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getSaveCount()).toBe(1);
+    r.tick(1);
+    r.step(drainOf(FIRST_ID + 1));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveLampPhase()).toBe("off");
+    finishBonus(r);
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.getSaveLampPhase()).toBe("steady"); // armed again, in the chute
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.getSaveCount()).toBe(2);
+  });
+
+  it("a backstop is the same ball: bonus counts, inlane flags, the skill phase and the ball number carry over", () => {
+    const r = makeRig();
+    startSaved(r);
+    r.session.onSwitch("lane", 500, false); // first switch: disarms the skill shot
+    expect(r.session.getSkillPhase()).toBe("off");
+    r.session.onSwitch("rollover", 400, false);
+    r.session.onSwitch("rollover", 401, false);
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getBall()).toBe(1);
+    expect(r.session.isInlaneScored(500)).toBe(true);
+    expect(r.session.getSkillPhase()).toBe("off");
+
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("bonus");
+    const tally = r.session.getBonusTally();
+    expect(tally.rows).toBe(2); // rollovers and inlanes from before the backstop
+    expect(r.session.getBonusTotal()).toBe(2 * 1000 + 2000);
+  });
+
+  it("a tilt disarms the save: a drain while tilted inside the window is a forfeit tally, not a save", () => {
+    const r = makeRig();
+    startSaved(r);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.session.getSaveLampPhase()).toBe("off");
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.isBonusForfeit()).toBe(true);
+    expect(r.session.getSaveCount()).toBe(0);
+  });
+
+  it("a drain before the timer starts (ball still in the chute) is a real drain", () => {
+    const r = makeRig();
+    r.setBallX(IN_CHUTE_X);
+    r.session.onStart();
+    r.tick(100);
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(0);
+  });
+
+  it("a drain after the window timed out enters the bonus state", () => {
+    const r = makeRig();
+    startSaved(r);
+    r.tick(BALL_SAVE_STEPS);
+    expect(r.session.getSaveLampPhase()).toBe("off");
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(0);
+  });
+
+  it("trySave(active) returns true once inside the window and records a kickback; a second call returns false", () => {
+    const r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID)).toBe(true);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getLastSaveKind()).toBe("kickback");
+    expect(r.session.getLastSaveStep()).toBe(1);
+    expect(r.session.getSaveLampPhase()).toBe("off");
+    expect(r.session.trySave(FIRST_ID)).toBe(false);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.calls).toHaveLength(1); // a kickback touches no ball
+  });
+
+  it("trySave returns false and changes nothing for another id, while tilted, in game over, before the timer starts, or after a backstop", () => {
+    // Another id.
+    let r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID + 99)).toBe(false);
+    expect(r.session.trySave(-1)).toBe(false);
+    expect(r.session.getSaveCount()).toBe(0);
+    expect(r.session.trySave(FIRST_ID)).toBe(true); // still armed
+
+    // Tilted.
+    r = makeRig();
+    startSaved(r);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.session.trySave(FIRST_ID)).toBe(false);
+
+    // Game over (attract, and after the last ball).
+    r = makeRig();
+    expect(r.session.trySave(-1)).toBe(false);
+    expect(r.session.trySave(FIRST_ID)).toBe(false);
+
+    // Before the timer starts.
+    r = makeRig();
+    r.setBallX(IN_CHUTE_X);
+    r.session.onStart();
+    r.tick(10);
+    expect(r.session.trySave(FIRST_ID)).toBe(false);
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+
+    // After a backstop save of this ball.
+    r = makeRig();
+    startSaved(r);
+    r.step(drainOf(FIRST_ID));
+    r.tick(1);
+    expect(r.session.trySave(r.session.activeBallId)).toBe(false);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getLastSaveKind()).toBe("backstop");
+  });
+
+  it("trySave in the bonus state and in game over after the last ball returns false", () => {
+    const r = makeRig(NO_SAVE);
+    startAndDrain(r, BALLS_PER_GAME);
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.trySave(-1)).toBe(false);
+    const s = makeRig();
+    s.session.onStart();
+    s.setBallX(IN_CHUTE_X);
+    s.step(drainOf(FIRST_ID)); // not started: a real drain
+    expect(s.session.getState()).toBe("bonus");
+    expect(s.session.trySave(-1)).toBe(false);
+    expect(s.session.trySave(FIRST_ID)).toBe(false);
+  });
+
+  it("two drain events for the active id in one batch give one remove, one add and one save; a later drain for the replaced id changes nothing", () => {
+    const r = makeRig();
+    startSaved(r);
+    r.step(drainOf(FIRST_ID), drainOf(FIRST_ID));
+    expect(r.calls).toEqual([
+      { op: "add", spec: SPAWN },
+      { op: "remove", id: FIRST_ID },
+      { op: "add", spec: SPAWN },
+    ]);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getDrainCount()).toBe(1);
+    r.tick(1);
+    r.step(drainOf(FIRST_ID)); // the replaced ball
+    expect(r.calls).toHaveLength(3);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.activeBallId).toBe(FIRST_ID + 1);
+    expect(r.session.getDrainCount()).toBe(1);
+  });
+
+  it("a kickback and a drain of the same ball on the same step keep the ball: remove then add, the ball unchanged, one save, as a kickback", () => {
+    const r = makeRig();
+    startSaved(r);
+    // The post kicker calls trySave during the step's dispatch; the drain is
+    // delivered in the same batch, and service() follows.
+    expect(r.session.trySave(FIRST_ID)).toBe(true);
+    r.step(drainOf(FIRST_ID));
+    expect(r.calls).toEqual([
+      { op: "add", spec: SPAWN },
+      { op: "remove", id: FIRST_ID },
+      { op: "add", spec: SPAWN },
+    ]);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(1);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getLastSaveKind()).toBe("kickback");
+
+    // The save is spent: the next drain of the re-served ball is real.
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(1);
+  });
+
+  it("a kickback followed by a drain on a LATER step is a real drain", () => {
+    const r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID)).toBe(true);
+    r.step();
+    r.tick(1);
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(1);
+  });
+
+  it("getSaveLampPhase() mirrors the save while playing and is off in game over, tilted and bonus", () => {
+    const r = makeRig();
+    expect(r.session.getSaveLampPhase()).toBe("off"); // attract
+    startSaved(r);
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(BALL_SAVE_STEPS - BALL_SAVE_BLINK_STEPS - 1);
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(1);
+    expect(r.session.getSaveLampPhase()).toBe("blink");
+    r.tick(BALL_SAVE_BLINK_STEPS);
+    expect(r.session.getSaveLampPhase()).toBe("off"); // timed out
+
+    const t = makeRig();
+    startSaved(t);
+    nudgeTimes(t, 4);
+    expect(t.session.getState()).toBe("tilted");
+    expect(t.session.getSaveLampPhase()).toBe("off");
+    t.step(drainOf(FIRST_ID));
+    expect(t.session.getState()).toBe("bonus");
+    expect(t.session.getSaveLampPhase()).toBe("off");
+
+    const g = makeRig(NO_SAVE);
+    startAndDrain(g, BALLS_PER_GAME);
+    expect(g.session.getState()).toBe("game-over");
+    expect(g.session.getSaveLampPhase()).toBe("off");
+  });
+
+  it("the save is disarmed in game over after the last ball: onStart re-arms it", () => {
+    const r = makeRig();
+    r.setBallX(IN_CHUTE_X); // never start the timer: every drain is real
+    startAndDrain(r, BALLS_PER_GAME);
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.getSaveCount()).toBe(0);
+    r.setBallX(0);
+    r.session.onStart();
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getSaveCount()).toBe(1);
   });
 });
