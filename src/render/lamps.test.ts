@@ -365,7 +365,8 @@ describe("buildLampShapes (D-21 lamp table)", () => {
       const dx = 0.1;
       const dy = 0.12;
       const len = Math.hypot(dx, dy);
-      const innerApex = ys.filter((_, i) => Math.abs((xs[i] ?? 0) - cx) < 1e-9).sort((p, q) => p - q)[1] ?? 0;
+      const innerApex =
+        ys.filter((_, i) => Math.abs((xs[i] ?? 0) - cx) < 1e-9).sort((p, q) => p - q)[1] ?? 0;
       expect(innerApex - (ys[apex] ?? 0)).toBeCloseTo((0.05 * len) / dx, 9);
     }
   });

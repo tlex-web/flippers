@@ -5,9 +5,20 @@
  * the CSS fit, Finding 1), bakes the static playfield once into an offscreen
  * layer and rebuilds the cached gradients. `draw(frame)` blits that layer with
  * one `drawImage` at identity, sets the world transform once and draws only what
- * moves, in this order: lit rollovers, element flashes, both bats at their
+ * moves, in this order: insert lamps, element flashes, both bats at their
  * interpolated angles, the plunger and its charge meter, one baked soft shadow
  * per ball (PLSH-03, D-20) and every ball at its interpolated position.
+ *
+ * Lamp pass (PLSH-04, D-21): every shape in the lamp table (`buildLampShapes`,
+ * built once in the constructor) reads its level from the frame's `LampReader`
+ * at `frame.alpha`. A lamp above FLASH_EPS draws three layers at its level L:
+ * the lens in its lit color at globalAlpha L (a round-capped stroke or a filled
+ * polygon over the precomputed vertices), its baked halo under "lighter" at L,
+ * and a LAMP_HOTSPOT mark at 0.8 * L (a short stroke over the middle half of an
+ * open stroke lens, a small disc up-left of a fill lens's center). One halo
+ * sprite is baked per distinct lit color in the table, after the ball shadow,
+ * so a new lamp color needs no renderer edit. Unlit lenses live in the static
+ * layer.
  *
  * Flash pass (RND-03): every flashable element reads its level from the frame's
  * `FlashReader` at `frame.alpha` with its kind's timing. A lit element draws only
@@ -35,6 +46,7 @@ import { deriveKickFace } from "../game/reactive-elements";
 import type { ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
 import { FLASH_EPS, FLASH_TIMING, type FlashTracker } from "./flash";
+import { buildLampShapes, type LampReader, type LampShape } from "./lamps";
 import {
   BALL_CORE,
   BALL_EDGE,
@@ -47,11 +59,11 @@ import {
   FLASH_WALL,
   FLIPPER_BODY,
   FLIPPER_EDGE,
+  LAMP_HOTSPOT,
   METER_FILL,
   METER_FRAME,
   METER_FULL,
   PLUNGER,
-  ROLLOVER_LIT,
   RUBBER_LINE_M,
   SENSOR_LINE_M,
 } from "./palette";
@@ -78,7 +90,11 @@ import {
 /** The read-only world surface the renderer needs. */
 export type RenderWorld = Pick<PhysicsWorld, "getElements" | "getFlippers">;
 
-/** Read-only light state (the rules' `ReactiveElements`). */
+/**
+ * Read-only light state (the rules' `ReactiveElements`). The renderer no
+ * longer reads it: the `LampTracker` (lamps.ts) reads this state and the
+ * renderer reads only its lamp levels (06-03).
+ */
 export interface LightState {
   isLit(elementId: number): boolean;
 }
@@ -101,8 +117,8 @@ export interface RenderFrame {
   readonly flipperAngles: readonly number[];
   /** Plunger charge in [0, 1]. */
   readonly plungerCharge: number;
-  /** Rollover light state, or null to draw every rollover unlit. */
-  readonly lights: LightState | null;
+  /** Insert lamp levels, or absent / null to draw every lamp unlit (06-03). */
+  readonly lamps?: LampReader | null;
   /** Element flash levels, or null to draw no flashes. */
   readonly flash: FlashReader | null;
   /** Render point between the last two fixed steps, in [0, 1] (`loop.alpha`). */
@@ -161,6 +177,16 @@ const GLINT_RADIUS = 0.22;
  */
 const FLIPPER_FLASH_RIM_M = 0.02;
 
+/** Lamp hot-spot: its alpha as a fraction of the lamp level. */
+const LAMP_HOTSPOT_ALPHA = 0.8;
+/** Stroke-lens hot-spot: line width (m) and the span along the segment it covers. */
+const LAMP_HOTSPOT_LINE_M = 0.01;
+const LAMP_HOTSPOT_FROM = 0.25;
+const LAMP_HOTSPOT_TO = 0.75;
+/** Fill-lens hot-spot disc: radius and up-left offset, as fractions of the lens radius. */
+const LAMP_HOTSPOT_DISC = 0.35;
+const LAMP_HOTSPOT_OFFSET = 0.2;
+
 /** Point at half the arc length of an element's polyline (its first vertex if degenerate). */
 function pathMidpoint(el: ResolvedElement): { x: number; y: number } {
   const v = el.vertices;
@@ -192,7 +218,12 @@ export class TableRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly layers: LayerFactory;
   private readonly elements: readonly ResolvedElement[];
-  private readonly rollovers: readonly ResolvedElement[];
+  private readonly lampShapes: readonly LampShape[];
+  /** Distinct lit colors in the lamp table, and each one's largest halo radius (m). */
+  private readonly lampColors: readonly string[];
+  private readonly lampColorHaloR: readonly number[];
+  /** Per lamp shape, its index into `lampColors` / `lampHalos`. */
+  private readonly lampHaloSlot: Int32Array;
   private readonly flippers: readonly FlipperState[];
   private readonly flashCircles: readonly FlashCircle[];
   private readonly flashFaces: readonly FlashFace[];
@@ -205,6 +236,7 @@ export class TableRenderer {
   private bumperHalo: Layer | null = null;
   private sensorHalo: Layer | null = null;
   private ballShadow: Layer | null = null;
+  private lampHalos: (Layer | null)[] = [];
   private flashLit = false;
   private ballGradient: CanvasGradient | null = null;
   private flipperGradients: CanvasGradient[] = [];
@@ -220,7 +252,25 @@ export class TableRenderer {
     this.ctx = ctx;
     this.layers = layers;
     this.elements = world.getElements();
-    this.rollovers = this.elements.filter((el) => el.kind === "rollover" && !el.mount);
+    // The lamp shape table, built once, and one halo slot per distinct lit color.
+    this.lampShapes = buildLampShapes(this.elements);
+    const colors: string[] = [];
+    const colorR: number[] = [];
+    this.lampHaloSlot = new Int32Array(this.lampShapes.length);
+    for (let i = 0; i < this.lampShapes.length; i++) {
+      const s = this.lampShapes[i];
+      if (!s) continue;
+      let slot = colors.indexOf(s.lit);
+      if (slot < 0) {
+        slot = colors.length;
+        colors.push(s.lit);
+        colorR.push(0);
+      }
+      if (s.haloRadius > (colorR[slot] ?? 0)) colorR[slot] = s.haloRadius;
+      this.lampHaloSlot[i] = slot;
+    }
+    this.lampColors = colors;
+    this.lampColorHaloR = colorR;
     // The pooled flipper snapshots: geometry is constant, and `angle` is the
     // live fallback when a frame's angle array is short.
     this.flippers = world.getFlippers();
@@ -323,6 +373,14 @@ export class TableRenderer {
         : null;
     // One ball-shadow sprite at its on-screen device-pixel size.
     this.ballShadow = bakeShadow(this.layers, 2 * SHADOW_RADIUS_M * view.scale);
+    // One lamp halo per distinct lit color, sized from that color's largest radius.
+    const lampHalos: (Layer | null)[] = [];
+    for (let i = 0; i < this.lampColors.length; i++) {
+      const color = this.lampColors[i];
+      const hr = this.lampColorHaloR[i] ?? 0;
+      lampHalos.push(color && hr > 0 ? bakeHalo(this.layers, color, 2 * hr * view.scale) : null);
+    }
+    this.lampHalos = lampHalos;
     this.bakes++;
   }
 
@@ -339,7 +397,7 @@ export class TableRenderer {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    this.drawLitRollovers(frame.lights);
+    if (frame.lamps) this.drawLamps(frame.lamps, frame.alpha);
     if (frame.flash) this.drawFlashes(frame.flash, frame.alpha, frame.flipperAngles);
     this.drawFlippers(frame.flipperAngles);
     this.drawPlunger(frame.plungerCharge);
@@ -350,18 +408,90 @@ export class TableRenderer {
     ctx.globalCompositeOperation = "source-over";
   }
 
-  private drawLitRollovers(lights: LightState | null): void {
-    if (!lights) return;
+  /**
+   * The lamp pass (D-21): for every lamp shape above FLASH_EPS, its lens in the
+   * lit color at globalAlpha L, its baked halo under "lighter" at L, then the
+   * hot-spot at 0.8 * L, each source-over except the halo. Index loops over the
+   * precomputed vertex arrays; nothing allocated. Ends source-over at alpha 1.
+   */
+  private drawLamps(lamps: LampReader, alpha: number): void {
     const ctx = this.ctx;
-    const rollovers = this.rollovers;
-    for (let i = 0; i < rollovers.length; i++) {
-      const el = rollovers[i];
-      if (!el || !lights.isLit(el.id)) continue;
-      traceElement(ctx, el);
-      ctx.strokeStyle = ROLLOVER_LIT;
-      ctx.lineWidth = RUBBER_LINE_M;
-      ctx.stroke();
+    const shapes = this.lampShapes;
+    let drew = false;
+    for (let i = 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (!s) continue;
+      const level = lamps.level(s.lamp, alpha);
+      if (!(level > FLASH_EPS)) continue;
+      const l = level < 1 ? level : 1;
+      drew = true;
+
+      // 1. The lens.
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = l;
+      this.traceLamp(s);
+      if (s.style === "stroke") {
+        ctx.strokeStyle = s.lit;
+        ctx.lineWidth = s.lineWidth;
+        ctx.lineCap = "round";
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = s.lit;
+        ctx.fill();
+      }
+
+      // 2. The halo, centered on the lens.
+      const halo = this.lampHalos[this.lampHaloSlot[i] ?? -1];
+      if (halo) {
+        const hr = s.haloRadius;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.drawImage(halo.canvas, s.cx - hr, s.cy - hr, 2 * hr, 2 * hr);
+        ctx.globalCompositeOperation = "source-over";
+      }
+
+      // 3. The hot-spot.
+      ctx.globalAlpha = LAMP_HOTSPOT_ALPHA * l;
+      if (s.style === "stroke") {
+        const n = s.xs.length - 1;
+        const ax = s.xs[0] ?? 0;
+        const ay = s.ys[0] ?? 0;
+        const dx = (s.xs[n] ?? ax) - ax;
+        const dy = (s.ys[n] ?? ay) - ay;
+        ctx.beginPath();
+        ctx.moveTo(ax + LAMP_HOTSPOT_FROM * dx, ay + LAMP_HOTSPOT_FROM * dy);
+        ctx.lineTo(ax + LAMP_HOTSPOT_TO * dx, ay + LAMP_HOTSPOT_TO * dy);
+        ctx.strokeStyle = LAMP_HOTSPOT;
+        ctx.lineWidth = LAMP_HOTSPOT_LINE_M;
+        ctx.stroke();
+      } else {
+        const r = s.lensRadius;
+        ctx.beginPath();
+        ctx.arc(
+          s.cx - LAMP_HOTSPOT_OFFSET * r,
+          s.cy - LAMP_HOTSPOT_OFFSET * r,
+          LAMP_HOTSPOT_DISC * r,
+          0,
+          TAU,
+        );
+        ctx.fillStyle = LAMP_HOTSPOT;
+        ctx.fill();
+      }
     }
+    if (drew) {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+
+  /** Path of a lamp lens from its precomputed vertices. */
+  private traceLamp(s: LampShape): void {
+    const ctx = this.ctx;
+    const xs = s.xs;
+    const ys = s.ys;
+    ctx.beginPath();
+    ctx.moveTo(xs[0] ?? 0, ys[0] ?? 0);
+    for (let k = 1; k < xs.length; k++) ctx.lineTo(xs[k] ?? 0, ys[k] ?? 0);
+    if (s.closed) ctx.closePath();
   }
 
   /**

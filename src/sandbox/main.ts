@@ -46,8 +46,9 @@
  *   then the nudge edges (`session.onNudge`); then `session.tick()`.
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve),
- *   then `observer.observe()` (game-event cues), then `flash.tick()` (the
- *   flash clock, RND-03).
+ *   then `observer.observe()` (game-event cues), then `lamps.update()` (the
+ *   insert lamp levels, PLSH-04), then `flash.tick()` (the flash clock,
+ *   RND-03).
  *
  * Presentation (Phase 5, AUD-01): the rules report every registered kick and
  * sensor pass through `ReactiveFeedback`; `CueFeedback` records each one as a
@@ -86,8 +87,9 @@ import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
 import { ContactFlash } from "../render/contact-flash";
 import { FlashTracker, maxElementId } from "../render/flash";
+import { LampTracker, type LampReader } from "../render/lamps";
 import type { LayerFactory } from "../render/static-layer";
-import { TableRenderer, type FlashReader, type LightState } from "../render/table-renderer";
+import { TableRenderer, type FlashReader } from "../render/table-renderer";
 import { computeView, tableBounds } from "../render/view-transform";
 import type { BallState } from "../physics/types";
 import { DebugRenderer } from "./debug-draw";
@@ -221,6 +223,10 @@ function main(): void {
     controller,
     flipperIds,
   );
+  // Insert lamps (PLSH-04, D-21): the tracker reads the rollover lights and the
+  // session's skill-shot getters once per fixed step and fades each lamp level
+  // on the step clock; the renderer reads only those levels. Built once.
+  const lamps = new LampTracker(reactive, session);
 
   // Audio: the factory runs only inside the first trusted gesture (a context
   // built here at boot would start suspended). The DOM factory is handed to a
@@ -293,6 +299,8 @@ function main(): void {
     // Diff the session and plunger getters for this step's game-event cues
     // (after the drain and serve landed, before the flash clock advances).
     observer.observe();
+    // The lamp levels follow this step's rule state (after the serve landed).
+    lamps.update();
     // Last: advance the flash clock one fixed step (it pauses with the sim).
     flash.tick();
   }
@@ -377,14 +385,14 @@ function main(): void {
     balls: readonly BallState[];
     flipperAngles: readonly number[];
     plungerCharge: number;
-    lights: LightState | null;
+    lamps: LampReader | null;
     flash: FlashReader | null;
     alpha: number;
   } = {
     balls: interpolated,
     flipperAngles,
     plungerCharge: 0,
-    lights: reactive,
+    lamps,
     flash,
     alpha: 0,
   };
@@ -462,7 +470,7 @@ function main(): void {
       renderFrame.balls = interpolated;
       renderFrame.flipperAngles = flipperAngles;
       renderFrame.plungerCharge = plunger.getCharge();
-      renderFrame.lights = reactive;
+      renderFrame.lamps = lamps;
       renderFrame.flash = flash;
       renderFrame.alpha = loop.alpha;
       tableRenderer.draw(renderFrame);

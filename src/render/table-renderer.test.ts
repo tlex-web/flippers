@@ -745,7 +745,8 @@ describe("TableRenderer lamp pass (PLSH-04, D-21, D-24)", () => {
     const rig = makeRig();
     for (const level of [0, FLASH_EPS]) {
       rig.rec.clear();
-      rig.renderer.draw(frameOf(rig.world, { lamps: allLampsAt(level) }));
+      // Charge 0: the meter fill shares SKILL_LIT by design (launch aim).
+      rig.renderer.draw(frameOf(rig.world, { lamps: allLampsAt(level), plungerCharge: 0 }));
       for (const color of LAMP_COLORS) {
         expect(rig.rec.sets("strokeStyle").filter((e) => e.value === color)).toHaveLength(0);
         expect(rig.rec.sets("fillStyle").filter((e) => e.value === color)).toHaveLength(0);
@@ -760,7 +761,9 @@ describe("TableRenderer lamp pass (PLSH-04, D-21, D-24)", () => {
 
   it("a frame with no lamps (absent or null) draws no lamp marks", () => {
     const rig = makeRig();
-    for (const frame of [frameOf(rig.world), frameOf(rig.world, { lamps: null })]) {
+    // Charge 0: the meter fill shares SKILL_LIT by design (launch aim).
+    const bare = { plungerCharge: 0 };
+    for (const frame of [frameOf(rig.world, bare), frameOf(rig.world, { ...bare, lamps: null })]) {
       rig.rec.clear();
       rig.renderer.draw(frame);
       expect(lampHaloDraws(rig)).toHaveLength(0);
