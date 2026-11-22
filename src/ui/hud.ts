@@ -11,8 +11,10 @@
  * - score: the running score with thousands separators (`formatScore`);
  * - ball: "BALL n / 3" while a ball is in play or tilted, empty in game-over
  *   (`ballText`);
- * - status: the attract and game-over prompts, WARNING and TILT, empty in plain
- *   play (`statusText`). It is the only HUD line announced to assistive tech;
+ * - status: one message at a time, resolved by the 06-UI-SPEC priority table
+ *   (TILT, then SKILL SHOT <value> for `STATUS_TRANSIENT_STEPS` fixed steps after
+ *   an award, then the attract and game-over prompts, then WARNING, else empty;
+ *   `StatusCode`, `statusText`). It is the only HUD line announced to assistive tech;
  *   the score changes too often to announce. The mute announcer (`MuteView`'s
  *   second sink, a visually hidden live region) is the page's other one.
  *
@@ -41,6 +43,12 @@ export interface HudSource {
   getState(): GameState;
   hasPlayed(): boolean;
   isWarning(): boolean;
+  /** Fixed steps since construction: the clock transient statuses expire on. */
+  getStep(): number;
+  getSkillShotCount(): number;
+  getLastSkillValue(): number;
+  /** `getStep()` at the most recent skill shot (-1 before any). */
+  getLastSkillStep(): number;
 }
 
 /** Built once: en-US thousands grouping, integers only. */
@@ -63,19 +71,40 @@ export function ballText(state: GameState, ball: number): string {
 }
 
 /**
- * The status line. Game-over reads "PRESS ENTER TO START" before the first game
- * and "GAME OVER · PRESS ENTER" after one; tilted reads "TILT" (it wins over an
- * open warning window); playing reads "WARNING" while the warning is open and ""
- * otherwise.
+ * What the status line shows, resolved from the 06-UI-SPEC priority table
+ * (highest wins): 1 `tilt`, 5 `skillShot`, 6 `attract` / `gameOver` (the
+ * prompts), 7 `warning`, 8 `none`. Later plans add their rows (TILT · NO BONUS,
+ * BONUS, NEW HIGH SCORE, BALL SAVED) as new codes.
  */
-export function statusText(state: GameState, hasPlayed: boolean, warning: boolean): string {
-  switch (state) {
-    case "game-over":
-      return hasPlayed ? "GAME OVER · PRESS ENTER" : "PRESS ENTER TO START";
-    case "tilted":
+export type StatusCode = "none" | "tilt" | "skillShot" | "attract" | "gameOver" | "warning";
+
+/**
+ * How long a transient status (SKILL SHOT) holds, in fixed physics steps:
+ * 180 steps = 1.5 s at 120 Hz. Counted on the session's step clock, never the
+ * wall clock, so it freezes on tab blur.
+ */
+export const STATUS_TRANSIENT_STEPS = 180;
+
+/**
+ * The status line text for a resolved code. `value` is used only by codes that
+ * carry a number (`skillShot`: the points just paid, 5,000 to 25,000); built from
+ * fixed strings and `formatScore` only (T-6-06). The longest text is the
+ * 23-character game-over prompt; SKILL SHOT 25,000 is 17.
+ */
+export function statusText(code: StatusCode, value: number): string {
+  switch (code) {
+    case "tilt":
       return "TILT";
-    case "playing":
-      return warning ? "WARNING" : "";
+    case "skillShot":
+      return `SKILL SHOT ${formatScore(value)}`;
+    case "attract":
+      return "PRESS ENTER TO START";
+    case "gameOver":
+      return "GAME OVER · PRESS ENTER";
+    case "warning":
+      return "WARNING";
+    case "none":
+      return "";
   }
 }
 
@@ -91,8 +120,9 @@ export class HudView {
   private lastScore = 0;
   private lastBall = 0;
   private lastState: GameState = "game-over";
-  private lastPlayed = false;
-  private lastWarning = false;
+  /** The resolved status the status line was last written from. */
+  private lastCode: StatusCode = "none";
+  private lastValue = 0;
 
   constructor(score: TextSink, ball: TextSink, status: TextSink) {
     this.score = score;
@@ -100,32 +130,52 @@ export class HudView {
     this.status = status;
   }
 
-  /** Rewrite each line only when its own inputs changed since its last write. */
+  /**
+   * Rewrite each line only when its own inputs changed since its last write.
+   * The status line is resolved to a (code, value) pair first, without
+   * allocating; its text is rebuilt and written only when that pair changes.
+   */
   update(src: HudSource): void {
     const score = src.getScore();
     const ball = src.getBall();
     const state = src.getState();
-    const played = src.hasPlayed();
-    const warning = src.isWarning();
 
     const first = !this.written;
-    const stateChanged = state !== this.lastState;
     if (first || score !== this.lastScore) {
       this.score.textContent = formatScore(score);
     }
-    if (first || stateChanged || ball !== this.lastBall) {
+    if (first || state !== this.lastState || ball !== this.lastBall) {
       this.ball.textContent = ballText(state, ball);
     }
-    if (first || stateChanged || played !== this.lastPlayed || warning !== this.lastWarning) {
-      this.status.textContent = statusText(state, played, warning);
+
+    // Status priority (06-UI-SPEC): 1 TILT, 5 SKILL SHOT, 6 prompts, 7 WARNING, 8 empty.
+    let code: StatusCode;
+    let value = 0;
+    if (state === "tilted") {
+      code = "tilt";
+    } else if (
+      src.getSkillShotCount() > 0 &&
+      src.getStep() < src.getLastSkillStep() + STATUS_TRANSIENT_STEPS
+    ) {
+      code = "skillShot";
+      value = src.getLastSkillValue();
+    } else if (state === "game-over") {
+      code = src.hasPlayed() ? "gameOver" : "attract";
+    } else if (src.isWarning()) {
+      code = "warning";
+    } else {
+      code = "none";
+    }
+    if (first || code !== this.lastCode || value !== this.lastValue) {
+      this.status.textContent = statusText(code, value);
     }
 
     this.written = true;
     this.lastScore = score;
     this.lastBall = ball;
     this.lastState = state;
-    this.lastPlayed = played;
-    this.lastWarning = warning;
+    this.lastCode = code;
+    this.lastValue = value;
   }
 }
 
