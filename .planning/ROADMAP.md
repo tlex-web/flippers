@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Flippers & Feel** - Two keyboard flippers with rotational CCD, momentum transfer, and cradle — the Core Value (completed 2026-07-16)
 - [x] **Phase 3: Table, Plunger & Event Bus** - An original space-themed table layout, a hold-to-charge plunger, and a typed collision-event bus (completed 2026-11-20)
 - [x] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works (completed 2026-11-21)
-- [ ] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX
+- [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
 - [ ] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score
 
 ## Phase Details
@@ -192,7 +192,7 @@ Plans:
   3. Every element flashes on contact to confirm the hit registered.
   4. Each element (bumper, flipper, slingshot, drain, launch, tilt) produces a distinct runtime-synthesized sound with velocity/pitch variation and no audio files, played through a shared, gesture-resumed audio context with enveloped one-shots.
 
-**Plans**: 8/8 plans executed (5 waves)
+**Plans**: 8/8 plans complete (5 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
 - [x] 05-01-PLAN.md — Tracer: a bumper hit is heard in the live game. ReactiveFeedback hook, CueQueue/CueFeedback, Web Audio seam, AudioEngine (bumper voice), fake AudioContext, gesture unlock + live wiring (A5 at the composition root), testTimeout fix [wave 1]
@@ -242,5 +242,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Flippers & Feel | 6/6 | Complete    | 2026-07-16 |
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
-| 5. Rendering & Audio | 8/8 | In Progress | - |
+| 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
 | 6. Juice & Polish | 0/TBD | Not started | - |

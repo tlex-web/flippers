@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 05
-current_phase_name: Rendering & Audio
-status: verifying
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-11-21T22:05:32.069Z"
-last_activity: 2026-11-21
-last_activity_desc: Phase 05 execution started
-state_head: fc1eb0b90af7c112b9367d099905ed07a1155d2c
+current_phase: 6
+current_phase_name: Juice & Polish
+status: planning
+stopped_at: Phase 05 complete, ready to plan Phase 6
+last_updated: "2026-11-22T00:46:30.605Z"
+last_activity: 2026-11-22
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
+state_head: 61edd71fc6c9926d98780f38e2b180abb4b759fd
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 42
   completed_plans: 42
-  percent: 67
+  percent: 83
 milestone_name: milestone
 ---
 
@@ -22,25 +22,25 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-21)
+See: .planning/PROJECT.md (updated 2026-11-22)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 05 — Rendering & Audio
+**Current focus:** Phase 6 — Juice & Polish
 
 ## Current Position
 
-Phase: 05 (Rendering & Audio) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
-Last activity: 2026-11-21 — Phase 05 execution started
+Phase: 6 — Juice & Polish
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-22 — Phase 05 complete, transitioned to Phase 6
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 35
+- Total plans completed: 43
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -52,6 +52,7 @@ Progress: [███████░░░] 67%
 | 2 | 7 | - | - |
 | 3 | 6 | - | - |
 | 04 | 15 | - | - |
+| 05 | 8 | - | - |
 
 **Recent Trend:**
 
@@ -210,6 +211,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-05: a charged release with no ball on the plunger still voices launch (approved at tracer check); gate on ball-in-zone in the observer only if UAT finds it noisy
 - [Phase 05]: 05-06: HUD colors live in CSS custom properties on :root echoing palette.ts (04-UI-REVIEW #8); CSS-only space theme, no assets
 - [Phase 05]: 05-06: bare-vs-presented scripted replay (144 and 60 Hz) is the read-only gate for presentation modules
+- [Phase 05]: D-01 accepted at UAT test 4: the DOM HUD meets SC1 ("procedural, zero image assets"); recorded as an overrides: entry in 05-VERIFICATION.md
+- [Phase 05]: Audio unlock redesigned after three review rounds (b04d725, bbcdbf7, ba7faae): a starting episode allows at most two bounded start windows until the context is seen running; a failed resume() opens nothing and is logged once; a 104-row invariant table pins it. Accepted cost: after a failed device start that recovers in the same episode, a third gesture gets no window
+- [Phase 05]: UAT 9/9 passed on 2026-11-22 (perf, 144 Hz, visuals, D-01, flashes, headphone pass, three audio-unlock re-checks); verification passed 7/7; review disposition open: 0
 
 ### Pending Todos
 
@@ -240,6 +244,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-21T23:55:00.000Z
-Stopped at: Phase 05 execute-phase halted before the verifier: the WR-01 fix (f1b2a1e) regressed the start cue when Shift precedes Enter (05-REVIEW.md WR-01, reproduced). Next: /gsd-code-review 05 --fix, then /gsd-execute-phase 05
+Last session: 2026-11-22T00:47:50.203Z
+Stopped at: Phase 05 complete, ready to plan Phase 6
 Resume file: None

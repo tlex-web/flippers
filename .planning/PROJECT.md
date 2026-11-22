@@ -35,14 +35,14 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 - [x] Tilt / nudge: **Validated in Phase 4.** X, Period and ArrowUp give a velocity-only shove; over-nudging warns, then TILTs. A tilt kills the elements, drops the bats and costs only the current ball.
 - [x] 3-ball game loop: **Validated in Phase 4.** Attract with no ball until Enter, three serves, GAME OVER with the score kept; replays bit-identically at 60/120/144 Hz.
   - Flipper input was hardened during UAT: reversal dead time removed, no stuck bats on quick taps, and Windows Shift quirks (Sticky Keys, both-Shift VK merge, focus loss) healed. Arrow keys and Shift passed on a real Windows keyboard.
+- [x] Bumpers, slings and rollovers flash and sound on hit: **Validated in Phase 5 (Rendering & Audio).** Every element flashes and decays cleanly from the contact bus; walls and the chute flash silently (RND-03, UAT 5).
+- [x] All graphics rendered procedurally at a stable 60fps: **Validated in Phase 5.** Canvas 2D table with a baked static layer and interpolated moving parts holds 60 fps and steps every frame at 144 Hz; zero image, font or audio assets, enforced by the asset-free test (RND-01, RND-02, UAT 1–3). The HUD stays DOM text (D-01, accepted override).
+- [x] Sound effects synthesized at runtime (Web Audio), no audio files: **Validated in Phase 5.** Distinct voice per element with velocity and pitch variation, a 16-voice pool with click-free stealing, a click-free mute fade, and nothing before the first gesture (AUD-01, UAT 6–9).
 
 ### Active
 
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
-- [ ] Bumpers, slings and rollovers flash and sound on hit (the kick and scoring shipped in Phase 4)
-- [ ] All graphics rendered procedurally (Canvas/WebGL) at a stable 60fps
-- [ ] Sound effects synthesized at runtime (Web Audio) — no audio files
 - [ ] Portfolio-grade "juice": visual/audio feedback that makes play feel responsive and polished
 
 ### Out of Scope
@@ -79,14 +79,15 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Browser (HTML5) over Windows native | Simplest to build and share; no install; portfolio-friendly | — Pending |
-| Procedural runtime rendering over baked/ripped art | Near-zero assets; avoids copyright; enables an own clean style | — Pending |
+| Procedural runtime rendering over baked/ripped art | Near-zero assets; avoids copyright; enables an own clean style | ✓ Phase 5 (Canvas 2D, asset-free gate) |
 | Original table design (not a recreation of any existing table) | Avoids copying another game's layout, names, or signature mechanics; standard pinball elements arranged for good ball flow | ✓ Decided 2026-11-19 |
 | Core pinball loop first; missions/ranks/multiball deferred | De-risk the physics and feel before layering progression systems | — Pending |
-| Synthesized audio (Web Audio) over sound files | Keeps asset load at zero; retro pinball sfx synthesize convincingly | — Pending |
+| Synthesized audio (Web Audio) over sound files | Keeps asset load at zero; retro pinball sfx synthesize convincingly | ✓ Phase 5 (headphone pass in Chrome and Firefox) |
 | One `table/spec` → `resolve()` drives both the colliders and the drawing | What's hit and what's drawn cannot drift (WR-03 confirmed the flipper drawing matches its collider) | ✓ Phase 3 |
 | Typed one-way collision bus, drained once per fixed step at the `onPostStep` seam | Scoring, rendering and audio (Phases 4–5) consume contacts without touching the world; the drain is read off the bus, not by position (CR-01) | ✓ Phase 3 |
 | Reactive kicks applied by one `ReactiveElements.service()` step via `applyImpulse`; bus listeners only record and award | Keeps the world write path single and ordered, so kicks stay deterministic and energy-bounded | ✓ Phase 4 |
 | HUD and diagnosis readout are DOM text, not canvas text | Canvas text shrank to ~3.4 px under the fit-to-viewport scale; DOM text stays legible and is screen-reader reachable | ✓ Phase 4 |
+| Audio unlock is a "starting episode": at most two bounded start windows until the context is seen running; a failed resume() opens nothing and is logged once | Three review rounds of per-finding flags each opened a new corner; one model with an invariant test table bounds the audio graph however resume() behaves and keeps the start figure on Shift-first unlocks (b04d725, UAT 9) | ✓ Phase 5 |
 | Left/Right Shift stay default flipper bindings, with a Windows reliability note naming the arrow keys | Keeps Phase 2 D-09; Windows-only Shift heals cover the VK_SHIFT merge, and the OS Sticky Keys case is an accepted residual (UAT 18 decision A) | ✓ Phase 4 |
 
 ## Evolution
@@ -107,4 +108,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-21 after Phase 4*
+*Last updated: 2026-11-22 after Phase 5*
