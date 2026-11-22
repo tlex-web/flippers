@@ -259,9 +259,10 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
   /**
    * A browser-like new context whose `resume()` never settles (no output
    * device, or a gesture that is not activation), on a fake wall clock. Its
-   * `currentTime` stays frozen at 0 and `onended` never fires.
+   * `currentTime` stays frozen at 0 and `onended` never fires. `resume`
+   * replaces that never-settling promise, from the first unlock on.
    */
-  function stuckRig(): {
+  function stuckRig(resume: () => Promise<void> = () => new Promise<void>(() => {})): {
     fake: FakeAudioContext;
     engine: AudioEngine;
     clock: { ms: number };
@@ -272,7 +273,7 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     fake.state = "suspended";
     fake.resume = () => {
       fake.resumeCalls++;
-      return new Promise<void>(() => {});
+      return resume();
     };
     const clock = { ms: 1000 };
     // Re-gestures default to non-activating (a modifier-only keydown).
@@ -404,14 +405,14 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
   });
 
   it("a resume that settles on a still-suspended context opens no window; only a running context ends the episode (WR-02)", async () => {
-    const { fake, engine, clock, activation } = stuckRig();
-    const pending: { settle: (() => void) | null } = { settle: null };
-    fake.resume = () => {
-      fake.resumeCalls++;
-      return new Promise<void>((resolve) => {
-        pending.settle = resolve;
-      });
-    };
+    // Every resume's resolver, the rig's first unlock included (IN-01).
+    const resolvers: (() => void)[] = [];
+    const { fake, engine, clock, activation } = stuckRig(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
     const q = new CueQueue();
     activation.active = true;
     clock.ms += STARTING_WINDOW_MS;
@@ -421,7 +422,9 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(0);
     // Every pending resume settles together, but the context stays suspended.
-    pending.settle?.();
+    expect(resolvers.length).toBe(3);
+    expect(fake.resumeCalls).toBe(3);
+    for (const settle of resolvers.splice(0)) settle();
     await Promise.resolve();
     await Promise.resolve();
     engine.unlock(); // settling is not running: the same, spent episode
