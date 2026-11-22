@@ -5,8 +5,12 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "An activating gesture inside a live starting window gets no window of its own, so a late Enter's \"start\" figure is discarded if the device starts after the window"
+    disposition: open
+    title: "Invariant 2 holds only for the episode's first two gestures. After a failed device start, the recovering Enter's \"start\" figure is dropped"
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "The rendering test compares the clock with a per-window anchor, so an unobserved run makes a frozen, suspended context count as \"rendering\" forever"
   - id: WR-02
     severity: warning
     disposition: fixed
@@ -15,10 +19,6 @@ findings:
     severity: warning
     disposition: fixed
     title: "Impossible-state guard: `activationReopened = false` in the fresh-resume branch"
-  - id: IN-01
-    severity: info
-    disposition: fixed
-    title: "The \"settles\" test says every pending resume settles together, but only the last promise resolves"
   - id: IN-02
     severity: info
     disposition: fixed
@@ -43,20 +43,20 @@ findings:
     severity: info
     disposition: fixed
     title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
-open: 0
+open: 2
 total: 10
-recorded: 2026-11-22T00:18:54.178Z
+recorded: 2026-11-22T00:29:39.800Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 05-REVIEW-FIX.md |
-| WR-03 | warning | fixed | 05-REVIEW-FIX.md |
-| IN-01 | info | fixed | 05-REVIEW-FIX.md |
-| IN-02 | info | fixed | 05-REVIEW-FIX.md |
+| WR-01 | warning | open | - |
+| IN-01 | info | open | - |
+| WR-02 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| WR-03 | warning | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-02 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-03 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-04 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
