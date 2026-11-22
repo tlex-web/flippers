@@ -29,6 +29,18 @@
  *   chevrons stay unlit.
  * - Tilted: the session disarms the skill shot, so the chevrons go out; the
  *   rollover and arrow lamps keep their rule state.
+ * - Ball-save ring (06-10, D-10): `getSaveLampPhase()` "steady" lit, "blink"
+ *   on the same LAMP_BLINK_PERIOD_STEPS blink counted from the blink edge, "off"
+ *   unlit (the session reads "off" when spent, timed out, tilted or not
+ *   playing); unlit in attract whatever it reads.
+ *
+ * Post flourish (06-10, D-07): a `getSaveCount()` increment whose
+ * `getLastSaveKind()` is "kickback" starts the flourish clock on the update
+ * that sees it, so the first frame after the kick step reads age `alpha`, like
+ * a flash. `postAge(alpha)` is -1 when no flourish is showing (before any
+ * kickback, and from rise + hold + sink steps on); the pure `postPose(age,
+ * out)` turns an age into the drawn scale, alpha and flash level. A backstop
+ * save shows no post.
  *
  * `buildLampShapes(elements)` is the shape table the renderer's lamp pass (and
  * the unlit bake) iterate: vertex lists in preallocated Float64Arrays, built
@@ -40,12 +52,15 @@
 import type { GameSession } from "../game/game-session";
 import type { ResolvedElement } from "../table/resolve";
 import { PLAYFIELD_CENTER_X } from "../table/spec";
+import { FLASH_TIMING, flashLevel } from "./flash";
 import {
   INLANE_LIT,
   INLANE_UNLIT,
   ROLLOVER_LIT,
   ROLLOVER_UNLIT,
   RUBBER_LINE_M,
+  SAVE_LIT,
+  SAVE_UNLIT,
   SKILL_LIT,
   SKILL_UNLIT,
 } from "./palette";
@@ -65,6 +80,9 @@ export type LampRules = Pick<
   | "getSkillShotCount"
   | "getLastSkillLane"
   | "isInlaneScored"
+  | "getSaveLampPhase"
+  | "getSaveCount"
+  | "getLastSaveKind"
 >;
 
 /** Lamp indices into the level arrays. */
@@ -76,8 +94,9 @@ export const LAMP_SKILL_401 = 4;
 export const LAMP_SKILL_402 = 5;
 export const LAMP_INLANE_500 = 6;
 export const LAMP_INLANE_501 = 7;
+export const LAMP_SAVE = 8;
 /** Number of lamps. */
-export const LAMP_COUNT = 8;
+export const LAMP_COUNT = 9;
 
 /** Fixed steps from unlit to fully lit. */
 export const LAMP_FADE_IN_STEPS = 4;
@@ -110,6 +129,23 @@ const ARROW_CX_M = 0.585;
 const ARROW_CY_M = 4.72;
 /** Arrow halo radius (m). */
 const ARROW_HALO_M = 0.14;
+
+/** Ball-save ring: inner edge this far outside the post collider, this wide (m). */
+const SAVE_RING_GAP_M = 0.02;
+const SAVE_RING_WIDTH_M = 0.035;
+/** Ball-save ring halo radius (m). */
+const SAVE_RING_HALO_M = 0.22;
+/** Points on the ring's closed polyline. */
+const SAVE_RING_POINTS = 48;
+
+/** Post flourish (UI-SPEC): rise, hold and sink lengths in fixed steps. */
+export const POST_RISE_STEPS = 3;
+export const POST_HOLD_STEPS = 48;
+export const POST_SINK_STEPS = 24;
+/** Steps from the kick to the post hiding. */
+const POST_TOTAL_STEPS = POST_RISE_STEPS + POST_HOLD_STEPS + POST_SINK_STEPS;
+/** The post's drawn scale at the start of the rise and the end of the sink. */
+const POST_LOW_SCALE = 0.7;
 
 /** A fade step that lands within this of its target snaps to it (Float32 drift). */
 const SNAP_EPS = 1e-4;
@@ -265,9 +301,43 @@ function arrowShape(cx: number, cy: number, lamp: number): LampShape {
 }
 
 /**
+ * The ball-save ring around a post circle: a closed polyline of
+ * SAVE_RING_POINTS on the centerline R + gap + width / 2, stroked at the ring
+ * width, so its inner edge sits SAVE_RING_GAP_M outside the collider (D-07).
+ */
+function ringShape(el: ResolvedElement): LampShape | null {
+  const c = el.circle;
+  if (!c) return null;
+  const rc = c.radius + SAVE_RING_GAP_M + SAVE_RING_WIDTH_M / 2;
+  const xs = new Float64Array(SAVE_RING_POINTS);
+  const ys = new Float64Array(SAVE_RING_POINTS);
+  for (let i = 0; i < SAVE_RING_POINTS; i++) {
+    const t = (2 * Math.PI * i) / SAVE_RING_POINTS;
+    xs[i] = c.center.x + rc * Math.cos(t);
+    ys[i] = c.center.y + rc * Math.sin(t);
+  }
+  return {
+    lamp: LAMP_SAVE,
+    style: "stroke",
+    xs,
+    ys,
+    closed: true,
+    lineWidth: SAVE_RING_WIDTH_M,
+    elementDrawn: false,
+    lit: SAVE_LIT,
+    unlit: SAVE_UNLIT,
+    haloRadius: SAVE_RING_HALO_M,
+    cx: c.center.x,
+    cy: c.center.y,
+    lensRadius: rc,
+  };
+}
+
+/**
  * The lamp shape table: the three rollover strokes from elements 400-402 (a
  * missing element has no shape), then the three skill chevrons, then the two
- * inlane arrows (the right one mirrored about the playfield center).
+ * inlane arrows (the right one mirrored about the playfield center), then the
+ * ball-save ring around the "post" element (none without one).
  */
 export function buildLampShapes(elements: readonly ResolvedElement[]): readonly LampShape[] {
   const out: LampShape[] = [];
@@ -281,7 +351,51 @@ export function buildLampShapes(elements: readonly ResolvedElement[]): readonly 
   }
   out.push(arrowShape(ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_500));
   out.push(arrowShape(2 * PLAYFIELD_CENTER_X - ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_501));
+  const post = elements.find((e) => e.kind === "post" && e.circle !== null);
+  const ring = post ? ringShape(post) : null;
+  if (ring) out.push(ring);
   return out;
+}
+
+/** The drawn post at one flourish age (a caller-owned, reused object). */
+export interface PostPose {
+  /** Drawn radius as a fraction of the collider radius R. */
+  scale: number;
+  /** Disc and rim alpha. */
+  alpha: number;
+  /** Flash halo level (FLASH_TIMING.post). */
+  flash: number;
+  visible: boolean;
+}
+
+/**
+ * Write the post pose at `age` fixed steps after the kick into `out` (no
+ * allocation): rise 0.7R to R over POST_RISE_STEPS, hold R for
+ * POST_HOLD_STEPS, sink R to 0.7R with alpha 1 to 0 over POST_SINK_STEPS, then
+ * hidden; the flash is `flashLevel` at the post kind's timing (FLASH_BUMPER).
+ * A negative, non-finite or spent age is invisible.
+ */
+export function postPose(age: number, out: PostPose): void {
+  if (!Number.isFinite(age) || age < 0 || age >= POST_TOTAL_STEPS) {
+    out.visible = false;
+    out.scale = 0;
+    out.alpha = 0;
+    out.flash = 0;
+    return;
+  }
+  out.visible = true;
+  out.flash = flashLevel(age, FLASH_TIMING.post.decaySteps, FLASH_TIMING.post.holdSteps);
+  if (age < POST_RISE_STEPS) {
+    out.scale = POST_LOW_SCALE + ((1 - POST_LOW_SCALE) * age) / POST_RISE_STEPS;
+    out.alpha = 1;
+  } else if (age <= POST_RISE_STEPS + POST_HOLD_STEPS) {
+    out.scale = 1;
+    out.alpha = 1;
+  } else {
+    const u = (age - POST_RISE_STEPS - POST_HOLD_STEPS) / POST_SINK_STEPS;
+    out.scale = 1 - (1 - POST_LOW_SCALE) * u;
+    out.alpha = 1 - u;
+  }
 }
 
 /** Per-lamp levels on the fixed-step clock. */
@@ -306,11 +420,20 @@ export class LampTracker {
   /** Chevron held lit by an award, and the updates left on the hold. */
   private holdLamp = -1;
   private holdLeft = 0;
+  /** `getSaveCount()` as last seen (snapshot at construction). */
+  private saves: number;
+  /** `lampStep` when the save lamp last began blinking (its blink origin). */
+  private saveBlinkStart = 0;
+  /** Whether the previous update saw the save lamp blinking. */
+  private wasSaveBlink = false;
+  /** `lampStep` of the update that saw the last kickback, or -1. */
+  private postStart = -1;
 
   constructor(lights: LampLights, rules: LampRules) {
     this.lights = lights;
     this.rules = rules;
     this.shots = rules.getSkillShotCount();
+    this.saves = rules.getSaveCount();
   }
 
   /** One fixed step: compute every target, then fade every level toward it. */
@@ -322,7 +445,8 @@ export class LampTracker {
     prev.set(cur);
     target.fill(0);
 
-    if (this.rules.getState() === "game-over") {
+    const attract = this.rules.getState() === "game-over";
+    if (attract) {
       if (!this.wasAttract) this.attractStart = this.lampStep;
       this.wasAttract = true;
       const k =
@@ -339,8 +463,9 @@ export class LampTracker {
       this.updateInlanes(target);
     }
 
-    // Always run: it tracks the shot count and the freeze edge in every state.
+    // Always run: they track the shot and save counts and the blink edges in every state.
     this.updateSkill(target);
+    this.updateSave(target, attract);
 
     for (let i = 0; i < LAMP_COUNT; i++) {
       const c = cur[i] ?? 0;
@@ -398,6 +523,46 @@ export class LampTracker {
   }
 
   /**
+   * The save ring target and the post flourish clock: a kickback save-count
+   * increment starts the flourish on this update; the ring follows the save
+   * lamp phase (never in attract).
+   */
+  private updateSave(target: Uint8Array, attract: boolean): void {
+    const rules = this.rules;
+    const saves = rules.getSaveCount();
+    if (saves !== this.saves) {
+      if (saves > this.saves && rules.getLastSaveKind() === "kickback") {
+        this.postStart = this.lampStep;
+      }
+      this.saves = saves;
+    }
+
+    const phase = rules.getSaveLampPhase();
+    const blink = phase === "blink";
+    if (blink && !this.wasSaveBlink) this.saveBlinkStart = this.lampStep;
+    this.wasSaveBlink = blink;
+
+    if (attract) return;
+    if (phase === "steady") target[LAMP_SAVE] = 1;
+    else if (blink) {
+      const t = (this.lampStep - this.saveBlinkStart) % LAMP_BLINK_PERIOD_STEPS;
+      if (t < LAMP_BLINK_PERIOD_STEPS / 2) target[LAMP_SAVE] = 1;
+    }
+  }
+
+  /**
+   * Post flourish age at the render point (fixed steps since the kickback,
+   * plus `alpha` clamped to [0, 1]), or -1 when no flourish is showing.
+   */
+  postAge(alpha: number): number {
+    if (this.postStart < 0) return -1;
+    const n = this.lampStep - this.postStart;
+    if (n >= POST_TOTAL_STEPS) return -1;
+    const a = alpha > 0 ? (alpha < 1 ? alpha : 1) : 0;
+    return n + a;
+  }
+
+  /**
    * Level of `lamp` at the render point between the last two steps:
    * prev + (cur - prev) * alpha, alpha clamped to [0, 1]. 0 out of range.
    */
@@ -410,5 +575,5 @@ export class LampTracker {
   }
 }
 
-/** The read side of the lamp clock (a `LampTracker` in production). */
-export type LampReader = Pick<LampTracker, "level">;
+/** The read side of the lamp clock (a `LampTracker` in production): levels and the post flourish. */
+export type LampReader = Pick<LampTracker, "level" | "postAge">;

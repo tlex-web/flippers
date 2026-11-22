@@ -1082,7 +1082,9 @@ describe("TableRenderer ball-save ring and post flourish (plan 06-10, D-07, D-10
     expect(stateAt(rig.rec, haloAt, "globalAlpha", 1)).toBe(1);
 
     // Pass order: the bumper flash halo, then the post, then the first bat.
-    const bumperHalo = rig.rec.calls("drawImage").find((c) => c.args[0] === rig.layers.layers[1]?.canvas);
+    const bumperHalo = rig.rec
+      .calls("drawImage")
+      .find((c) => c.args[0] === rig.layers.layers[1]?.canvas);
     const bumperAt = bumperHalo ? rig.rec.log.indexOf(bumperHalo) : -1;
     const firstRotate = rig.rec.log.findIndex((e) => e.kind === "call" && e.name === "rotate");
     expect(bumperAt).toBeGreaterThan(0);

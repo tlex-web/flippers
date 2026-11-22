@@ -6,8 +6,8 @@
  * layer and rebuilds the cached gradients. `draw(frame)` fills the backing with
  * BG_BOTTOM at identity, blits that layer with one `drawImage` at the shake
  * offset, sets the shaken world transform and draws only what moves, in this
- * order: insert lamps, element flashes, both bats at their
- * interpolated angles, the plunger and its charge meter, one baked soft shadow
+ * order: insert lamps, element flashes, the ball-save post flourish, both bats
+ * at their interpolated angles, the plunger and its charge meter, one baked soft shadow
  * per ball (PLSH-03, D-20) and every ball at its interpolated position.
  *
  * Lamp pass (PLSH-04, D-21): every shape in the lamp table (`buildLampShapes`,
@@ -16,7 +16,8 @@
  * the lens in its lit color at globalAlpha L (a round-capped stroke or a filled
  * polygon over the precomputed vertices), its baked halo under "lighter" at L,
  * and a LAMP_HOTSPOT mark at 0.8 * L (a short stroke over the middle half of an
- * open stroke lens, a small disc up-left of a fill lens's center). One halo
+ * open stroke lens, an arc over the upper-left quarter of a closed stroke lens
+ * such as the ball-save ring, a small disc up-left of a fill lens's center). One halo
  * sprite is baked per distinct lit color in the table, after the ball shadow,
  * so a new lamp color needs no renderer edit. Unlit lenses live in the static
  * layer.
@@ -28,6 +29,12 @@
  * outline (sling rubber, sensor, drain apron, wall, chute) or a glowing rim
  * around a bat. Nothing larger than the element is ever drawn (photosensitive
  * safety). Halos are baked once per resize (`bakeHalo`).
+ *
+ * Post flourish (PLSH-07, D-07, D-10, 06-10): the frame's `LampReader` gives
+ * the post age; the pure `postPose` turns it into scale, alpha and flash, and
+ * the disc, its SAVE_LIT rim and the flash halo (the ring's SAVE_LIT sprite,
+ * no extra bake) are drawn at the "post" element's own circle, after the
+ * flash pass and before the bats.
  *
  * Ball shadows (PLSH-03, D-20): one radial sprite baked per resize
  * (`bakeShadow`), stamped source-over at globalAlpha 1 with one `drawImage` per
@@ -60,7 +67,7 @@ import type { ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
 import type { EffectsReader } from "./effects";
 import { FLASH_EPS, FLASH_TIMING, type FlashTracker } from "./flash";
-import { buildLampShapes, type LampReader, type LampShape } from "./lamps";
+import { buildLampShapes, postPose, type LampReader, type LampShape, type PostPose } from "./lamps";
 import {
   BALL_CORE,
   BALL_EDGE,
@@ -79,7 +86,9 @@ import {
   METER_FRAME,
   METER_FULL,
   PLUNGER,
+  POST_BODY,
   RUBBER_LINE_M,
+  SAVE_LIT,
   SENSOR_LINE_M,
 } from "./palette";
 import {
@@ -206,6 +215,12 @@ const LAMP_HOTSPOT_TO = 0.75;
 /** Fill-lens hot-spot disc: radius and up-left offset, as fractions of the lens radius. */
 const LAMP_HOTSPOT_DISC = 0.35;
 const LAMP_HOTSPOT_OFFSET = 0.2;
+/** Closed-stroke (ring) hot-spot: an arc on the centerline over the upper-left quarter. */
+const RING_HOTSPOT_FROM = Math.PI;
+const RING_HOTSPOT_TO = 1.5 * Math.PI;
+
+/** Ball-save post rim stroke width (m, UI-SPEC post flourish). */
+const POST_RIM_M = 0.02;
 
 /** Point at half the arc length of an element's polyline (its first vertex if degenerate). */
 function pathMidpoint(el: ResolvedElement): { x: number; y: number } {
@@ -250,6 +265,14 @@ export class TableRenderer {
   private readonly flashSensors: readonly FlashSensor[];
   private readonly flashPaths: readonly FlashPath[];
   private readonly maxBumperRadius: number;
+  /** The "post" element's circle (radius 0 without one): the sensor's own field (D-07). */
+  private readonly postX: number;
+  private readonly postY: number;
+  private readonly postR: number;
+  /** Index of SAVE_LIT in `lampColors` / `lampHalos` (-1 without the ring). */
+  private readonly postHaloSlot: number;
+  /** This frame's post pose (renderer-owned, preallocated). */
+  private readonly postPose: PostPose = { scale: 0, alpha: 0, flash: 0, visible: false };
 
   private view: ViewTransform | null = null;
   private layer: Layer | null = null;
@@ -296,6 +319,13 @@ export class TableRenderer {
     }
     this.lampColors = colors;
     this.lampColorHaloR = colorR;
+    // The ball-save post: center and radius read from the resolved element's
+    // circle, the same field its sensor uses, and the ring's SAVE_LIT halo slot.
+    const post = this.elements.find((e) => e.kind === "post" && e.circle !== null)?.circle;
+    this.postX = post ? post.center.x : 0;
+    this.postY = post ? post.center.y : 0;
+    this.postR = post ? post.radius : 0;
+    this.postHaloSlot = colors.indexOf(SAVE_LIT);
     // The pooled flipper snapshots: geometry is constant, and `angle` is the
     // live fallback when a frame's angle array is short.
     this.flippers = world.getFlippers();
@@ -441,6 +471,7 @@ export class TableRenderer {
 
     if (frame.lamps) this.drawLamps(frame.lamps, frame.alpha);
     if (frame.flash) this.drawFlashes(frame.flash, frame.alpha, frame.flipperAngles);
+    if (frame.lamps) this.drawPost(frame.lamps, frame.alpha);
     this.drawFlippers(frame.flipperAngles);
     this.drawPlunger(frame.plungerCharge);
     this.drawBallShadows(frame.balls);
@@ -503,7 +534,14 @@ export class TableRenderer {
 
       // 3. The hot-spot.
       ctx.globalAlpha = LAMP_HOTSPOT_ALPHA * l;
-      if (s.style === "stroke") {
+      if (s.style === "stroke" && s.closed) {
+        // A ring: an arc on its centerline over the upper-left quarter.
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, s.lensRadius, RING_HOTSPOT_FROM, RING_HOTSPOT_TO);
+        ctx.strokeStyle = LAMP_HOTSPOT;
+        ctx.lineWidth = LAMP_HOTSPOT_LINE_M;
+        ctx.stroke();
+      } else if (s.style === "stroke") {
         const n = s.xs.length - 1;
         const ax = s.xs[0] ?? 0;
         const ay = s.ys[0] ?? 0;
@@ -533,6 +571,44 @@ export class TableRenderer {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
     }
+  }
+
+  /**
+   * The ball-save post flourish (D-07, D-10): at the lamp clock's post age, a
+   * POST_BODY disc of radius R * scale at the post center with a SAVE_LIT rim
+   * POST_RIM_M wide, both at the pose alpha, then, while the flash is above
+   * FLASH_EPS, the ring's SAVE_LIT halo sprite at HALO_SCALE * R under
+   * "lighter". R is the element's circle radius (collision always happens at
+   * R). Drawn between the flash pass and the bats; nothing without a flourish.
+   * Ends source-over at alpha 1.
+   */
+  private drawPost(lamps: LampReader, alpha: number): void {
+    const r0 = this.postR;
+    if (!(r0 > 0)) return;
+    const age = lamps.postAge(alpha);
+    if (!(age >= 0)) return;
+    const pose = this.postPose;
+    postPose(age, pose);
+    if (!pose.visible || !(pose.alpha > 0)) return;
+    const ctx = this.ctx;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = pose.alpha < 1 ? pose.alpha : 1;
+    ctx.beginPath();
+    ctx.arc(this.postX, this.postY, r0 * pose.scale, 0, TAU);
+    ctx.fillStyle = POST_BODY;
+    ctx.fill();
+    ctx.strokeStyle = SAVE_LIT;
+    ctx.lineWidth = POST_RIM_M;
+    ctx.stroke();
+    const halo = this.lampHalos[this.postHaloSlot];
+    if (halo && pose.flash > FLASH_EPS) {
+      const hr = HALO_SCALE * r0;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = pose.flash < 1 ? pose.flash : 1;
+      ctx.drawImage(halo.canvas, this.postX - hr, this.postY - hr, 2 * hr, 2 * hr);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
   }
 
   /** Path of a lamp lens from its precomputed vertices. */
