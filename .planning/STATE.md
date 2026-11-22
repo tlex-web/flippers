@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-09-PLAN.md
-last_updated: "2026-11-22T23:18:52.508Z"
+stopped_at: Completed 06-10-PLAN.md
+last_updated: "2026-11-22T23:49:51.795Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 983ed18168110780f2378ecebaa67b4ccfdaa5ab
+state_head: bf389ce919caf57f60e7fc88c22e868616497b4f
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 51
+  completed_plans: 52
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 10 of 14
+Plan: 11 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -113,6 +113,7 @@ Progress: [████████░░] 83%
 | Phase 06 P07 | 10min | 2 tasks | 7 files |
 | Phase 06 P08 | 17min | 2 tasks | 11 files |
 | Phase 06 P09 | 47min | 2 tasks | 9 files |
+| Phase 06 P10 | 28min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -247,6 +248,10 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-08: armed energy bound measured peak 7.66 m/s (bound 15) with RED control 19.99 m/s at kickbackSpeed 20; trough runners (released 0.47-0.62 m down walls 130/131, below the drooped bat) never reach the post
 - [Phase 06]: 06-09: a backstop-saved drain still raises getDrainCount(), so it shakes like a real drain; the center-post kick sends no feedback and does not shake
 - [Phase 06]: 06-09: the nudge cue sits between launch and tilt, elementId = direction (left 0, right 1, up 2); reduced motion is enforced in the renderer (sample skipped) as well as in ShakeTracker
+- [Phase 06]: 06-10: a backstop save pushes [drain, ballSave]; the drain growl plays, then the save sting
+- [Phase 06]: 06-10: BALL SAVED and SKILL SHOT share status row 5; the later event step wins inside its 180-step window (same-step tie keeps SKILL SHOT)
+- [Phase 06]: 06-10: the post flourish starts only on a kickback save-count increment; a backstop save shows no post
+- [Phase 06]: 06-10: the ring lamp hot-spot is a LAMP_HOTSPOT arc over the ring's upper-left quarter, not a centered disc
 
 ### Pending Todos
 
@@ -277,6 +282,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T23:18:51.073Z
-Stopped at: Completed 06-09-PLAN.md
+Last session: 2026-11-22T23:49:50.381Z
+Stopped at: Completed 06-10-PLAN.md
 Resume file: None
