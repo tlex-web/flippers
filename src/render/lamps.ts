@@ -21,6 +21,8 @@
  *   `getSkillShotCount()` increment the `getLastSkillLane()` chevron is steady
  *   for LAMP_AWARD_HOLD_STEPS whatever the phase. Off, tilted and game over:
  *   unlit.
+ * - Inlane arrows 500/501 (playing and tilted): `isInlaneScored(id)`, steady
+ *   once that inlane scored on this ball; the session clears it on every serve.
  *
  * `buildLampShapes(elements)` is the shape table the renderer's lamp pass (and
  * the unlit bake) iterate: vertex lists in preallocated Float64Arrays, built
@@ -31,7 +33,16 @@
 
 import type { GameSession } from "../game/game-session";
 import type { ResolvedElement } from "../table/resolve";
-import { ROLLOVER_LIT, ROLLOVER_UNLIT, RUBBER_LINE_M, SKILL_LIT, SKILL_UNLIT } from "./palette";
+import { PLAYFIELD_CENTER_X } from "../table/spec";
+import {
+  INLANE_LIT,
+  INLANE_UNLIT,
+  ROLLOVER_LIT,
+  ROLLOVER_UNLIT,
+  RUBBER_LINE_M,
+  SKILL_LIT,
+  SKILL_UNLIT,
+} from "./palette";
 import { SENSOR_HALO_M } from "./sprites";
 
 /** The rules' boolean light state (`ReactiveElements`). */
@@ -42,7 +53,12 @@ export interface LampLights {
 /** The read-only session getters the lamps show. */
 export type LampRules = Pick<
   GameSession,
-  "getState" | "getSkillPhase" | "getSkillLitLane" | "getSkillShotCount" | "getLastSkillLane"
+  | "getState"
+  | "getSkillPhase"
+  | "getSkillLitLane"
+  | "getSkillShotCount"
+  | "getLastSkillLane"
+  | "isInlaneScored"
 >;
 
 /** Lamp indices into the level arrays. */
@@ -52,8 +68,10 @@ export const LAMP_ROLLOVER_402 = 2;
 export const LAMP_SKILL_400 = 3;
 export const LAMP_SKILL_401 = 4;
 export const LAMP_SKILL_402 = 5;
+export const LAMP_INLANE_500 = 6;
+export const LAMP_INLANE_501 = 7;
 /** Number of lamps. */
-export const LAMP_COUNT = 6;
+export const LAMP_COUNT = 8;
 
 /** Fixed steps from unlit to fully lit. */
 export const LAMP_FADE_IN_STEPS = 4;
@@ -73,6 +91,17 @@ const CHEVRON_Y_M = 1.32;
 const CHEVRON_XS_M: readonly number[] = [0.95, 1.45, 1.95];
 /** Chevron halo radius (m). */
 const CHEVRON_HALO_M = 0.16;
+
+/** Inlane arrow: a head this wide and tall over a stem this wide and tall (m). */
+const ARROW_HEAD_W_M = 0.16;
+const ARROW_HEAD_H_M = 0.12;
+const ARROW_STEM_W_M = 0.05;
+const ARROW_STEM_H_M = 0.08;
+/** Left inlane arrow center (m); the right one is its mirror about x = 1.45. */
+const ARROW_CX_M = 0.585;
+const ARROW_CY_M = 4.72;
+/** Arrow halo radius (m). */
+const ARROW_HALO_M = 0.14;
 
 /** A fade step that lands within this of its target snaps to it (Float32 drift). */
 const SNAP_EPS = 1e-4;
@@ -186,8 +215,39 @@ function chevronShape(cx: number, cy: number, lamp: number): LampShape {
 }
 
 /**
+ * An upward arrow (head over stem) centered on (cx, cy), the whole arrow
+ * ARROW_HEAD_H_M + ARROW_STEM_H_M tall: apex, right head corner, right stem
+ * top, right stem foot, left stem foot, left stem top, left head corner.
+ */
+function arrowShape(cx: number, cy: number, lamp: number): LampShape {
+  const hw = ARROW_HEAD_W_M / 2;
+  const sw = ARROW_STEM_W_M / 2;
+  const top = cy - (ARROW_HEAD_H_M + ARROW_STEM_H_M) / 2;
+  const base = top + ARROW_HEAD_H_M;
+  const foot = base + ARROW_STEM_H_M;
+  const xs = new Float64Array([cx, cx + hw, cx + sw, cx + sw, cx - sw, cx - sw, cx - hw]);
+  const ys = new Float64Array([top, base, base, foot, foot, base, base]);
+  return {
+    lamp,
+    style: "fill",
+    xs,
+    ys,
+    closed: true,
+    lineWidth: 0,
+    elementDrawn: false,
+    lit: INLANE_LIT,
+    unlit: INLANE_UNLIT,
+    haloRadius: ARROW_HALO_M,
+    cx,
+    cy,
+    lensRadius: hw,
+  };
+}
+
+/**
  * The lamp shape table: the three rollover strokes from elements 400-402 (a
- * missing element has no shape), then the three skill chevrons.
+ * missing element has no shape), then the three skill chevrons, then the two
+ * inlane arrows (the right one mirrored about the playfield center).
  */
 export function buildLampShapes(elements: readonly ResolvedElement[]): readonly LampShape[] {
   const out: LampShape[] = [];
@@ -199,6 +259,8 @@ export function buildLampShapes(elements: readonly ResolvedElement[]): readonly 
   for (let i = 0; i < CHEVRON_XS_M.length; i++) {
     out.push(chevronShape(CHEVRON_XS_M[i] ?? 0, CHEVRON_Y_M, LAMP_SKILL_400 + i));
   }
+  out.push(arrowShape(ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_500));
+  out.push(arrowShape(2 * PLAYFIELD_CENTER_X - ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_501));
   return out;
 }
 
@@ -243,6 +305,7 @@ export class LampTracker {
     }
 
     this.updateSkill(target);
+    this.updateInlanes(target);
 
     for (let i = 0; i < LAMP_COUNT; i++) {
       const c = cur[i] ?? 0;
@@ -255,6 +318,14 @@ export class LampTracker {
         cur[i] = n <= t + SNAP_EPS ? t : n;
       }
     }
+  }
+
+  /** Inlane arrow targets: the session's per-ball flags, in playing and tilted. */
+  private updateInlanes(target: Uint8Array): void {
+    const rules = this.rules;
+    if (rules.getState() === "game-over") return;
+    if (rules.isInlaneScored(500)) target[LAMP_INLANE_500] = 1;
+    if (rules.isInlaneScored(501)) target[LAMP_INLANE_501] = 1;
   }
 
   /** Chevron targets from the skill-shot getters (only while playing). */

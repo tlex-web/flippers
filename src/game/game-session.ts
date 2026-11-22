@@ -67,6 +67,11 @@
  * tilt and game over disarm it. `onSwitch()` only awards and records; the
  * world is still written only in `service()`.
  *
+ * Inlane flags (D-21): a "lane" switch while playing records its element id
+ * for this ball, read through `isInlaneScored(id)` (the inlane arrow lamps).
+ * Every serve clears them. A backstop re-serve (06-07) is the same ball and
+ * must not clear them.
+ *
  * Engine-agnostic: no engine import, talks to the `PhysicsWorld` interface
  * only. Steady state allocates nothing; remove/add run only on a start or drain.
  */
@@ -169,6 +174,12 @@ export class GameSession implements RulesGate, RuleHooks {
 
   /** The plunger phase `tick()` saw on the previous step. */
   private prevPlungerPhase: PlungerPhase = "idle";
+
+  /**
+   * Lane (inlane) ids that scored on this ball, reused: cleared with
+   * `length = 0` in `serveBall()`, at most one entry per inlane.
+   */
+  private readonly scoredLanes: number[] = [];
 
   constructor(
     world: GameSessionWorld,
@@ -301,6 +312,9 @@ export class GameSession implements RulesGate, RuleHooks {
    * `award()`. Only awards and records; never touches the world.
    */
   onSwitch(kind: SwitchKind, elementId: number): void {
+    if (kind === "lane" && this.state === "playing" && !this.scoredLanes.includes(elementId)) {
+      this.scoredLanes.push(elementId);
+    }
     const v = this.skill.resolve(kind, elementId);
     if (v > 0) {
       this.award(v);
@@ -344,6 +358,11 @@ export class GameSession implements RulesGate, RuleHooks {
   /** Lane of the most recent skill shot this game (-1 before any). */
   getLastSkillLane(): number {
     return this.skill.getLastLane();
+  }
+
+  /** Whether the inlane `elementId` scored on this ball (cleared on every serve). */
+  isInlaneScored(elementId: number): boolean {
+    return this.scoredLanes.includes(elementId);
   }
 
   /**
@@ -401,11 +420,14 @@ export class GameSession implements RulesGate, RuleHooks {
   }
 
   /**
-   * Serve a ball: tilt cleared, state playing, one ball at the spawn, the
-   * flippers on, then the skill shot armed (game start and every next ball).
+   * Serve a ball: tilt cleared, inlane flags cleared, state playing, one ball
+   * at the spawn, the flippers on, then the skill shot armed (game start and
+   * every next ball). A backstop re-serve of the same ball (06-07) must not
+   * come through here, or it would clear the inlane flags.
    */
   private serveBall(): void {
     this.clearTilt();
+    this.scoredLanes.length = 0;
     this.state = "playing";
     this.active = this.world.addBall(this.spawn);
     this.flippers.setEnabled(true);

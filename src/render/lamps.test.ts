@@ -455,7 +455,9 @@ describe("buildLampShapes (D-21 lamp table)", () => {
     const l = shapes.find((x) => x.lamp === LAMP_INLANE_500);
     const r = shapes.find((x) => x.lamp === LAMP_INLANE_501);
     if (l && r) {
-      const lx = Array.from(l.xs).map((x) => 2.9 - x).sort((p, q) => p - q);
+      const lx = Array.from(l.xs)
+        .map((x) => 2.9 - x)
+        .sort((p, q) => p - q);
       const rx = Array.from(r.xs).sort((p, q) => p - q);
       for (let i = 0; i < lx.length; i++) expect(rx[i]).toBeCloseTo(lx[i] ?? 0, 12);
     }

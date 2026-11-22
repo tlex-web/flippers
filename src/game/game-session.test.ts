@@ -569,21 +569,21 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
     r.session.onStart();
     expect(r.session.isInlaneScored(500)).toBe(false);
     expect(r.session.isInlaneScored(501)).toBe(false);
-    r.session.onSwitch("lane", 500, false);
+    r.session.onSwitch("lane", 500);
     expect(r.session.isInlaneScored(500)).toBe(true);
     expect(r.session.isInlaneScored(501)).toBe(false);
-    r.session.onSwitch("lane", 500, false);
+    r.session.onSwitch("lane", 500);
     expect(r.session.isInlaneScored(500)).toBe(true);
     expect(r.session.isInlaneScored(501)).toBe(false);
-    r.session.onSwitch("lane", 501, false);
+    r.session.onSwitch("lane", 501);
     expect(r.session.isInlaneScored(501)).toBe(true);
   });
 
   it("a drain followed by the next serve clears both", () => {
     const r = makeRig();
     r.session.onStart();
-    r.session.onSwitch("lane", 500, false);
-    r.session.onSwitch("lane", 501, false);
+    r.session.onSwitch("lane", 500);
+    r.session.onSwitch("lane", 501);
     r.step(drainOf(r.session.activeBallId));
     expect(r.session.getBall()).toBe(2);
     expect(r.session.isInlaneScored(500)).toBe(false);
@@ -595,8 +595,8 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
     r.session.onStart();
     r.step(drainOf(r.session.activeBallId));
     r.step(drainOf(r.session.activeBallId));
-    r.session.onSwitch("lane", 500, false);
-    r.session.onSwitch("lane", 501, false);
+    r.session.onSwitch("lane", 500);
+    r.session.onSwitch("lane", 501);
     r.step(drainOf(r.session.activeBallId));
     expect(r.session.getState()).toBe("game-over");
     r.session.onStart();
@@ -606,12 +606,12 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
 
   it("a non-lane switch sets nothing, and outside play a lane switch sets nothing", () => {
     const r = makeRig();
-    r.session.onSwitch("lane", 500, false); // game over (attract)
+    r.session.onSwitch("lane", 500); // game over (attract)
     expect(r.session.isInlaneScored(500)).toBe(false);
     r.session.onStart();
-    r.session.onSwitch("rollover", 500, false);
-    r.session.onSwitch("bumper", 500, false);
-    r.session.onSwitch("slingshot", 501, false);
+    r.session.onSwitch("rollover", 500);
+    r.session.onSwitch("bumper", 500);
+    r.session.onSwitch("slingshot", 501);
     expect(r.session.isInlaneScored(500)).toBe(false);
     expect(r.session.isInlaneScored(501)).toBe(false);
   });
@@ -619,7 +619,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   it("an unknown id reads false", () => {
     const r = makeRig();
     r.session.onStart();
-    r.session.onSwitch("lane", 500, false);
+    r.session.onSwitch("lane", 500);
     for (const id of [-1, 0, 400, 502, 600, Number.NaN]) {
       expect(r.session.isInlaneScored(id)).toBe(false);
     }
