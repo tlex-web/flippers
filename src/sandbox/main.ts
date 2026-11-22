@@ -37,7 +37,8 @@
  * calls, in a fixed order, after dispatch. The score, the ball number and the
  * game status (start and game-over prompts, WARNING, TILT) show in a DOM HUD
  * overlay (`#hud-score`, `#hud-ball`, `#hud-status`, each written only when it
- * changes). The score counts up on the step clock (dt = steps * FIXED_DT, D-14);
+ * changes), plus the high score (`#hud-best`, PLSH-08) read once at boot from
+ * the guarded localStorage (`safeLocalStorage()`). The score counts up on the step clock (dt = steps * FIXED_DT, D-14);
  * `prefers-reduced-motion` is read once at boot into a boolean, kept current by
  * one change listener registered outside the frame (D-18), and passed to the HUD
  * and the bonus overlay, which then snap.
@@ -84,6 +85,7 @@ import { AudioUnlock } from "../audio/audio-unlock";
 import { FlipperController } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { GameSession, type FlipperGate } from "../game/game-session";
+import { HighScore, type StorageLike } from "../game/high-score";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, isWindowsPlatform } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
@@ -204,7 +206,14 @@ function main(): void {
   // listeners and the hooks only record or award (record-then-service), and the
   // world is mutated only in the two service() calls, in the fixed order of
   // onPostStep.
-  const session = new GameSession(world, router, BALL_SPAWN, flipperGate, { plunger });
+  // High score (PLSH-08, D-15, D-16): read once here at boot over the guarded
+  // localStorage (null when the getter throws), written by the session only at
+  // game over on a new best. Every storage failure is silent.
+  const highScore = new HighScore(safeLocalStorage());
+  const session = new GameSession(world, router, BALL_SPAWN, flipperGate, {
+    plunger,
+    highScore,
+  });
   // Phase-5 cues (AUD-01): registered hits are recorded as scalar cues on the
   // step path (no allocation) and flushed to audio once per render frame.
   const cues = new CueQueue();
@@ -376,12 +385,16 @@ function main(): void {
     };
     armDprWatch();
   }
-  // Game HUD: the DOM overlay (score, ball, status), each line written only
-  // when its own inputs change.
+  // Game HUD: the DOM overlay (score, ball, high score, status), each line
+  // written only when its own inputs change. #hud-best is both the best line's
+  // text sink and the attribute sink for its new-best pulse (data-new).
+  const hudBest = requireElement("hud-best");
   const hudView = new HudView(
     requireTextSink("hud-score"),
     requireTextSink("hud-ball"),
     requireTextSink("hud-status"),
+    hudBest,
+    hudBest,
   );
   // End-of-ball bonus overlay (06-UI-SPEC, D-12): the tally row by row, shown
   // only in the bonus state; each row, label, value and TOTAL written only when
@@ -546,6 +559,19 @@ function main(): void {
   }
 
   requestAnimationFrame(frame);
+}
+
+/**
+ * `window.localStorage`, or null when it is unavailable (D-16): the getter
+ * itself throws a `SecurityError` when storage is blocked, so it is read inside
+ * a try/catch and any throw degrades silently to the in-memory best.
+ */
+function safeLocalStorage(): StorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null; // blocked storage: silent per D-16
+  }
 }
 
 /** The element with this id as a text sink; throws a clear error if missing. */

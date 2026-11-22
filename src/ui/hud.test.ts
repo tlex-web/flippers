@@ -59,6 +59,9 @@ class FakeSource implements HudSource {
   bonusForfeit = false;
   saveCount = 0;
   saveStep = -1;
+  best = 0;
+  newBest = false;
+  gameOverStep = -1;
   getScore(): number {
     return this.score;
   }
@@ -97,6 +100,15 @@ class FakeSource implements HudSource {
   }
   getLastSaveStep(): number {
     return this.saveStep;
+  }
+  getBest(): number {
+    return this.best;
+  }
+  isNewBest(): boolean {
+    return this.newBest;
+  }
+  getGameOverStep(): number {
+    return this.gameOverStep;
   }
 }
 

@@ -79,6 +79,36 @@
         font-size: 16px;
         color: var(--text-soft);
       }
+      /* High score (PLSH-08): HIGH SCORE <best> in game over, empty otherwise.
+         nowrap: past 8 digits the left-anchored panel grows rightward. */
+      .hud-best {
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--text-soft);
+      }
+      /* A new best: the glow pulses three times at 1.5 Hz (peaks 0.667 s
+         apart, 2 s total) and ends steady on the third peak. Kept under
+         reduced motion: it is a flash, not motion. */
+      .hud-best[data-new="true"] {
+        text-shadow: 0 0 12px var(--accent-glow);
+        animation: hud-best-pulse 2s ease-in-out 1;
+      }
+      @keyframes hud-best-pulse {
+        0%,
+        33.333%,
+        66.667% {
+          text-shadow: 0 0 0 var(--accent-glow);
+        }
+        16.667%,
+        50%,
+        83.333%,
+        100% {
+          text-shadow: 0 0 12px var(--accent-glow);
+        }
+      }
       /* Game status (GAME-02/03): the announced game line (the mute announcer
          below is the only other live region); min-height keeps the panel from
          jumping when it empties. */
@@ -258,6 +288,7 @@
         <div class="hud-label">SCORE</div>
         <div id="hud-score" class="hud-score">0</div>
         <div id="hud-ball" class="hud-ball"></div>
+        <div id="hud-best" class="hud-best"></div>
         <div id="hud-status" class="hud-status" role="status" aria-live="polite"></div>
         <dl id="hud-controls" class="hud-controls">
           <dt>Start</dt>

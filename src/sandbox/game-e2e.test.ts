@@ -22,7 +22,7 @@ import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
 import { CHUTE_X, PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
-import { formatScore, HudView, type TextSink } from "../ui/hud";
+import { formatScore, HudView, NEW_BEST_STATUS_STEPS, type TextSink } from "../ui/hud";
 
 // Heavy simulation suite: the 5 s default timeout is too tight under load, so
 // this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
@@ -701,6 +701,12 @@ describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot 
     finishTally(g);
     expect(g.session.getState()).toBe("game-over");
     expect(ball.textContent).toBe("");
+    // The first scoring game beats the session's empty in-memory best (06-11,
+    // PLSH-08): NEW HIGH SCORE holds for NEW_BEST_STATUS_STEPS, then the prompt.
+    expect(g.session.getScore()).toBeGreaterThan(0);
+    expect(g.session.isNewBest()).toBe(true);
+    expect(status.textContent).toBe("NEW HIGH SCORE");
+    runSteps(g, FRAME_120_HZ, NEW_BEST_STATUS_STEPS);
     expect(status.textContent).toBe("GAME OVER · PRESS ENTER");
     expect(score.textContent).toBe(formatScore(g.session.getScore()));
 
@@ -708,9 +714,10 @@ describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot 
     // of its own inputs. Ball (state or ball): "", BALL 1, BALL 1 again on the
     // tilt and on its forfeit hold (state changes), BALL 2, BALL 2 on its tally,
     // BALL 3, BALL 3 on its tally, "". Status: attract, "", WARNING, TILT,
-    // TILT · NO BONUS, "", BONUS (once for the whole tally), "", BONUS, GAME OVER.
+    // TILT · NO BONUS, "", BONUS (once for the whole tally), "", BONUS,
+    // NEW HIGH SCORE, GAME OVER.
     expect(ball.writes).toBe(9);
-    expect(status.writes).toBe(10);
+    expect(status.writes).toBe(11);
   });
 });
 

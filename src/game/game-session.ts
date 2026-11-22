@@ -104,6 +104,14 @@
  * kickback is kept as a backstop re-serve that counts once, as the kickback
  * (research A4). A tilt, the bonus state and game over disarm it.
  *
+ * High score (PLSH-08, D-15, research Open Question 3): the session submits
+ * the final score to its `HighScoreSink` (`GameSessionOptions.highScore`,
+ * default an in-memory `HighScore(null)`) exactly once, when the last ball's
+ * tally ends, after the credit and before entering game-over. Nothing is
+ * submitted during play or the bonus state. `isNewBest()` and
+ * `getNewBestCount()` record a new best, `getGameOverStep()` records when, and
+ * `onStart()` clears `isNewBest()`.
+ *
  * Engine-agnostic: no engine import, talks to the `PhysicsWorld` interface
  * only. Steady state allocates nothing; remove/add run only on a start or drain.
  */
@@ -118,6 +126,7 @@ import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/
 import { PLUNGER_ZONE } from "../table/spec";
 import { BallSave, type SaveKind, type SaveLampPhase } from "./ball-save";
 import { BonusCounters, BonusTally, bonusDurationSteps } from "./bonus";
+import { HighScore, type HighScoreSink } from "./high-score";
 import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
 import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
@@ -167,6 +176,12 @@ export interface GameSessionOptions {
    * sit at x = 0 pass 0 explicitly; the live game uses the default.
    */
   readonly ballSaveSteps?: number;
+  /**
+   * The best score (PLSH-08): submitted once when the game ends (default an
+   * in-memory `HighScore(null)`, so the session stays storage-free and
+   * deterministic). `main.ts` injects one over the guarded localStorage.
+   */
+  readonly highScore?: HighScoreSink;
 }
 
 /** Default plunger: always idle. Module-level and frozen, shared by all. */
@@ -261,6 +276,18 @@ export class GameSession implements RulesGate, RuleHooks {
   /** `step` of a kickback spent by `trySave()`, -1 once used or before any. */
   private savedAtStep = -1;
 
+  /** The best score, submitted once per game at game over (PLSH-08). */
+  private readonly highScore: HighScoreSink;
+
+  /** Whether the game that just ended set a new best (cleared by `onStart()`). */
+  private newBest = false;
+
+  /** New bests since construction (presentation counter: the fanfare). */
+  private newBestCount = 0;
+
+  /** `step` at the most recent game over, -1 before any. */
+  private gameOverStep = -1;
+
   constructor(
     world: GameSessionWorld,
     router: CollisionRouter,
@@ -273,6 +300,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.flippers = flippers;
     this.plunger = options.plunger ?? IDLE_PLUNGER;
     this.save = new BallSave(options.ballSaveSteps ?? BALL_SAVE_STEPS);
+    this.highScore = options.highScore ?? new HighScore(null);
     router.register(this.onEvent);
     this.flippers.setEnabled(false); // boot into attract: the flippers are dead
   }
@@ -289,6 +317,7 @@ export class GameSession implements RulesGate, RuleHooks {
         this.score = 0;
         this.ball = 1;
         this.played = true;
+        this.newBest = false;
         this.drained = NO_BALL;
         this.savedAtStep = -1;
         this.skill.reset();
@@ -366,7 +395,11 @@ export class GameSession implements RulesGate, RuleHooks {
     this.reServe();
   }
 
-  /** End the tally: credit it (unless forfeit), then serve or end the game. */
+  /**
+   * End the tally: credit it (unless forfeit), then serve or end the game.
+   * Ending the game submits the final score to the high score exactly once,
+   * after the credit and before entering game-over (research Open Question 3).
+   */
   private endBonus(): void {
     this.skipRequested = false;
     if (!this.tally.forfeit) this.credit(this.tally.total);
@@ -374,6 +407,9 @@ export class GameSession implements RulesGate, RuleHooks {
       this.ball++;
       this.serveBall();
     } else {
+      this.newBest = this.highScore.submit(this.score);
+      if (this.newBest) this.newBestCount++;
+      this.gameOverStep = this.step;
       this.state = "game-over";
       this.active = NO_BALL;
       this.flippers.setEnabled(false);
@@ -509,6 +545,26 @@ export class GameSession implements RulesGate, RuleHooks {
   }
 
   // Presentation counters: read-only getters that change no behavior.
+
+  /** The best score (stored, or the best submitted since boot). */
+  getBest(): number {
+    return this.highScore.getBest();
+  }
+
+  /** Whether the game that just ended set a new best (false again after `onStart()`). */
+  isNewBest(): boolean {
+    return this.newBest;
+  }
+
+  /** New bests since construction (one per game at most). */
+  getNewBestCount(): number {
+    return this.newBestCount;
+  }
+
+  /** `getStep()` at the most recent game over (-1 before any). */
+  getGameOverStep(): number {
+    return this.gameOverStep;
+  }
 
   /** Saves since construction, kickback or backstop. */
   getSaveCount(): number {

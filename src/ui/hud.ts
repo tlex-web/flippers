@@ -16,9 +16,14 @@
  *   the true value; only the line lags;
  * - ball: "BALL n / 3" while a ball is in play, tilted or in its bonus tally,
  *   empty in game-over (`ballText`);
+ * - best (optional, plan 06-11, PLSH-08): `HIGH SCORE <best>` in game-over when
+ *   the best is above 0, else empty (`bestText`); a game over that set a new
+ *   best sets `data-new="true"` on it through an `AttrSink` (the CSS pulse),
+ *   removed again on the next game start;
  * - status: one message at a time, resolved by the 06-UI-SPEC priority table
  *   (TILT, then TILT · NO BONUS for a forfeit hold, then BONUS <total> for the
- *   whole tally, then SKILL SHOT <value> or BALL SAVED for `STATUS_TRANSIENT_STEPS`
+ *   whole tally, then NEW HIGH SCORE for `NEW_BEST_STATUS_STEPS` after a game
+ *   over that set a new best, then SKILL SHOT <value> or BALL SAVED for `STATUS_TRANSIENT_STEPS`
  *   fixed steps after an award or a save (the newer of the two wins), then the
  *   attract and game-over prompts, then WARNING, else empty;
  *   `StatusCode`, `statusText`). It is the only HUD line announced to assistive tech;
@@ -75,6 +80,12 @@ export interface HudSource {
   getSaveCount(): number;
   /** `getStep()` at the most recent save (-1 before any). */
   getLastSaveStep(): number;
+  /** The best score (0 when none is stored or storage is unreadable). */
+  getBest(): number;
+  /** Whether the game that just ended set a new best (cleared on the next start). */
+  isNewBest(): boolean;
+  /** `getStep()` at the most recent game over (-1 before any). */
+  getGameOverStep(): number;
 }
 
 /** Built once: en-US thousands grouping, integers only. */
@@ -113,15 +124,16 @@ export function ballText(state: GameState, ball: number): string {
 /**
  * What the status line shows, resolved from the 06-UI-SPEC priority table
  * (highest wins): 1 `tilt`, 2 `tiltNoBonus` (a forfeit hold), 3 `bonus` (the
- * whole tally), 5 `skillShot` / `ballSaved` (the newer of the two),
- * 6 `attract` / `gameOver` (the prompts), 7 `warning`, 8 `none`. Later plans
- * add their rows (NEW HIGH SCORE) as new codes.
+ * whole tally), 4 `newHighScore` (`NEW_BEST_STATUS_STEPS` after a game over
+ * that set a new best), 5 `skillShot` / `ballSaved` (the newer of the two),
+ * 6 `attract` / `gameOver` (the prompts), 7 `warning`, 8 `none`.
  */
 export type StatusCode =
   | "none"
   | "tilt"
   | "tiltNoBonus"
   | "bonus"
+  | "newHighScore"
   | "skillShot"
   | "ballSaved"
   | "attract"
@@ -134,6 +146,12 @@ export type StatusCode =
  * wall clock, so it freezes on tab blur.
  */
 export const STATUS_TRANSIENT_STEPS = 180;
+
+/**
+ * How long NEW HIGH SCORE holds after the game over that set it (UI-SPEC row
+ * 4): 360 fixed steps = 3 s at 120 Hz, then the game-over prompt. Step clock.
+ */
+export const NEW_BEST_STATUS_STEPS = 360;
 
 /**
  * The status line text for a resolved code. `value` is used only by codes that
@@ -150,6 +168,8 @@ export function statusText(code: StatusCode, value: number): string {
       return "TILT · NO BONUS";
     case "bonus":
       return `BONUS ${formatScore(value)}`;
+    case "newHighScore":
+      return "NEW HIGH SCORE";
     case "skillShot":
       return `SKILL SHOT ${formatScore(value)}`;
     case "ballSaved":
@@ -165,10 +185,23 @@ export function statusText(code: StatusCode, value: number): string {
   }
 }
 
+/**
+ * The best line (`#hud-best`, UI-SPEC): `HIGH SCORE 48,250` in game-over
+ * (attract and after a game) when the best is above 0, empty during play and
+ * empty for a best of 0 (the empty state never shows `HIGH SCORE 0`). Fixed
+ * text plus a formatted integer, nothing user-authored.
+ */
+export function bestText(state: GameState, best: number): string {
+  return state === "game-over" && best > 0 ? `HIGH SCORE ${formatScore(best)}` : "";
+}
+
 export class HudView {
   private readonly score: TextSink;
   private readonly ball: TextSink;
   private readonly status: TextSink;
+  /** The best line and its `data-new` attribute (optional: older compositions omit them). */
+  private readonly best: TextSink | null;
+  private readonly bestAttr: AttrSink | null;
 
   /** Whether any line has been written; false so the first update writes all three. */
   private written = false;
@@ -183,11 +216,22 @@ export class HudView {
   /** The resolved status the status line was last written from. */
   private lastCode: StatusCode = "none";
   private lastValue = 0;
+  /** The best-line inputs last written (with `lastState`). */
+  private lastBest = 0;
+  private lastNewBest = false;
 
-  constructor(score: TextSink, ball: TextSink, status: TextSink) {
+  constructor(
+    score: TextSink,
+    ball: TextSink,
+    status: TextSink,
+    best: TextSink | null = null,
+    bestAttr: AttrSink | null = null,
+  ) {
     this.score = score;
     this.ball = ball;
     this.status = status;
+    this.best = best;
+    this.bestAttr = bestAttr;
   }
 
   /**
@@ -224,10 +268,29 @@ export class HudView {
       this.ball.textContent = ballText(state, ball);
     }
 
+    // The best line and the new-best pulse: rewritten only when the state, the
+    // best or the new-best flag changed. data-new="true" marks a game over that
+    // set a new best (CSS pulses it); the next game start clears it.
+    const best = src.getBest();
+    const newBest = src.isNewBest();
+    if (
+      first ||
+      state !== this.lastState ||
+      best !== this.lastBest ||
+      newBest !== this.lastNewBest
+    ) {
+      if (this.best !== null) this.best.textContent = bestText(state, best);
+      if (this.bestAttr !== null) {
+        if (state === "game-over" && newBest) this.bestAttr.setAttribute("data-new", "true");
+        else this.bestAttr.removeAttribute("data-new");
+      }
+    }
+
     // Status priority (06-UI-SPEC): 1 TILT, 2 TILT · NO BONUS, 3 BONUS,
-    // 5 SKILL SHOT / BALL SAVED (the newer of the two inside its window wins),
-    // 6 prompts, 7 WARNING, 8 empty. The bonus total is fixed for the whole
-    // tally, so BONUS is written (and announced) once.
+    // 4 NEW HIGH SCORE (for NEW_BEST_STATUS_STEPS after the game over that set
+    // it), 5 SKILL SHOT / BALL SAVED (the newer of the two inside its window
+    // wins), 6 prompts, 7 WARNING, 8 empty. The bonus total is fixed for the
+    // whole tally, so BONUS is written (and announced) once.
     const now = src.getStep();
     const skillStep = src.getLastSkillStep();
     const saveStep = src.getLastSaveStep();
@@ -242,6 +305,12 @@ export class HudView {
     } else if (state === "bonus") {
       code = "bonus";
       value = src.getBonusTotal();
+    } else if (
+      state === "game-over" &&
+      newBest &&
+      now < src.getGameOverStep() + NEW_BEST_STATUS_STEPS
+    ) {
+      code = "newHighScore";
     } else if (saveOn && (!skillOn || saveStep > skillStep)) {
       code = "ballSaved";
     } else if (skillOn) {
@@ -264,6 +333,8 @@ export class HudView {
     this.lastState = state;
     this.lastCode = code;
     this.lastValue = value;
+    this.lastBest = best;
+    this.lastNewBest = newBest;
   }
 }
 
