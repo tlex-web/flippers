@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-11-22T21:55:28.237Z"
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-11-22T22:08:14.855Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 90c719d755183979d99c375ba8e57be2d63b46b0
+state_head: 7a7d0eac57aa4bfd35e145f406019734f824a44e
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 48
+  completed_plans: 49
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 7 of 14
+Plan: 8 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -110,6 +110,7 @@ Progress: [████████░░] 83%
 | Phase 06 P04 | 10min | 2 tasks | 9 files |
 | Phase 06 P05 | 11 min | 2 tasks | 8 files |
 | Phase 06 P06 | 16min | 2 tasks | 6 files |
+| Phase 06 P07 | 10min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-06: HudView.update dt defaults to +Infinity (snap); the score snaps when gap <= COUNT_UP_SNAP, covering a target drop
 - [Phase 06]: 06-06: the observer pushes the drain cue once per getDrainCount() increment (drain step) and one bonusTick per tally row reveal; ball-number drain inference removed
 - [Phase 06]: 06-06: prefers-reduced-motion is read once at boot with one change listener in main.ts and passed as a boolean (06-09 shake reuses it)
+- [Phase 06]: 06-07: ball-save timer starts on the strict chute exit (x + BALL_RADIUS_M < CHUTE_X) and runs 840 usable steps; the start update does not count down
+- [Phase 06]: 06-07: a backstop save re-serves the same ball via reServe() (no serveBall), keeps counters/inlane/skill, no re-arm, no bonus state; it still increments getDrainCount so the 06-06 drain growl sounds on a save (06-10 to decide)
+- [Phase 06]: 06-07: trySave(ballId) is a public GameSession method; a drain on the same step as a kickback is re-served and counted once as the kickback; RuleHooks wiring left to 06-08
 
 ### Pending Todos
 
@@ -267,6 +271,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T21:55:26.849Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-11-22T22:08:13.457Z
+Stopped at: Completed 06-07-PLAN.md
 Resume file: None
