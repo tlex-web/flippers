@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import { BonusCounters, BonusTally } from "../game/bonus";
 import type { GameState } from "../game/game-session";
+import { FIXED_DT } from "../physics/constants";
 import {
   ballText,
   BonusView,
+  COUNT_UP_SNAP,
+  COUNT_UP_TAU_S,
   DiagView,
   diagText,
   formatScore,
@@ -720,5 +723,113 @@ describe("BonusView overlay (plan 06-06 Task 1, 06-UI-SPEC bonus overlay, D-12)"
       view.update(src);
     }
     expect(writes()).toBe(first);
+  });
+});
+
+describe("HudView score count-up (plan 06-06 Task 2, D-14, PLSH-06)", () => {
+  /** A view whose score line already shows `start` (snapped by a default-dt update). */
+  function shownAt(start: number): { view: HudView; score: CountingSink; src: FakeSource } {
+    const { view, score } = makeView();
+    const src = new FakeSource();
+    src.score = start;
+    view.update(src);
+    return { view, score, src };
+  }
+
+  /** Parse a formatted score line back to an integer. */
+  function parse(text: string | null): number {
+    return Number((text ?? "").replace(/,/g, ""));
+  }
+
+  it("the chase constants are the UI-SPEC values: tau 0.20 s, snap 10", () => {
+    expect(COUNT_UP_TAU_S).toBe(0.2);
+    expect(COUNT_UP_SNAP).toBe(10);
+  });
+
+  it("0 -> 10,000 at dt = FIXED_DT rises monotonically, never exceeds 10,000 and lands exactly on it", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 10000;
+    const seen: number[] = [];
+    let changes = 0;
+    let lastText = score.textContent;
+    for (let i = 0; i < 2000; i++) {
+      view.update(src, FIXED_DT);
+      const text = score.textContent;
+      if (text !== lastText) changes++;
+      lastText = text;
+      seen.push(parse(text));
+    }
+    expect(seen[0]).toBeGreaterThan(0);
+    expect(seen[0]).toBeLessThan(10000);
+    for (let i = 1; i < seen.length; i++) {
+      expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1] ?? 0);
+      expect(seen[i]).toBeLessThanOrEqual(10000);
+    }
+    expect(score.textContent).toBe("10,000");
+    // Written only when the rounded value changed: 1 initial write + one per change.
+    expect(score.writes).toBe(1 + changes);
+  });
+
+  it("one update with dt = 0.2 s from 0 to 10,000 shows round(10,000 * (1 - e^-1)) = 6,321", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 10000;
+    view.update(src, 0.2);
+    expect(score.textContent).toBe("6,321");
+    expect(Math.round(10000 * (1 - Math.exp(-1)))).toBe(6321);
+  });
+
+  it("target 9,995 from shown 9,990 snaps at once (difference 5 <= snap)", () => {
+    const { view, score, src } = shownAt(9990);
+    expect(score.textContent).toBe("9,990");
+    src.score = 9995;
+    view.update(src, FIXED_DT);
+    expect(score.textContent).toBe("9,995");
+  });
+
+  it("a drop in target (new game, 48,250 -> 0) snaps to 0 in one update with no intermediate value", () => {
+    const { view, score, src } = shownAt(48250);
+    const before = score.writes;
+    src.score = 0;
+    view.update(src, FIXED_DT);
+    expect(score.textContent).toBe("0");
+    expect(score.writes).toBe(before + 1);
+  });
+
+  it("reducedMotion snaps every change", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 10000;
+    view.update(src, FIXED_DT, true);
+    expect(score.textContent).toBe("10,000");
+    src.score = 23456;
+    view.update(src, FIXED_DT, true);
+    expect(score.textContent).toBe("23,456");
+  });
+
+  it("the default dt (+Infinity) snaps, as before the count-up", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 10000;
+    view.update(src);
+    expect(score.textContent).toBe("10,000");
+  });
+
+  it("a frame with no fixed steps (dt 0) leaves the shown value and writes nothing", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 10000;
+    view.update(src, FIXED_DT);
+    const text = score.textContent;
+    const writes = score.writes;
+    for (let i = 0; i < 10; i++) view.update(src, 0);
+    expect(score.textContent).toBe(text);
+    expect(score.writes).toBe(writes);
+  });
+
+  it("the shown value is always an integer and getScore() is never touched", () => {
+    const { view, score, src } = shownAt(0);
+    src.score = 1234567;
+    for (let i = 0; i < 50; i++) {
+      view.update(src, FIXED_DT);
+      expect(Number.isInteger(parse(score.textContent))).toBe(true);
+      expect(src.score).toBe(1234567);
+    }
   });
 });

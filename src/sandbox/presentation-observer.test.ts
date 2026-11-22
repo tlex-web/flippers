@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
+import { BonusCounters, BonusTally } from "../game/bonus";
 import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
 import type { GameState } from "../game/game-session";
 import {
@@ -26,6 +27,9 @@ class FakeSession implements ObserverSession {
   skillShots = 0;
   lastSkillValue = 0;
   lastSkillLane = -1;
+  drains = 0;
+  elapsed = 0;
+  readonly tally = new BonusTally();
   getState(): GameState {
     return this.state;
   }
@@ -43,6 +47,31 @@ class FakeSession implements ObserverSession {
   }
   getLastSkillLane(): number {
     return this.lastSkillLane;
+  }
+  getDrainCount(): number {
+    return this.drains;
+  }
+  getBonusTally(): Readonly<BonusTally> {
+    return this.tally;
+  }
+  getBonusElapsed(): number {
+    return this.elapsed;
+  }
+  /**
+   * Drain the ball as the session does: the drain counter rises and the state
+   * enters "bonus" at elapsed 0 with a tally of these counters (a forfeit when
+   * `forfeit`); the ball number is unchanged.
+   */
+  drain(rollovers = 0, inlanes = 0, banks = 0, forfeit = false): void {
+    const c = new BonusCounters();
+    c.rollovers = rollovers;
+    c.inlanes = inlanes;
+    c.banks = banks;
+    this.tally.snapshot(c);
+    if (forfeit) this.tally.markForfeit();
+    this.drains++;
+    this.state = "bonus";
+    this.elapsed = 0;
   }
 }
 
@@ -165,9 +194,10 @@ describe("PresentationObserver: game-event cues (05-05)", () => {
     expect(step(r)).toEqual(["start"]);
   });
 
-  it("playing/1 -> playing/2 pushes drain on element 600 and flashes the drain apron", () => {
+  it("a drain-count increment (ball unchanged, bonus) pushes drain on element 600 and flashes the drain apron", () => {
     const r = rig("playing", 1);
-    r.session.ball = 2;
+    r.session.drain();
+    expect(r.session.ball).toBe(1);
     expect(step(r)).toEqual(["drain"]);
     const c = r.cues.at(0);
     expect(c?.elementId).toBe(DRAIN);
@@ -175,24 +205,69 @@ describe("PresentationObserver: game-event cues (05-05)", () => {
     expect(r.flash.records).toEqual([{ id: DRAIN, strength: 1 }]);
   });
 
-  it("tilted/2 -> playing/3 pushes only drain", () => {
-    const r = rig("tilted", 2);
+  it("the later serve (ball increment after the tally) pushes no second drain", () => {
+    const r = rig("playing", 1);
+    r.session.drain();
+    step(r);
+    r.session.elapsed = 60;
+    step(r);
     r.session.state = "playing";
-    r.session.ball = 3;
-    expect(step(r)).toEqual(["drain"]);
-  });
-
-  it("playing/3 -> game-over pushes drain then gameOver", () => {
-    const r = rig("playing", 3);
-    r.session.state = "game-over";
-    expect(step(r)).toEqual(["drain", "gameOver"]);
+    r.session.ball = 2;
+    r.session.elapsed = 0;
+    expect(step(r)).toEqual([]);
     expect(r.flash.records).toEqual([{ id: DRAIN, strength: 1 }]);
   });
 
-  it("tilted/3 -> game-over (a tilt on the last ball) pushes drain then gameOver", () => {
-    const r = rig("tilted", 3);
+  it("a ball increment with no drain-count increment pushes nothing (the drain is never inferred)", () => {
+    const r = rig("playing", 1);
+    r.session.ball = 2;
+    expect(step(r)).toEqual([]);
+    expect(r.flash.records).toEqual([]);
+  });
+
+  it("a tilted drain (forfeit tally) pushes only drain", () => {
+    const r = rig("tilted", 2);
+    r.session.drain(3, 1, 1, true);
+    expect(step(r)).toEqual(["drain"]);
+  });
+
+  it("drain on the last ball, then bonus -> game-over pushes gameOver only (its drain was already pushed)", () => {
+    const r = rig("playing", 3);
+    r.session.drain();
+    expect(step(r)).toEqual(["drain"]);
+    r.session.elapsed = 60;
+    expect(step(r)).toEqual([]);
     r.session.state = "game-over";
-    expect(step(r)).toEqual(["drain", "gameOver"]);
+    r.session.elapsed = 0;
+    expect(step(r)).toEqual(["gameOver"]);
+    expect(r.flash.records).toEqual([{ id: DRAIN, strength: 1 }]);
+  });
+
+  it("a tilt on the last ball: forfeit drain, then game-over pushes drain, then gameOver", () => {
+    const r = rig("tilted", 3);
+    r.session.drain(0, 0, 0, true);
+    expect(step(r)).toEqual(["drain"]);
+    r.session.state = "game-over";
+    expect(step(r)).toEqual(["gameOver"]);
+  });
+
+  it("construction snapshots a non-zero drain count, so the first observe pushes no drain", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    session.ball = 2;
+    session.drains = 4;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
   });
 
   it("playing -> tilted pushes tilt once; a second observe while still tilted pushes nothing", () => {
@@ -344,7 +419,7 @@ describe("PresentationObserver: skill-shot sting (06-04, D-25)", () => {
     r.session.skillShots = 1;
     r.session.lastSkillValue = 10000;
     r.session.lastSkillLane = 400;
-    r.session.ball = 2;
+    r.session.drains = 1;
     expect(step(r)).toEqual(["warning", "skillShot", "drain"]);
   });
 
@@ -378,5 +453,83 @@ describe("PresentationObserver: skill-shot sting (06-04, D-25)", () => {
     r.session.ball = 1;
     r.session.skillShots = 0;
     expect(step(r)).toEqual(["start"]);
+  });
+});
+
+describe("PresentationObserver: bonus row ticks (06-06, D-25)", () => {
+  it("a 3-row tally pushes one bonusTick on the drain step after the drain cue, then one at 48 and one at 96", () => {
+    const r = rig("playing", 1);
+    r.session.drain(3, 2, 1);
+    expect(stepTagged(r)).toBe(`drain@${String(DRAIN)},bonusTick@-1`);
+    expect(r.cues.size).toBe(2);
+    expect(r.cues.at(1)?.strength).toBe(1);
+    const ticks: number[] = [];
+    for (let e = 1; e <= 264; e++) {
+      r.session.elapsed = e;
+      const kinds = step(r);
+      if (kinds.length > 0) {
+        expect(kinds).toEqual(["bonusTick"]);
+        ticks.push(e);
+      }
+    }
+    // TOTAL (elapsed 144) and every counted step in between push nothing.
+    expect(ticks).toEqual([48, 96]);
+  });
+
+  it("an all-zero tally pushes no bonusTick", () => {
+    const r = rig("playing", 1);
+    r.session.drain(0, 0, 0);
+    expect(step(r)).toEqual(["drain"]);
+    for (let e = 1; e <= 60; e++) {
+      r.session.elapsed = e;
+      expect(step(r)).toEqual([]);
+    }
+  });
+
+  it("a forfeit pushes no bonusTick", () => {
+    const r = rig("tilted", 1);
+    r.session.drain(3, 2, 1, true);
+    expect(step(r)).toEqual(["drain"]);
+    for (let e = 1; e <= 200; e++) {
+      r.session.elapsed = e;
+      expect(step(r)).toEqual([]);
+    }
+  });
+
+  it("a skipped tally pushes no further tick, and the next ball's tally ticks again from row 0", () => {
+    const r = rig("playing", 1);
+    r.session.drain(3, 0, 1);
+    expect(step(r)).toEqual(["drain", "bonusTick"]);
+    r.session.elapsed = 10;
+    expect(step(r)).toEqual([]);
+    // A flipper press skips: the next ball is served.
+    r.session.state = "playing";
+    r.session.ball = 2;
+    r.session.elapsed = 0;
+    expect(step(r)).toEqual([]);
+    r.session.drain(1, 0, 0);
+    expect(step(r)).toEqual(["drain", "bonusTick"]);
+  });
+
+  it("construction mid-tally snapshots the revealed rows, so the first observe pushes nothing", () => {
+    const session = new FakeSession();
+    session.drain(3, 2, 1);
+    session.elapsed = 50;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
+    session.elapsed = 96;
+    observer.observe();
+    expect(cues.size).toBe(1);
+    expect(cues.at(0)?.kind).toBe("bonusTick");
   });
 });
