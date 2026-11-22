@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController } from "../control/flipper-controller";
-import { PlungerController } from "../control/plunger-controller";
+import { isRestingInZone, PlungerController } from "../control/plunger-controller";
 import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
-import { ROLLOVER_POINTS, SKILL_SHOT_BASE_POINTS } from "../game/tuning";
+import { ROLLOVER_POINTS, SKILL_SHOT_BASE_POINTS, SKILL_SHOT_ROTATE_STEPS } from "../game/tuning";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
@@ -13,7 +13,7 @@ import { FIXED_DT, PLUNGER_CHARGE_RATE, PLUNGER_MAX_CHARGE } from "../physics/co
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallState, CollisionEvent } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
-import { PLUNGER_REST } from "../table/spec";
+import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
 
 // Heavy simulation suite: the 5 s default timeout is too tight under load, so
 // this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
@@ -67,6 +67,7 @@ function key(code: string): KeyEventLike {
 }
 const SPACE = key("Space");
 const ENTER = key("Enter");
+const KEY_X = key("KeyX");
 
 interface SwitchHit {
   readonly kind: string;
@@ -301,6 +302,83 @@ describe("skill shot on the real table (PLSH-05, D-01..D-05)", () => {
     expect(r.hit.kind).not.toBe("rollover");
     expect(g.session.getSkillShotCount()).toBe(0);
     expect(g.session.getSkillPhase()).toBe("off");
+  });
+});
+
+/** A weak plunge: below the 0.637 fall-back edge (D-01), so the ball returns. */
+const WEAK_HOLD_STEPS = 40;
+
+/** Run single steps until `done()` holds; throws after `cap` steps. */
+function runUntil(g: Game, done: () => boolean, cap = SWITCH_CAP_STEPS): void {
+  for (let steps = 0; !done(); steps++) {
+    if (steps >= cap) throw new Error(`condition not reached within ${cap} steps`);
+    runSteps(g, 1);
+  }
+}
+
+describe("skill shot arming on the real table (D-03)", () => {
+  it("a launched ball keeps the lane frozen from the release step to its first switch", () => {
+    const g = makeGame();
+    pressEnter(g);
+    runSteps(g, ANCHOR_SETTLE_STEPS);
+    launch(g, ANCHOR_HOLD_STEPS);
+    // The release step reads the pre-impulse snapshot (ball still at rest);
+    // that must not reopen the rotation under a ball that is leaving.
+    while (g.firstSwitch() === null) {
+      runSteps(g, 1);
+      if (g.firstSwitch() !== null) break;
+      expect(g.session.getSkillPhase()).toBe("frozen");
+      expect(g.session.getSkillLitLane()).toBe(401);
+    }
+    expect(g.session.getSkillShotCount()).toBe(1);
+  });
+
+  it("a N=40 weak plunge falls back and reopens the rotation; a N=62 relaunch with 401 lit awards 5000", () => {
+    const g = makeGame();
+    pressEnter(g);
+    runSteps(g, ANCHOR_SETTLE_STEPS); // 401 lit
+    launch(g, WEAK_HOLD_STEPS);
+    expect(g.session.getSkillPhase()).toBe("frozen");
+
+    runUntil(g, () => g.session.getSkillPhase() === "rotating");
+    expect(g.plunger.getPhase()).toBe("idle");
+    expect(isRestingInZone(g.ball(), PLUNGER_ZONE)).toBe(true);
+    expect(g.firstSwitch()).toBeNull(); // it never left the lane
+    expect(g.session.getSkillLitLane()).toBe(401); // resumes from the frozen lane
+    expect(g.session.getScore()).toBe(0);
+
+    // One full rotation later 401 is lit again, with the ball long settled.
+    runSteps(g, 3 * SKILL_SHOT_ROTATE_STEPS);
+    expect(g.session.getSkillLitLane()).toBe(401);
+    launch(g, ANCHOR_HOLD_STEPS);
+    const r = runToFirstSwitch(g);
+    expect(r.hit).toEqual({ kind: "rollover", elementId: 401 });
+    expect(g.session.getSkillShotCount()).toBe(1);
+    expect(g.session.getLastSkillValue()).toBe(5000);
+    expect(r.scoreAfter - r.scoreBefore).toBe(ROLLOVER_POINTS + 5000);
+  });
+
+  it("four nudges 32 steps apart after a N=62 launch tilt the ball before its first switch: no skill shot", () => {
+    const g = makeGame();
+    pressEnter(g);
+    runSteps(g, ANCHOR_SETTLE_STEPS); // 401 lit
+    launch(g, ANCHOR_HOLD_STEPS);
+    runSteps(g, 1); // the release step
+    for (let n = 0; n < 4; n++) {
+      g.gameInput.handleKeyDown(KEY_X);
+      g.gameInput.handleKeyUp(KEY_X);
+      runSteps(g, n < 3 ? 32 : 1);
+    }
+    expect(g.session.getState()).toBe("tilted");
+    expect(g.firstSwitch()).toBeNull();
+    expect(g.session.getSkillPhase()).toBe("off");
+    expect(g.session.getSkillLitLane()).toBe(-1);
+
+    // Whatever the dead ball touches next scores nothing and awards no skill shot.
+    runUntil(g, () => g.firstSwitch() !== null || g.session.getBall() === 2);
+    expect(g.session.getSkillShotCount()).toBe(0);
+    expect(g.session.getLastSkillValue()).toBe(0);
+    expect(g.session.getScore()).toBe(0);
   });
 });
 
