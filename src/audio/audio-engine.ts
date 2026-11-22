@@ -196,10 +196,11 @@ export class AudioEngine {
   /** Wall-clock deadline (ms, `clock`) of the current starting window. */
   private startingUntilMs = 0;
   /**
-   * The audio clock (`currentTime`) when the starting window opened. Once it
-   * has moved, the context is rendering even if `state` still reads
-   * "suspended": the spec flips `state` in a task queued after rendering
-   * starts (05-REVIEW IN-05).
+   * The audio clock (`currentTime`) when the starting window opened, or when
+   * a resume last went in flight from idle (05-REVIEW IN-01). Once it has
+   * moved, the context is rendering even if `state` still reads "suspended":
+   * the spec flips `state` in a task queued after rendering starts
+   * (05-REVIEW IN-05).
    */
   private startAudioT = 0;
   /** Set once a closed context has been reported; later gestures stay quiet. */
@@ -342,6 +343,10 @@ export class AudioEngine {
         if (nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
         this.openStartingWindow(ctx, nowMs);
       }
+      // `isRendering` counts only while a resume is in flight, so anchor the
+      // audio clock whenever one goes in flight from idle: a run the engine
+      // never observed must not leave a stale anchor (05-REVIEW IN-01).
+      if (!this.resumePending) this.startAudioT = ctx.currentTime;
       this.resumePending = true;
       ctx.resume().then(
         () => {

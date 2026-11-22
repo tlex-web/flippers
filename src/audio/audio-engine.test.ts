@@ -967,6 +967,52 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
     engine.unlock();
     expect(frame()).toBe(0);
   });
+
+  it("1. bounded: after a run the engine never observes, a stuck resume in the spent episode builds nothing (05-REVIEW IN-01)", async () => {
+    const fake = new FakeAudioContext();
+    fake.state = "suspended";
+    let stuck = false;
+    const resolvers: (() => void)[] = [];
+    fake.resume = () => {
+      fake.resumeCalls++;
+      return new Promise<void>((resolve) => {
+        if (!stuck) resolvers.push(resolve);
+      });
+    };
+    const clock = { ms: T0 };
+    const engine = new AudioEngine(
+      () => fake,
+      () => 0.5,
+      () => clock.ms,
+      () => true,
+    );
+    engine.unlock(); // the episode's first window
+    engine.unlock(); // the activating re-arm: the episode is spent
+    const chain = fake.nodes.length;
+    // The device starts and the context renders, but no flush() or unlock()
+    // runs (rAF paused) before it is suspended again: the run is never
+    // observed, so the episode does not end.
+    fake.state = "running";
+    fake.currentTime = 5;
+    for (const resolve of resolvers.splice(0)) resolve();
+    await drain();
+    fake.state = "suspended";
+    clock.ms += 10_000;
+    // A gesture in the spent episode opens no window, and its resume sticks.
+    stuck = true;
+    engine.unlock();
+    const q = new CueQueue();
+    let built = 0;
+    for (let f = 0; f < 600; f++) {
+      clock.ms += FRAME_MS;
+      q.push("bumper", 200 + (f % 3), 1);
+      built += engine.flush(q);
+    }
+    // The frozen clock must not read as rendering against a stale anchor.
+    expect(built).toBe(0);
+    expect(connected(fake, chain)).toBe(0);
+    expect(engine.activeVoices()).toBe(0);
+  });
 });
 
 describe("unlock edge cases (05-REVIEW IN-06)", () => {
