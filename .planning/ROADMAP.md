@@ -228,10 +228,10 @@ Plans:
   4. Scores count up with animation and an end-of-ball bonus tally, and a near-drain can trigger a simple center-post ball-save flourish.
   5. The local high score persists across browser sessions via `localStorage`.
 
-**Plans**: 14 plans (9 waves)
+**Plans**: 1/14 plans executed (9 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
-- [ ] 06-01-PLAN.md — Tracer: skill shot rule live. SkillShot rotate/freeze/resolve, RuleHooks.onSwitch seam, GameSession composition, D-05 anchor on the real table, isRestingInZone, main.ts wiring [wave 1]
+- [x] 06-01-PLAN.md — Tracer: skill shot rule live. SkillShot rotate/freeze/resolve, RuleHooks.onSwitch seam, GameSession composition, D-05 anchor on the real table, isRestingInZone, main.ts wiring [wave 1]
 - [ ] 06-02-PLAN.md — Depth: baked ball shadow, light pool, drop shadows, vignette; the Phase-6 palette token set; renderer frame-contract re-pins [wave 1]
 
 **Wave 2** *(blocked on Wave 1; both plans run in parallel)*
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
-| 6. Juice & Polish | 0/14 | Planned | - |
+| 6. Juice & Polish | 1/14 | In Progress | - |

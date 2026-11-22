@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 6
+current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-11-22T19:06:46.570Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-11-22T19:43:15.281Z"
 last_activity: 2026-11-22
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 48ddc14efb0432d967ce0b3cfbe3f1c020eda4e8
+last_activity_desc: Phase 06 execution started
+state_head: 7f34b0c83a60abe41a3413fce900a577c66aa6fa
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 42
+  completed_plans: 43
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-22)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 6 — Juice & Polish
+**Current focus:** Phase 06 — Juice & Polish
 
 ## Current Position
 
-Phase: 6 (Juice & Polish) — READY TO EXECUTE
-Plan: Not started
+Phase: 06 (Juice & Polish) — EXECUTING
+Plan: 2 of 14
 Status: Ready to execute
-Last activity: 2026-11-22 — Phase 05 complete, transitioned to Phase 6
+Last activity: 2026-11-22 — Phase 06 execution started
 
 Progress: [████████░░] 83%
 
@@ -104,6 +104,7 @@ Progress: [████████░░] 83%
 | Phase 05 P04 | 17 min | 2 tasks | 8 files |
 | Phase 05 P05 | 18 min | 2 tasks | 7 files |
 | Phase 05 P06 | 15 min | 3 tasks | 6 files |
+| Phase 06 P01 | 13 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,9 @@ Recent decisions affecting current work:
 - [Phase 05]: D-01 accepted at UAT test 4: the DOM HUD meets SC1 ("procedural, zero image assets"); recorded as an overrides: entry in 05-VERIFICATION.md
 - [Phase 05]: Audio unlock redesigned after three review rounds (b04d725, bbcdbf7, ba7faae): a starting episode allows at most two bounded start windows until the context is seen running; a failed resume() opens nothing and is logged once; a 104-row invariant table pins it. Accepted cost: after a failed device start that recovers in the same episode, a third gesture gets no window
 - [Phase 05]: UAT 9/9 passed on 2026-11-22 (perf, 144 Hz, visuals, D-01, flashes, headphone pass, three audio-unlock re-checks); verification passed 7/7; review disposition open: 0
+- [Phase 06]: Skill-shot rest test is ignored on the plunger release step (pre-impulse snapshot would reopen rotation under a leaving ball)
+- [Phase 06]: RuleHooks.onSwitch runs after the award and before presentation feedback; GameSession implements it, main.ts passes the session as gate and hooks
+- [Phase 06]: isRestingInZone(ball, PlungerZone) is the single plunger rest test shared by the release gate and the skill-shot fall-back
 
 ### Pending Todos
 
@@ -243,6 +247,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T10:56:38.985Z
-Stopped at: Phase 6 UI-SPEC approved
-Resume file: .planning/phases/06-juice-polish/06-UI-SPEC.md
+Last session: 2026-11-22T19:43:11.730Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
