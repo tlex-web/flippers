@@ -1,138 +1,85 @@
 ---
 phase: 05-rendering-audio
-reviewed: 2026-11-21T23:58:52Z
+reviewed: 2026-11-22T00:27:22Z
 depth: standard
-files_reviewed: 5
+files_reviewed: 4
 files_reviewed_list:
   - src/audio/audio-engine.test.ts
   - src/audio/audio-engine.ts
-  - src/audio/envelope.ts
   - src/render/asset-free.test.ts
   - src/sandbox/main.ts
 findings:
   critical: 0
-  warning: 3
-  info: 2
-  total: 5
-  necessity: 1
+  warning: 1
+  info: 1
+  total: 2
+  necessity: 0
 status: issues_found
 ---
 
-# Phase 5: Code Review Report (incremental: round-2 fix commits 660e019..0c11790)
+# Phase 5: Code Review Report (incremental: round-3 fix commits b04d725, 7487c53, 2ae42d4)
 
-**Reviewed:** 2026-11-21T23:58:52Z
+**Reviewed:** 2026-11-22T00:27:22Z
 **Depth:** standard
-**Files Reviewed:** 5
+**Files Reviewed:** 4
 **Status:** issues_found
-**Scope:** `git diff f6f6a1a..HEAD -- src`, the 7 fix commits for WR-01, WR-02 and IN-01..IN-04 of the previous review. For context I also read `src/audio/audio-unlock.ts`, `src/audio/test/fake-audio-context.ts` and the flipper key bindings in `src/input/flipper-input.ts:223-226`.
+**Scope:** `git diff cf48843..HEAD -- src`. For context I also read `src/audio/voice-pool.ts`, `src/audio/test/fake-audio-context.ts`, `src/audio/audio-unlock.ts` and the frame loop in `src/sandbox/main.ts:397-475`. I modelled resume behaviour on the Web Audio spec's `resume()` algorithm and its "control message to resume" steps.
 
 ## Summary
 
-All six fixes do what they claim. `vitest run src/audio src/render/asset-free.test.ts` passes (7 files, 97 tests). I traced the `unlock()` state machine through every flag transition. `activationReopened` implies `resumePending` on every path (set at `:322` just before `:327`, and cleared at `:331`, `:335` and `:341` together with `resumePending`). So "one activation reopen per stuck resume" holds, and the WR-02 `!isRendering(ctx)` guard does what it says. Both UAT paths trace through correctly.
+The episode model is sound. I traced every path through `unlock()`/`flush()` against the five stated invariants:
 
-There are two remaining holes in the same state machine, and I reproduced both with scratch vitests (the scratch files are outside the repo and the tree was not changed):
-- **WR-01 is not complete for an Enter that lands late in the first window.** That Enter starts the context, but it does not get a window of its own. If the device needs longer than the time left in the window, the next flush discards the "start" figure.
-- **The window bound only covers a resume that stays pending.** A `resume()` that rejects clears `resumePending`, so every later gesture opens a fresh window. A held key then builds voices with no bound and logs an error on every keydown.
+1. **Bounded:** holds on every input where the engine sees `state === "running"` at least once during each run of the context. One unobserved run leaves `startAudioT` stale and lets the graph grow without limit (IN-01). Reaching that needs a rAF-paused run followed by a stuck resume, so I list it as hardening.
+2. **"start" survives:** holds for the episode's opener and for its first activating, non-rendering re-gesture. It does **not** hold for any later activating gesture. The spec allows one reachable case: a device start that fails, then recovers inside the same episode (WR-01).
+3. **No hard cut while the clock advances:** holds. Both discard sites (`unlock()`'s re-arm and `flush()`'s not-playable branch) are gated by `isRendering`. `isRendering` can only miss an advancing clock if `resumePending` is false while `state` still lags, and the spec rules that out (see the residual below).
+4. **Reject reported once per episode:** holds. The throw path and the reject path share `rejectReported`, and only `endEpisode()` resets it.
+5. **Running then suspended resets:** holds whenever the engine observes the run (the IN-01 caveat applies).
 
-**Per-fix verdicts:**
+**Does the table exercise them?** Mostly. The 84 rows cover invariants 2-4 over the gesture and outcome space that was modelled. The 8 held-key cases and the dedicated tests cover 1, 4 and 5. Gaps:
+- no outcome where an activating resume fails and a later one succeeds (WR-01);
+- no run the engine does not observe (IN-01);
+- no row asserts a node bound. Invariant 1 rests on the held-key cases alone;
+- invariant 3 is measured only for cuts caused by `unlock()`. A cut made by `flush()` is caught only when it hits the "start" voice (`startCut`).
 
-| Fix | Verdict | Notes |
-|---|---|---|
-| WR-01 (660e019, 665dc82) | Fixed for a stuck resume, with gaps | Once per stuck resume is enforced and pinned by the 60 s held-key test. Not covered: an activating gesture inside a live window (WR-01 below), and a resume that rejects (WR-02 below). |
-| WR-02 (23f874d) | Fixed | The reopen requires `!isRendering(ctx)`, so the IN-05 interval no longer discards voices or re-anchors `startAudioT`. The reopen allowance stays unspent there, which is correct. |
-| IN-01 (ca0496d) | Fixed | The engine header, the `STARTING_WINDOW_MS` doc, the `flush()` doc and `main.ts:57-63` match the code. |
-| IN-02 (c4c8b53) | Fixed | `applyEnvelope` is used only by `envelope.test.ts` and `voice-pool.test.ts`, and production calls `scheduleEnvelope` plus `envelopeEnd` (`audio-engine.ts:542-544`). |
-| IN-03 (af96c21) | Fixed as suggested | The four patterns are in place and the tree scans clean. A small gap remains in the remote-module pattern (IN-02 below). |
-| IN-04 (0c11790) | Fixed | The clock now moves past `startAudioT` before the suspended flush, and `activeVoices()` is asserted. |
+**The out-of-scope residual (one `resumePending` flag, late settle).** It is reachable, but harmless. The spec settles every promise in `[[pending resume promises]]` and sets `state` to `"running"` in the **same** queued task. The `.then` callbacks then run at that task's microtask checkpoint, before any later gesture task can call `resume()`. An earlier promise can resolve while `state` is still suspended and a newer start is under way? That cannot happen. There is exactly one spec path where an earlier settle clears the flag while a newer resume stays in flight. A blocked resume A sits on the pending list. An allowed resume B attempts a device start, and the start fails. The failure task rejects only the pending-list promises, so A rejects. B was never on the list, so B never settles. The flag is now false while B is "in flight". But the device failed, so dropping cues and discarding voices is the correct result. Scratch repro B shows it: `flush` returns 0 and no voice stays held. A synchronous throw from `resume()` (the `catch` at `audio-engine.ts:347-350`) also clears the flag over an older pending promise, but only non-conforming engines throw. **No change needed.**
 
-**Necessity:** I read `necessity-review.md`. There is one finding (WR-03).
+`asset-free.test.ts` (IN-02 regexes) and the `main.ts` doc edit: no defects. `tsc`, `vitest` and `eslint` were reported green by the fixer and not re-run here.
+
+**Scratch repros:** `C:\Users\aster\AppData\Local\Temp\claude\de811a44c71c6315\0f5cbbd4-c854-4188-a9bc-a1b26aab1b8a\scratchpad\r4\episode.spec.ts`. Run them with `npx vitest run --config <scratch>/r4/vitest.config.mjs --dir <scratch>/r4` from the repo root. All 4 pass. Their output: `A start flushed: 0`; `B flush after A rejects with B in flight: 0 active 0`; `C built 15 connected nodes 0` (windowsOpened 1, which re-anchors and is safe); `C2 built 600 connected nodes 3000` (episode spent, stale anchor: unbounded).
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01: An activating gesture inside a live starting window gets no window of its own, so a late Enter's "start" figure is discarded if the device starts after the window
+### WR-01: Invariant 2 holds only for the episode's first two gestures. After a failed device start, the recovering Enter's "start" figure is dropped
 
-**File:** `src/audio/audio-engine.ts:316-326` (the reopen requires `nowMs >= this.startingUntilMs`), `src/audio/audio-engine.ts:399-403` (the discard on expiry), `src/audio/audio-engine.test.ts:434-443` (this test pins the behaviour)
+**File:** `src/audio/audio-engine.ts:327-336` (doc: `:23-30`)
+**Issue:** The fix report states invariant 2 without a condition: the "start" figure survives an activating gesture whose context starts within STARTING_WINDOW_MS. The code grants windows only to the opener and to the first activating, non-rendering re-gesture (`windowsOpened` 0 to 1 to 2). Any later activating gesture in the same episode gets no window, even if its own `resume()` is the one that starts the device. One reachable sequence follows the spec's resume algorithm:
+1. Shift (not activating) opens window 1. Its resume A is blocked and goes on the pending list.
+2. Z (activating) re-arms, so `windowsOpened = 2`. Its allowed resume B attempts a device start.
+3. The start fails: the device is busy in exclusive mode, or a Bluetooth headset is still connecting. A rejects (reported once). B never settles.
+4. The device recovers. Enter (activating) calls resume C, and the device starts 60 ms later.
+5. `isStarting` is false because no window is open and `resumePending` was cleared by A. The "start" frame's `flush` returns 0 and the figure is lost.
 
-**Issue:** The WR-01 goal is that after a non-activating first gesture (Shift, which is also a flipper key), the Enter that really starts the context still gets its "start" cue played. The reopen only fires once the first window has expired. Here is what happens if Enter lands inside the window, for example at t0 + 230 ms:
-1. `unlock()` takes neither branch, so the deadline stays at t0 + 250 ms. Enter's `resume()` starts the audio device.
-2. The "start" cue is flushed at about t0 + 240 ms. It is inside the window, so it is scheduled on the frozen clock.
-3. The device needs some tens of ms to come up. The first flush after t0 + 250 ms sees a context that is neither rendering (the clock has not moved yet) nor starting, and `pool.discardAll()` stops and disconnects the whole "start" figure before it can sound.
-
-The "do not extend a live window" rule existed to stop re-gestures from extending the window without limit. Since 660e019 the `activationReopened` flag already caps activation reopens at one per stuck resume. Extending a live window once on the first activating gesture therefore keeps the same bound of two windows per stuck resume. The `expired` condition no longer protects anything, and it creates this gap. The UAT covered "Shift, **wait**, Enter", which waits past expiry, so it did not reach this case. A quick Shift-then-Enter, the natural start, does.
-
-**Reproduced (scratch vitest, real engine and the fake context):** Shift-unlock at 1000 ms, then an activating unlock at 1230 ms. Flush "start" at 1240 ms, which returns 1. Then flush at 1257 ms with the clock still frozen: **6 of the 6 "start" nodes were disconnected**.
-
-**Fix:** Let the first activating gesture while a resume is pending (re)arm the window whether or not it has expired. Discard old voices only when the window had expired:
-
-```ts
-} else if (!this.activationReopened && !this.isRendering(ctx) && this.isActivation()) {
-  this.activationReopened = true;
-  // Voices from an expired window must not ride into the new one; a live
-  // window's voices are at most STARTING_WINDOW_MS old and may stay.
-  if (nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
-  this.openStartingWindow(ctx, nowMs);
-}
-```
-
-Update `audio-engine.test.ts:434` to expect a flush 20 ms past the original deadline to return 1, and a flush past `nowMs + STARTING_WINDOW_MS` to return 0. Add a test for the reproduced sequence (an activating unlock at t0 + 230 ms, "start" flushed, then a flush at t0 + 257 ms on a frozen clock, with no "start" node disconnected).
-
-### WR-02: A resume() that rejects re-arms the window on every gesture, so the bound only holds for a resume that stays pending
-
-**File:** `src/audio/audio-engine.ts:313-315`, `src/audio/audio-engine.ts:333-337`
-
-**Issue:** The window bound, and the round-2 WR-01 argument for it ("at most one activation reopen per stuck resume"), assume a resume that fails stays pending. A resume that rejects instead (a device start failure, which the header already treats as possible at `:17-18`) goes through the reject handler. That handler clears both `resumePending` and `activationReopened`. The next gesture then takes the `!this.resumePending` branch and opens a fresh 250 ms window, and its `resume()` rejects again. With a held flipper key (auto-repeat at about 30 Hz), every repeat re-arms the window:
-- voices are built on a context that never renders, about one per keydown, with no bound for as long as keys are pressed. The pool keeps the live graph at 16 voices, but node creation grows. That is the growth the previous two WR-01 rounds set out to bound.
-- `report("resume() was rejected", …)` runs on every keydown, which floods the console. `closedReported` already guards against the same flood for the closed state (`:290-297`).
-
-**Reproduced (scratch vitest):** `resume()` returns `Promise.reject(...)` every time, `isActivation` is true, and there is an unlock every 2 frames and a bumper cue every frame for 60 s. The result: **1800 voices started, 9002 nodes created, 1800 `console.error` lines**. The same run with a stuck resume stays within two windows, about 34 voices (the round-2 test at `audio-engine.test.ts:375`).
-
-**Fix:** Bound the windows per episode that ends in "running", not per promise, and report a rejection once. For example:
-
-```ts
-/** Starting windows opened since the context last ran (or was created). */
-private windowsOpened = 0;
-private rejectReported = false;
-
-// unlock(), replacing the two branches' guards:
-const fresh = !this.resumePending && this.windowsOpened === 0;
-const reopen =
-  !fresh && this.windowsOpened < 2 && !this.isRendering(ctx) && this.isActivation();
-if (fresh || reopen) {
-  if (reopen && nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
-  this.windowsOpened++;
-  this.openStartingWindow(ctx, nowMs);
-}
-// resolve: this.resumePending = false; if (ctx.state === "running") this.windowsOpened = 0;
-// reject:  this.resumePending = false; if (!this.rejectReported) { this.rejectReported = true; report(...); }
-```
-
-Also reset `windowsOpened` when `unlock()` sees `state === "running"`. Then a later OS-level suspend gets a fresh allowance. Add a test with a resume that always rejects, a held activating key and 60 s of frames, asserting that the voices started stay within two windows and that there is one `console.error`.
-
-### WR-03: Impossible-state guard: `activationReopened = false` in the fresh-resume branch
-
-**File:** `src/audio/audio-engine.ts:314`
-**Category:** necessity
-**Issue:** The fresh-resume branch runs only when `resumePending` is false. `activationReopened` is set true in only one place (`:322`), and `resumePending = true` follows unconditionally (`:327`). If anything in between throws, the catch at `:340-341` clears both. Every other write of `resumePending = false` (`:330`, `:334`, `:340`) also writes `activationReopened = false`. So `activationReopened` implies `resumePending`, and the reset at `:314` always writes `false` over `false`. It also suggests to the reader that the flag could be stale, which it cannot be. If the WR-02 fix changes how the flag is reset, the line should go with it.
-**Fix:** Remove line 314, or replace the separate flag with the per-episode counter from WR-02, where the reset has a real job.
+Scratch repro A (`episode.spec.ts`, "A. invariant 2…") asserts `flushed === 0`, and it passes. A held activating key during the failure spends window 2 in the same way. The 84-row table cannot reach this: its only success outcome ("runs") starts the device 60 ms after the *first* activating gesture, and no row has a failure followed by a success.
+**Fix:** Do not reopen windows on rejection. That brings back the WR-02 unbounded case. Make the stated invariant match the bound and pin it with a test. Change the header line at `:23-27` to something like: "the 'start' figure survives when the device starts within STARTING_WINDOW_MS of the episode's opener or of its first activating, non-rendering re-gesture; a later gesture in a spent episode gets no window (the cost of the two-window bound)". Then add an outcome to the table such as `"fails-then-runs"`: the first activating resume rejects, and the device starts 60 ms after the next activating gesture. Assert `startFlushed === 0` for rows where that gesture is the episode's third, so the trade-off is documented rather than accidental.
 
 ## Info
 
-### IN-01: The "settles" test says every pending resume settles together, but only the last promise resolves
+### IN-01: The rendering test compares the clock with a per-window anchor, so an unobserved run makes a frozen, suspended context count as "rendering" forever
 
-**File:** `src/audio/audio-engine.test.ts:404-432`
-**Issue:** `pending.settle` is overwritten on each `resume()` call, so `pending.settle?.()` at `:422` resolves only the third promise. The second (the reopen's) never settles, and neither does the first, which comes from `stuckRig`'s never-settling fake. The comment at `:421` says "Every pending resume settles together". The test passes because any one callback clears both flags. It therefore never shows that a late callback from an earlier resume is harmless after a fresh window has opened.
-**Fix:** Collect every resolver (`const resolvers: (() => void)[] = []`), install the override before the rig's first `unlock()`, and resolve them all at `:422`. Or reword the comment to say that only the latest resume is settled.
-
-### IN-02: The remote-module asset pattern misses side-effect imports and template-literal specifiers
-
-**File:** `src/render/asset-free.test.ts:98-102`, `src/render/asset-free.test.ts:103-107`
-**Issue:** `import "https://esm.sh/x";` has no `from` and no `(`, so no pattern matches it (the URL pattern needs `href=`/`src=`). It is still a runtime fetch that Vite leaves external. `` import(`https://…`) `` and `` createElement(`img`) `` are also missed, because the character classes accept only `"` and `'`.
-**Fix:** Use `/\b(from|import)\s*["'`](https?:)?\/\/|\bimport\s*\(\s*["'`](https?:)?\/\//` and `["'`]` in the `createElement` pattern, with positive samples for `import "https://x/y.js";` and `` import(`https://x`) ``.
+**File:** `src/audio/audio-engine.ts:452-455`, `:370-373`, `:357-360`
+**Issue:** `isRendering` returns true when `resumePending && state === "suspended" && currentTime > startAudioT`. `startAudioT` is anchored only when a window opens. Suppose the context runs and is suspended again with no `flush()`/`unlock()` in between: a rAF-paused page, or a long main-thread task. Then `endEpisode()` never runs and `windowsOpened` stays at 2, so the next gesture opens no window and does not re-anchor. That gesture sets `resumePending = true`. If its resume stays pending (an allowed outcome, per the header), every frame counts as rendering on a frozen clock. Voices are admitted with `rendering = true`, so stolen voices are never torn down, and `onended` never fires. Scratch repro C2: 600 frames build 600 voices and leave 3000 nodes connected, growing linearly. Invariant 1 is broken, and invariant 5 does not apply because the run was never observed. With `windowsOpened === 1`, the activating re-arm re-anchors and the graph stays bounded (repro C). Reaching this needs an unobserved run plus a stuck resume afterwards. I could not show that combination on a shipping browser: desktop Chrome keeps hidden-tab contexts running, and iOS reports `"interrupted"`, which fails the `"suspended"` check. So it is listed as hardening, not as a reachable defect.
+**Fix:** One line. Re-anchor the audio clock whenever a resume goes in flight from idle. `isRendering` only counts while `resumePending` is true, so this is exactly the moment the anchor must be fresh:
+```ts
+// unlock(), before `this.resumePending = true;`
+if (!this.resumePending) this.startAudioT = ctx.currentTime;
+this.resumePending = true;
+```
+The anchor is not touched while a resume stays pending, which keeps IN-05's interval detection. Also add C2 as a regression test. I checked this in a scratch copy of `src/`: with the line applied, all 117 existing `audio-engine.test.ts` tests pass and C2 drops to 0 voices built and 0 nodes connected.
 
 ---
 
-_Reviewed: 2026-11-21T23:58:52Z_
+_Reviewed: 2026-11-22T00:27:22Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
