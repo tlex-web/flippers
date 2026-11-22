@@ -4,10 +4,13 @@
  * size, and the live frame blits it with one `drawImage` at identity.
  *
  * Draw order: at identity, the space background gradient, two nebula clouds and
- * a seeded starfield (identical on every load); then, in world meters after one
- * `setTransform`, every non-mount table element by kind. Flipper mounts are
- * skipped: the bats are drawn live. `shadowBlur` is used only here (bake time)
- * and is reset to 0 before returning. Pure geometry and gradients, no assets.
+ * a seeded starfield (identical on every load); then, in world meters, a
+ * "lighter" light pool over the lower-center play area and every non-mount
+ * table element by kind, each bumper, slingshot and wall preceded by its own
+ * down-right drop shadow (PLSH-03, D-20); last, back at identity, the vignette
+ * over the whole backing. Flipper mounts are skipped: the bats are drawn live.
+ * `shadowBlur` is used only here (bake time, D-24) and is reset to 0 before
+ * returning. Pure geometry and gradients, no assets.
  */
 
 import { mulberry32 } from "../harness/prng";
@@ -21,7 +24,10 @@ import {
   BUMPER_RING,
   CHUTE,
   DRAIN,
+  DROP_SHADOW,
   LANE,
+  LIGHT_POOL,
+  LIGHT_POOL_FADE,
   NEBULA_TEAL,
   NEBULA_TEAL_FADE,
   NEBULA_VIOLET,
@@ -32,12 +38,14 @@ import {
   SLING_BODY,
   SLING_RUBBER,
   STAR,
+  VIGNETTE_CLEAR,
+  VIGNETTE_EDGE,
   WALL,
   WALL_GLOW,
   WALL_GLOW_LINE_M,
   WALL_LINE_M,
 } from "./palette";
-import type { ViewTransform } from "./view-transform";
+import { tableBounds, type ViewTransform } from "./view-transform";
 
 /** One offscreen drawing surface. */
 export interface Layer {
@@ -72,6 +80,24 @@ const LANE_ALPHA = 0.55;
 
 /** Bake-time bumper glow radius (meters, converted to device px for shadowBlur). */
 const BUMPER_GLOW_M = 0.06;
+
+/** Light pool center and radius (meters): the lower-center play area (UI-SPEC Depth). */
+const LIGHT_POOL_X_M = 1.45;
+const LIGHT_POOL_Y_M = 4.6;
+const LIGHT_POOL_R_M = 2.6;
+
+/** Bumper and sling drop-shadow offset and bake-time blur (meters, down-right). */
+const SOLID_SHADOW_DX_M = 0.04;
+const SOLID_SHADOW_DY_M = 0.06;
+const SOLID_SHADOW_BLUR_M = 0.04;
+
+/** Wall drop-shadow stroke offset and width (meters, down-right). */
+const WALL_SHADOW_DX_M = 0.02;
+const WALL_SHADOW_DY_M = 0.03;
+const WALL_SHADOW_LINE_M = 0.04;
+
+/** Vignette clear radius as a fraction of the backing half-diagonal. */
+const VIGNETTE_INNER = 0.5;
 
 const TAU = Math.PI * 2;
 
@@ -152,6 +178,79 @@ function drawBackground(ctx: CanvasRenderingContext2D, view: ViewTransform): voi
   ctx.globalAlpha = 1;
 }
 
+/** World transform shifted by (dx, dy) meters. */
+function setWorld(
+  ctx: CanvasRenderingContext2D,
+  view: ViewTransform,
+  dx: number,
+  dy: number,
+): void {
+  const s = view.scale;
+  ctx.setTransform(s, 0, 0, s, view.offX + dx * s, view.offY + dy * s);
+}
+
+/** Additive radial falloff brightening the lower-center play area (world transform set). */
+function drawLightPool(ctx: CanvasRenderingContext2D, elements: readonly ResolvedElement[]): void {
+  const b = tableBounds(elements);
+  const g = ctx.createRadialGradient(
+    LIGHT_POOL_X_M,
+    LIGHT_POOL_Y_M,
+    0,
+    LIGHT_POOL_X_M,
+    LIGHT_POOL_Y_M,
+    LIGHT_POOL_R_M,
+  );
+  g.addColorStop(0, LIGHT_POOL);
+  g.addColorStop(1, LIGHT_POOL_FADE);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = g;
+  ctx.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+/**
+ * Down-right drop shadow under one element, drawn before it. Bumpers and slings
+ * fill their shape blurred; walls stroke their path. Leaves the world transform
+ * set and shadowBlur at 0.
+ */
+function drawDropShadow(
+  ctx: CanvasRenderingContext2D,
+  el: ResolvedElement,
+  view: ViewTransform,
+): void {
+  if (el.kind === "wall") {
+    setWorld(ctx, view, WALL_SHADOW_DX_M, WALL_SHADOW_DY_M);
+    traceElement(ctx, el);
+    ctx.strokeStyle = DROP_SHADOW;
+    ctx.lineWidth = WALL_SHADOW_LINE_M;
+    ctx.stroke();
+  } else {
+    setWorld(ctx, view, SOLID_SHADOW_DX_M, SOLID_SHADOW_DY_M);
+    ctx.shadowColor = DROP_SHADOW;
+    ctx.shadowBlur = SOLID_SHADOW_BLUR_M * view.scale;
+    traceElement(ctx, el);
+    ctx.fillStyle = DROP_SHADOW;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  setWorld(ctx, view, 0, 0);
+}
+
+/** Darkened corners over the whole backing, at identity. */
+function drawVignette(ctx: CanvasRenderingContext2D, view: ViewTransform): void {
+  const w = view.backingW;
+  const h = view.backingH;
+  const cx = w / 2;
+  const cy = h / 2;
+  const half = Math.hypot(w, h) / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const g = ctx.createRadialGradient(cx, cy, half * VIGNETTE_INNER, cx, cy, half);
+  g.addColorStop(0, VIGNETTE_CLEAR);
+  g.addColorStop(1, VIGNETTE_EDGE);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+}
+
 function drawBumper(ctx: CanvasRenderingContext2D, el: ResolvedElement, view: ViewTransform): void {
   const c = el.circle;
   if (!c) return;
@@ -202,13 +301,15 @@ export function bakeStatic(
   ctx.shadowBlur = 0;
   drawBackground(ctx, view);
 
-  ctx.setTransform(view.scale, 0, 0, view.scale, view.offX, view.offY);
+  setWorld(ctx, view, 0, 0);
+  drawLightPool(ctx, elements);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   for (const el of elements) {
     if (el.mount) continue;
     switch (el.kind) {
       case "wall":
+        drawDropShadow(ctx, el, view);
         traceElement(ctx, el);
         neon(ctx, WALL_GLOW, 1, WALL, WALL_LINE_M);
         break;
@@ -235,9 +336,11 @@ export function bakeStatic(
         ctx.stroke();
         break;
       case "bumper":
+        drawDropShadow(ctx, el, view);
         drawBumper(ctx, el, view);
         break;
       case "slingshot":
+        drawDropShadow(ctx, el, view);
         drawSlingshot(ctx, el);
         break;
       case "flipper":
@@ -252,5 +355,7 @@ export function bakeStatic(
   }
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
+  drawVignette(ctx, view);
+  ctx.globalCompositeOperation = "source-over";
   return drawn;
 }
