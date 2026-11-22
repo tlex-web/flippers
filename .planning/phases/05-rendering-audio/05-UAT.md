@@ -3,7 +3,7 @@ status: complete
 phase: 05-rendering-audio
 source: [05-VERIFICATION.md]
 started: 2026-11-21T00:00:00Z
-updated: 2026-11-21T23:53:27.524Z
+updated: 2026-11-22T00:43:07.950Z
 ---
 
 ## Current Test
@@ -44,10 +44,14 @@ result: pass
 expected: Both runs play the three-note start figure on Enter; in the second run the flipper taps sound normally; no clicks or cut-off sounds in either run
 result: pass
 
+### 9. Re-check after the unlock redesign (b04d725 starting episode, ba7faae): fresh load, press Shift, wait 1 s, press Enter; fresh load, press Shift, then Enter right away (within a quarter second); fresh load, press Shift, wait 1 s, tap Z or Slash a few times, then press Enter
+expected: All three runs play the three-note start figure on Enter; flipper taps sound normally; no clicks or cut-off sounds
+result: pass
+
 ## Summary
 
-total: 8
-passed: 8
+total: 9
+passed: 9
 issues: 0
 pending: 0
 skipped: 0
