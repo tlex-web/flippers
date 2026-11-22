@@ -8,6 +8,7 @@ import { TABLE_SPEC, type TableSpec } from "../table/spec";
 import {
   deriveKickFace,
   ReactiveElements,
+  type ReactiveConfig,
   type ReactiveFeedback,
   type ReactiveWorld,
   type RuleHooks,
@@ -18,6 +19,7 @@ import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
   INLANE_POINTS,
+  KICKBACK_SPEED,
   KICKER_REARM_STEPS,
   ROLLOVER_BANK_BONUS,
   ROLLOVER_POINTS,
@@ -141,6 +143,8 @@ interface Rig {
   readonly reactive: ReactiveElements;
   /** One simulated step: dispatch this batch, then service(). */
   step(batch: CollisionEvent[]): void;
+  /** Half a step: dispatch this batch only (no service()). */
+  dispatch(batch: CollisionEvent[]): void;
 }
 
 function makeRig(
@@ -148,6 +152,7 @@ function makeRig(
   feedback?: ReactiveFeedback,
   log: LogEntry[] | null = null,
   ruleHooks?: RuleHooks,
+  config?: ReactiveConfig,
 ): Rig {
   const world = new SpyWorld(spec);
   const gate = new SpyGate(log);
@@ -161,20 +166,26 @@ function makeRig(
   });
   // Without a feedback the THREE-argument constructor is used, so every
   // Phase-4 case exercises the default (no-op) feedback path.
-  // With rule hooks the FIVE-argument constructor is used (06-01).
-  const reactive = ruleHooks
-    ? new ReactiveElements(world, router, gate, feedback, ruleHooks)
-    : feedback
-      ? new ReactiveElements(world, router, gate, feedback)
-      : new ReactiveElements(world, router, gate);
-  const step = (batch: CollisionEvent[]): void => {
+  // With rule hooks the FIVE-argument constructor is used (06-01), with a
+  // config the SIX-argument one (06-08).
+  const reactive = config
+    ? new ReactiveElements(world, router, gate, feedback, ruleHooks, config)
+    : ruleHooks
+      ? new ReactiveElements(world, router, gate, feedback, ruleHooks)
+      : feedback
+        ? new ReactiveElements(world, router, gate, feedback)
+        : new ReactiveElements(world, router, gate);
+  const dispatch = (batch: CollisionEvent[]): void => {
     pending = batch;
     world.dispatching = true;
     router.dispatch();
     world.dispatching = false;
+  };
+  const step = (batch: CollisionEvent[]): void => {
+    dispatch(batch);
     reactive.service();
   };
-  return { world, gate, reactive, step };
+  return { world, gate, reactive, step, dispatch };
 }
 
 describe("ReactiveElements bumper rule (ELEM-01)", () => {
@@ -591,14 +602,21 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
 /**
  * Spy rule hooks (plan 06-01, PLSH-05) appending to the same log as the gate
  * and the feedback, so "award, then switch, then feedback" is one comparison.
+ * `trySave` (06-08, PLSH-07) logs each ask and answers `grant`.
  */
 class SpyHooks implements RuleHooks {
+  /** What trySave answers. */
+  grant = false;
+  /** Every ball trySave was asked about, in order. */
+  readonly asked: BallId[] = [];
   constructor(private readonly log: LogEntry[]) {}
   onSwitch(kind: SwitchKind, elementId: number, bank: boolean): void {
     this.log.push(["switch", kind, elementId, bank]);
   }
-  trySave(): boolean {
-    return false;
+  trySave(ballId: BallId): boolean {
+    this.asked.push(ballId);
+    this.log.push(["trySave", ballId]);
+    return this.grant;
   }
 }
 
@@ -723,5 +741,160 @@ describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", 
     expect(hooked.gate.awards).toEqual(plain.gate.awards);
     expect(hooked.world.impulses).toEqual(plain.world.impulses);
     expect(plain.gate.awards.length).toBeGreaterThan(0);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * Center-post kickback gating (PLSH-07, plan 06-08 Task 2) against the spy
+ * world: the post is a points-free kicker that asks the rule hooks to spend
+ * the save and applies the bumper law in service() only.
+ * ------------------------------------------------------------------------- */
+
+const POST_ID = 610;
+const POST_C = { x: 1, y: 5 };
+
+/** Tiny table with one virtual post (a sensor circle) and a floor. */
+const POST_SPEC: TableSpec = [
+  { id: POST_ID, kind: "post", center: POST_C, radius: 0.09, sensor: true },
+  {
+    id: 100,
+    kind: "wall",
+    path: [
+      { x: 0, y: 6 },
+      { x: 2, y: 6 },
+    ],
+  },
+];
+
+/** A post overlap whose point is the ball center (as the engine emits it). */
+function postEv(ballId: BallId, x: number, y: number): CollisionEvent {
+  return ev("post", POST_ID, 0, ballId, x, y);
+}
+
+/** A post rig whose gate, feedback and spy hooks share one log. */
+function postRig(
+  grant: boolean,
+  config?: ReactiveConfig,
+): Rig & { log: LogEntry[]; hooks: SpyHooks } {
+  const log: LogEntry[] = [];
+  const spy = new SpyHooks(log);
+  spy.grant = grant;
+  return { ...makeRig(POST_SPEC, new SpyFeedback(log), log, spy, config), log, hooks: spy };
+}
+
+/** The bumper law expected for a ball at (x, y) moving (vx, vy) off the post. */
+function expectedKick(
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  target: number,
+): { ix: number; iy: number } {
+  const dx = x - POST_C.x;
+  const dy = y - POST_C.y;
+  const len = Math.hypot(dx, dy);
+  const nx = dx / len;
+  const ny = dy / len;
+  const j = ballMass(BALL_R) * (target - (vx * nx + vy * ny));
+  return { ix: j * nx, iy: j * ny };
+}
+
+describe("ReactiveElements center-post kickback gating (06-08, PLSH-07)", () => {
+  it("live, above the center and granted: trySave is asked once and service() applies one bumper-law kick", () => {
+    const rig = postRig(true);
+    // Up and to the right of the post, falling onto it.
+    const bx = 1.12;
+    const by = 4.82;
+    rig.world.addBall(3, bx, by, -0.4, 1.6);
+    rig.dispatch([postEv(3, bx, by)]);
+    // Recorded only: nothing reaches the world before service().
+    expect(rig.world.impulses).toHaveLength(0);
+    rig.reactive.service();
+    expect(rig.hooks.asked).toEqual([3]);
+    expect(rig.world.impulses).toHaveLength(1);
+    const call = rig.world.impulses[0];
+    if (!call) throw new Error("no impulse");
+    const want = expectedKick(bx, by, -0.4, 1.6, KICKBACK_SPEED);
+    expect(call.ballId).toBe(3);
+    expect(call.ix).toBeCloseTo(want.ix, 12);
+    expect(call.iy).toBeCloseTo(want.iy, 12);
+    // Applying it raises the normal speed to exactly KICKBACK_SPEED.
+    const len = Math.hypot(bx - POST_C.x, by - POST_C.y);
+    const nx = (bx - POST_C.x) / len;
+    const ny = (by - POST_C.y) / len;
+    const m = ballMass(BALL_R);
+    const vn = (-0.4 + call.ix / m) * nx + (1.6 + call.iy / m) * ny;
+    expect(vn).toBeCloseTo(KICKBACK_SPEED, 10);
+    expect(rig.world.callsWhileDispatching).toEqual([]);
+  });
+
+  it("not live: trySave is never asked and nothing is applied", () => {
+    const rig = postRig(true);
+    rig.world.addBall(0, 1, 4.8);
+    rig.gate.live = false;
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.hooks.asked).toEqual([]);
+    expect(rig.world.impulses).toHaveLength(0);
+  });
+
+  it("ball center level with the post center: trySave is never asked and nothing is applied", () => {
+    const rig = postRig(true);
+    rig.world.addBall(0, 1.25, POST_C.y);
+    rig.step([postEv(0, 1.25, POST_C.y)]);
+    expect(rig.hooks.asked).toEqual([]);
+    expect(rig.world.impulses).toHaveLength(0);
+  });
+
+  it("ball center below the post center (a downward kick into the drain): never asked, nothing applied", () => {
+    const rig = postRig(true);
+    rig.world.addBall(0, 1.05, 5.2);
+    rig.step([postEv(0, 1.05, 5.2)]);
+    expect(rig.hooks.asked).toEqual([]);
+    expect(rig.world.impulses).toHaveLength(0);
+  });
+
+  it("trySave false: asked once, nothing applied", () => {
+    const rig = postRig(false);
+    rig.world.addBall(0, 1, 4.8);
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.hooks.asked).toEqual([0]);
+    expect(rig.world.impulses).toHaveLength(0);
+  });
+
+  it("the default hooks never save: a live, above-center post overlap applies nothing", () => {
+    const rig = makeRig(POST_SPEC);
+    rig.world.addBall(0, 1, 4.8);
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.world.impulses).toHaveLength(0);
+    expect(rig.gate.awards).toEqual([]);
+  });
+
+  it("a granted post kick awards nothing and calls neither onSwitch nor the feedback", () => {
+    const rig = postRig(true);
+    rig.world.addBall(0, 1, 4.8);
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.world.impulses).toHaveLength(1);
+    expect(rig.gate.awards).toEqual([]);
+    expect(rig.log).toEqual([["trySave", 0]]);
+  });
+
+  it("config { kickbackSpeed: 4 } raises the normal speed to 4 m/s", () => {
+    const rig = postRig(true, { kickbackSpeed: 4 });
+    // Straight above the post, at rest: the impulse is m * 4 straight up.
+    rig.world.addBall(0, 1, 4.8);
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.world.impulses).toHaveLength(1);
+    const call = rig.world.impulses[0];
+    if (!call) throw new Error("no impulse");
+    expect(call.ix).toBeCloseTo(0, 12);
+    expect(call.iy).toBeCloseTo(-ballMass(BALL_R) * 4, 12);
+  });
+
+  it("a ball already leaving faster than the target gets no impulse", () => {
+    const rig = postRig(true);
+    rig.world.addBall(0, 1, 4.8, 0, -(KICKBACK_SPEED + 1));
+    rig.step([postEv(0, 1, 4.8)]);
+    expect(rig.hooks.asked).toEqual([0]);
+    expect(rig.world.impulses).toHaveLength(0);
   });
 });

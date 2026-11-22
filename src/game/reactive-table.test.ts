@@ -574,3 +574,130 @@ describe("center-post kickback (PLSH-07)", () => {
     expect(out.vn).toBeGreaterThanOrEqual(KICKBACK_SPEED - 0.25);
   });
 });
+
+interface ArmedDropResult {
+  readonly drained: boolean;
+  readonly maxSpeed: number;
+  readonly postKicks: number;
+}
+
+/**
+ * The armed variant of dropToDrain (D-10): one dead-flipper drop whose rule
+ * hooks grant one save, run to the drain or 60 s, tracking the peak speed.
+ */
+function armedDropToDrain(
+  origin: { x: number; y: number },
+  config: ReactiveConfig = {},
+): ArmedDropResult {
+  const rig = makeArmedRig(1, config);
+  rig.world.addBall(origin);
+  let maxSpeed = 0;
+  for (let i = 0; i < SIXTY_SECONDS && !rig.drained(); i++) {
+    rig.run(1);
+    for (const b of rig.world.getBalls()) maxSpeed = Math.max(maxSpeed, Math.hypot(b.vx, b.vy));
+  }
+  return { drained: rig.drained(), maxSpeed, postKicks: rig.postKicks().length };
+}
+
+describe("energy bound with the save armed (PLSH-07, D-10)", () => {
+  it("12 seeded dead-flipper drops with one save each all drain within 60 s, never exceed 15 m/s, and post kicks fire", () => {
+    const results = energyOrigins().map((o) => armedDropToDrain(o));
+    const drained = results.filter((r) => r.drained).length;
+    const maxSpeed = Math.max(...results.map((r) => r.maxSpeed));
+    const postKicks = results.reduce((sum, r) => sum + r.postKicks, 0);
+    expect(results).toHaveLength(ENERGY_DROPS);
+    expect(drained).toBe(ENERGY_DROPS);
+    expect(maxSpeed).toBeLessThanOrEqual(ENERGY_MAX_SPEED);
+    expect(postKicks).toBeGreaterThan(0);
+  });
+
+  it("RED control: the same drops with { kickbackSpeed: 20 } break the 15 m/s bound", () => {
+    const results = energyOrigins().map((o) => armedDropToDrain(o, { kickbackSpeed: 20 }));
+    const maxSpeed = Math.max(...results.map((r) => r.maxSpeed));
+    expect(results.reduce((sum, r) => sum + r.postKicks, 0)).toBeGreaterThan(0);
+    expect(maxSpeed).toBeGreaterThan(ENERGY_MAX_SPEED);
+  });
+});
+
+/** Seed of the trough-release stream (phase 06, plan 08). */
+const TROUGH_SEED = 0x0608;
+/** Releases per trough wall (each side). */
+const TROUGH_RELEASES = 6;
+/**
+ * Release window along the trough wall, in metres from its top end: the
+ * drooped bat covers the wall above about 0.47 m, so a ball released higher
+ * would start inside the bat (measured, 06-08 Task 2).
+ */
+const TROUGH_T_MIN = 0.47;
+const TROUGH_T_MAX = 0.62;
+/** Release depth inside the wall line, ball center to wall (m). */
+const TROUGH_OFFSET_MIN = 0.22;
+const TROUGH_OFFSET_MAX = 0.28;
+/** Push down the wall at release (m/s). */
+const TROUGH_PUSH_MAX = 1.0;
+
+/**
+ * Seeded releases just inside trough wall `wallId` (130 left, 131 right): a
+ * point TROUGH_T along the wall from its top, pushed TROUGH_OFFSET toward the
+ * playfield center, moving down the wall. Geometry is read from the resolve.
+ */
+function troughReleases(
+  wallId: number,
+  rand: () => number,
+): { x: number; y: number; vx: number; vy: number }[] {
+  const probe = new PlanckWorld();
+  const seg = probe.getElements().find((el) => el.id === wallId)?.segments[0];
+  if (!seg) throw new Error(`trough wall ${wallId} missing`);
+  // Top end first (smaller y).
+  const top = seg.a.y < seg.b.y ? seg.a : seg.b;
+  const bottom = seg.a.y < seg.b.y ? seg.b : seg.a;
+  const len = Math.hypot(bottom.x - top.x, bottom.y - top.y);
+  const dx = (bottom.x - top.x) / len;
+  const dy = (bottom.y - top.y) / len;
+  // Wall normal toward the post side of the wall.
+  const post = postCenter(probe);
+  let nx = -dy;
+  let ny = dx;
+  if (nx * (post.x - top.x) + ny * (post.y - top.y) < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const out: { x: number; y: number; vx: number; vy: number }[] = [];
+  for (let i = 0; i < TROUGH_RELEASES; i++) {
+    const t = TROUGH_T_MIN + rand() * (TROUGH_T_MAX - TROUGH_T_MIN);
+    const off = TROUGH_OFFSET_MIN + rand() * (TROUGH_OFFSET_MAX - TROUGH_OFFSET_MIN);
+    const push = rand() * TROUGH_PUSH_MAX;
+    out.push({
+      x: top.x + t * dx + off * nx,
+      y: top.y + t * dy + off * ny,
+      vx: push * dx,
+      vy: push * dy,
+    });
+  }
+  return out;
+}
+
+describe("trough exclusion: the post never reaches the outlane trough runners (PLSH-07, research A1)", () => {
+  it("seeded balls released inside either trough wall roll to the drain with zero post events", () => {
+    const rand = mulberry32(TROUGH_SEED);
+    const releases = [...troughReleases(130, rand), ...troughReleases(131, rand)];
+    expect(releases).toHaveLength(2 * TROUGH_RELEASES);
+    for (const r of releases) {
+      const rig = makeArmedRig(1);
+      rig.world.addBall(r);
+      // A fixed 2 s, past the drain event, so a late roll toward the post counts.
+      rig.run(TWO_SECONDS);
+      expect(rig.drained()).toBe(true);
+      expect(rig.posts).toEqual([]);
+      expect(rig.kicks).toEqual([]);
+    }
+  });
+
+  it("control: a ball dropped on the mirror axis above the post does produce a post event", () => {
+    const rig = makeArmedRig(0);
+    const c = postCenter(rig.world);
+    rig.world.addBall({ x: c.x, y: c.y - 0.45 });
+    rig.run(TWO_SECONDS);
+    expect(rig.posts.length).toBeGreaterThan(0);
+  });
+});
