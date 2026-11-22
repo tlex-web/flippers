@@ -16,6 +16,7 @@ import {
   buildLampShapes,
   LAMP_COUNT,
   LAMP_ROLLOVER_401,
+  LAMP_SAVE,
   LAMP_SKILL_402,
   type LampReader,
   type LampShape,
@@ -26,8 +27,10 @@ import {
   FLASH_FLIPPER,
   FLASH_WALL,
   LAMP_HOTSPOT,
+  POST_BODY,
   ROLLOVER_LIT,
   RUBBER_LINE_M,
+  SAVE_LIT,
   SKILL_LIT,
 } from "./palette";
 import {
@@ -574,14 +577,22 @@ describe("TableRenderer flash pass (RND-03, T-05-15)", () => {
   });
 });
 
-/** A lamp reader with fixed levels (absent lamps read 0). */
+/** A lamp reader with fixed levels (absent lamps read 0) and no post flourish. */
 function lampsAt(levels: Readonly<Record<number, number>>): LampReader {
-  return { level: (lamp: number) => levels[lamp] ?? 0 };
+  return { level: (lamp: number) => levels[lamp] ?? 0, postAge: () => -1 };
 }
 
-/** Every lamp at `level`. */
+/** Every lamp at `level`, no post flourish. */
 function allLampsAt(level: number): LampReader {
-  return { level: (lamp: number) => (lamp >= 0 && lamp < LAMP_COUNT ? level : 0) };
+  return {
+    level: (lamp: number) => (lamp >= 0 && lamp < LAMP_COUNT ? level : 0),
+    postAge: () => -1,
+  };
+}
+
+/** Every lamp unlit and the post flourish at a fixed age (06-10). */
+function postAt(age: number): LampReader {
+  return { level: () => 0, postAge: () => age };
 }
 
 function shapeOf(lamp: number): LampShape {
@@ -964,5 +975,179 @@ describe("TableRenderer screen shake (PLSH-01, D-17, D-18, Pitfall 8)", () => {
         expect(f).toBe(rig.view.offY);
       }
     }
+  });
+});
+
+/** The resolved "post" element's circle: the one field the sensor and the drawing share (D-07). */
+function postCircle(rig: Rig): { cx: number; cy: number; r: number } {
+  const c = rig.world.getElements().find((e) => e.kind === "post")?.circle;
+  if (!c) throw new Error("no post element");
+  return { cx: c.center.x, cy: c.center.y, r: c.radius };
+}
+
+/** drawImage calls of the SAVE_LIT lamp halo sprite. */
+function saveHaloDraws(rig: Rig): CallEntry[] {
+  const canvas = lampHaloCanvas(rig, SAVE_LIT);
+  return rig.rec.calls("drawImage").filter((c) => c.args[0] === canvas);
+}
+
+describe("TableRenderer ball-save ring and post flourish (plan 06-10, D-07, D-10, D-24)", () => {
+  it("the ring at level 1: SAVE_LIT closed lens stroke at 0.035 m, the SAVE_LIT halo under lighter, a LAMP_HOTSPOT arc over its upper-left quarter at 0.8", () => {
+    const rig = makeRig();
+    const s = shapeOf(LAMP_SAVE);
+    rig.renderer.draw(frameOf(rig.world, { lamps: lampsAt({ [LAMP_SAVE]: 1 }) }));
+
+    // 1. The lens: the 48-point ring, closed, stroked SAVE_LIT at the ring width.
+    expect(styledCalls(rig.rec, "strokeStyle", SAVE_LIT, "stroke")).toBe(1);
+    const lens = callAfterSet(rig.rec, "strokeStyle", SAVE_LIT, "stroke");
+    expect(stateAt(rig.rec, lens, "globalAlpha", 1)).toBe(1);
+    expect(stateAt(rig.rec, lens, "globalCompositeOperation", "source-over")).toBe("source-over");
+    expect(stateAt(rig.rec, lens, "lineWidth", 0)).toBe(0.035);
+    const begin = lastCallIndexBefore(rig.rec, lens, "beginPath");
+    const path = rig.rec.log.slice(begin, lens).filter((e): e is CallEntry => e.kind === "call");
+    expect(path.filter((c) => c.name === "moveTo")).toHaveLength(1);
+    expect(path.filter((c) => c.name === "lineTo")).toHaveLength(47);
+    expect(path.filter((c) => c.name === "closePath")).toHaveLength(1);
+
+    // 2. The halo: one SAVE_LIT sprite of radius 0.22 centered on the post, under lighter.
+    const halos = lampHaloDraws(rig);
+    expect(halos).toHaveLength(1);
+    expect(halos[0]?.args[0]).toBe(lampHaloCanvas(rig, SAVE_LIT));
+    const [x, y, w, h] = (halos[0]?.args.slice(1) ?? []) as number[];
+    expect(w).toBeCloseTo(0.44, 12);
+    expect(h).toBeCloseTo(0.44, 12);
+    const post = postCircle(rig);
+    expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo(post.cx, 12);
+    expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo(post.cy, 12);
+    const haloAt = halos[0] ? rig.rec.log.indexOf(halos[0]) : -1;
+    expect(stateAt(rig.rec, haloAt, "globalCompositeOperation", "source-over")).toBe("lighter");
+
+    // 3. The hot-spot: a 0.01 m white arc on the ring's centerline from left (PI) to top (1.5 PI).
+    expect(styledCalls(rig.rec, "strokeStyle", LAMP_HOTSPOT, "stroke")).toBe(1);
+    const hot = callAfterSet(rig.rec, "strokeStyle", LAMP_HOTSPOT, "stroke");
+    expect(stateAt(rig.rec, hot, "globalAlpha", 1)).toBeCloseTo(0.8, 12);
+    expect(stateAt(rig.rec, hot, "lineWidth", 0)).toBe(0.01);
+    const arc = lastCallBefore(rig.rec, hot, "arc");
+    expect(arc?.args[0]).toBeCloseTo(s.cx, 12);
+    expect(arc?.args[1]).toBeCloseTo(s.cy, 12);
+    expect(arc?.args[2]).toBeCloseTo(s.lensRadius, 12);
+    expect(arc?.args[3]).toBeCloseTo(Math.PI, 12);
+    expect(arc?.args[4]).toBeCloseTo(1.5 * Math.PI, 12);
+    expect(lastCallIndexBefore(rig.rec, hot, "beginPath")).toBeGreaterThan(haloAt);
+
+    expect(lens).toBeLessThan(haloAt);
+    expect(haloAt).toBeLessThan(hot);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("a post at age 0 (rise start, flash 1): after the flash pass and before the bats, a POST_BODY disc of 0.7R at the post center, a 0.02 m SAVE_LIT rim, and the SAVE_LIT halo at HALO_SCALE * R under lighter", () => {
+    const rig = makeRig();
+    const post = postCircle(rig);
+    // The drawn radius reads the collider's own field (D-07, T-6-21).
+    expect(post.r).toBe(0.09);
+    const flash = trackerFor(rig.world);
+    flash.record(202, 1);
+    rig.renderer.draw(frameOf(rig.world, { lamps: postAt(0), flash, alpha: 0 }));
+
+    // The disc.
+    expect(styledCalls(rig.rec, "fillStyle", POST_BODY, "fill")).toBe(1);
+    const disc = callAfterSet(rig.rec, "fillStyle", POST_BODY, "fill");
+    const discArc = lastCallBefore(rig.rec, disc, "arc");
+    expect(discArc?.args[0]).toBeCloseTo(post.cx, 12);
+    expect(discArc?.args[1]).toBeCloseTo(post.cy, 12);
+    expect(discArc?.args[2]).toBeCloseTo(0.7 * post.r, 12);
+    expect(discArc?.args[3]).toBe(0);
+    expect(discArc?.args[4]).toBeCloseTo(2 * Math.PI, 12);
+    expect(stateAt(rig.rec, disc, "globalAlpha", 1)).toBe(1);
+    expect(stateAt(rig.rec, disc, "globalCompositeOperation", "source-over")).toBe("source-over");
+
+    // The rim.
+    expect(styledCalls(rig.rec, "strokeStyle", SAVE_LIT, "stroke")).toBe(1);
+    const rim = callAfterSet(rig.rec, "strokeStyle", SAVE_LIT, "stroke");
+    expect(stateAt(rig.rec, rim, "lineWidth", 0)).toBe(0.02);
+    expect(lastCallBefore(rig.rec, rim, "arc")?.args[2]).toBeCloseTo(0.7 * post.r, 12);
+    expect(stateAt(rig.rec, rim, "globalCompositeOperation", "source-over")).toBe("source-over");
+
+    // The flash halo: the shape table's SAVE_LIT sprite at 2 * HALO_SCALE * R, centered.
+    const halos = saveHaloDraws(rig);
+    expect(halos).toHaveLength(1);
+    const [x, y, w, h] = (halos[0]?.args.slice(1) ?? []) as number[];
+    expect(w).toBeCloseTo(2 * HALO_SCALE * post.r, 12);
+    expect(h).toBeCloseTo(2 * HALO_SCALE * post.r, 12);
+    expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo(post.cx, 12);
+    expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo(post.cy, 12);
+    const haloAt = halos[0] ? rig.rec.log.indexOf(halos[0]) : -1;
+    expect(stateAt(rig.rec, haloAt, "globalCompositeOperation", "source-over")).toBe("lighter");
+    expect(stateAt(rig.rec, haloAt, "globalAlpha", 1)).toBe(1);
+
+    // Pass order: the bumper flash halo, then the post, then the first bat.
+    const bumperHalo = rig.rec.calls("drawImage").find((c) => c.args[0] === rig.layers.layers[1]?.canvas);
+    const bumperAt = bumperHalo ? rig.rec.log.indexOf(bumperHalo) : -1;
+    const firstRotate = rig.rec.log.findIndex((e) => e.kind === "call" && e.name === "rotate");
+    expect(bumperAt).toBeGreaterThan(0);
+    expect(bumperAt).toBeLessThan(disc);
+    expect(disc).toBeLessThan(rim);
+    expect(rim).toBeLessThan(haloAt);
+    expect(haloAt).toBeLessThan(firstRotate);
+
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("a post at age 63 (mid-sink): the disc at 0.85R and globalAlpha 0.5, and no halo once the flash has decayed", () => {
+    const rig = makeRig();
+    const post = postCircle(rig);
+    rig.renderer.draw(frameOf(rig.world, { lamps: postAt(63) }));
+    const disc = callAfterSet(rig.rec, "fillStyle", POST_BODY, "fill");
+    expect(disc).toBeGreaterThan(0);
+    expect(lastCallBefore(rig.rec, disc, "arc")?.args[2]).toBeCloseTo(0.85 * post.r, 12);
+    expect(stateAt(rig.rec, disc, "globalAlpha", 1)).toBeCloseTo(0.5, 12);
+    expect(saveHaloDraws(rig)).toHaveLength(0);
+    expect(setsLighter(rig.rec)).toBe(false);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("with no flourish (postAge -1, age 75 or later) or no lamps, nothing post-related is drawn", () => {
+    const rig = makeRig();
+    for (const lamps of [postAt(-1), postAt(75), postAt(200), null]) {
+      rig.rec.clear();
+      rig.renderer.draw(frameOf(rig.world, { lamps, plungerCharge: 0 }));
+      expect(rig.rec.sets("fillStyle").filter((e) => e.value === POST_BODY)).toHaveLength(0);
+      expect(rig.rec.sets("strokeStyle").filter((e) => e.value === SAVE_LIT)).toHaveLength(0);
+      expect(saveHaloDraws(rig)).toHaveLength(0);
+      expect(setsLighter(rig.rec)).toBe(false);
+      expect(rig.rec.calls("drawImage")).toHaveLength(1 + 1);
+    }
+  });
+
+  it("ten frames across the flourish keep the frame contract: no gradient, blur, text, save/restore or new layer; ends clean", () => {
+    const rig = makeRig();
+    const atResize = rig.layers.createCount;
+    const allowed = new Set<unknown>(rig.layers.layers.map((l) => l.canvas));
+    for (const age of [0, 1.5, 2, 3, 10, 30, 51, 60, 70, 74.5]) {
+      rig.rec.clear();
+      rig.rec.ctx.globalAlpha = 0.3;
+      rig.rec.ctx.globalCompositeOperation = "lighter";
+      rig.renderer.draw(frameOf(rig.world, { lamps: postAt(age), alpha: 0.5 }));
+      expect(rig.rec.calls("createLinearGradient")).toHaveLength(0);
+      expect(rig.rec.calls("createRadialGradient")).toHaveLength(0);
+      expect(
+        rig.rec.sets("shadowBlur").filter((s) => typeof s.value !== "number" || s.value > 0),
+      ).toHaveLength(0);
+      expect(rig.rec.calls("fillText")).toHaveLength(0);
+      expect(rig.rec.calls("strokeText")).toHaveLength(0);
+      expect(rig.rec.calls("save")).toHaveLength(0);
+      expect(rig.rec.calls("restore")).toHaveLength(0);
+      for (const d of rig.rec.calls("drawImage")) expect(allowed.has(d.args[0])).toBe(true);
+      // The halo never exceeds the element footprint rule (HALO_SCALE * R, T-6-20).
+      for (const d of saveHaloDraws(rig)) {
+        expect(d.args[3]).toBeLessThanOrEqual(2 * HALO_SCALE * postCircle(rig).r + 1e-12);
+      }
+      expect(rig.rec.ctx.globalAlpha).toBe(1);
+      expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+    }
+    expect(rig.layers.createCount).toBe(atResize);
   });
 });

@@ -1,11 +1,19 @@
 import { describe, it, expect } from "vitest";
 
+import type { SaveKind, SaveLampPhase } from "../game/ball-save";
 import type { GameState } from "../game/game-session";
 import type { SkillPhase } from "../game/skill-shot";
 import { PlanckWorld } from "../physics/planck-world";
 import { TABLE_SPEC } from "../table/spec";
+import { flashLevel } from "./flash";
 import {
   buildLampShapes,
+  LAMP_SAVE,
+  POST_HOLD_STEPS,
+  POST_RISE_STEPS,
+  POST_SINK_STEPS,
+  postPose,
+  type PostPose,
   LAMP_AWARD_HOLD_STEPS,
   LAMP_BLINK_PERIOD_STEPS,
   LAMP_CHASE_DWELL_STEPS,
@@ -30,6 +38,8 @@ import {
   ROLLOVER_LIT,
   ROLLOVER_UNLIT,
   RUBBER_LINE_M,
+  SAVE_LIT,
+  SAVE_UNLIT,
   SKILL_LIT,
   SKILL_UNLIT,
 } from "./palette";
@@ -66,6 +76,18 @@ class FakeRules implements LampRules {
   readonly inlanes = new Set<number>();
   isInlaneScored(elementId: number): boolean {
     return this.inlanes.has(elementId);
+  }
+  saveLamp: SaveLampPhase = "off";
+  saves = 0;
+  lastSaveKind: SaveKind | "none" = "none";
+  getSaveLampPhase(): SaveLampPhase {
+    return this.saveLamp;
+  }
+  getSaveCount(): number {
+    return this.saves;
+  }
+  getLastSaveKind(): SaveKind | "none" {
+    return this.lastSaveKind;
   }
 }
 
@@ -576,5 +598,348 @@ describe("buildLampShapes (D-21 lamp table)", () => {
     const only = buildLampShapes(elements.filter((e) => e.id !== 401));
     expect(only.find((s) => s.lamp === LAMP_ROLLOVER_401)).toBeUndefined();
     expect(only.find((s) => s.lamp === LAMP_ROLLOVER_400)).toBeDefined();
+  });
+});
+
+/**
+ * Ball-save ring lamp and post flourish (plan 06-10, PLSH-07, D-07, D-10,
+ * D-22): the ring is one more row in the lamp table, concentric with the
+ * "post" element's circle; the post flourish clock lives in the tracker and
+ * starts on a kickback save-count increment.
+ */
+describe("Ball-save ring shape (plan 06-10, D-07, D-10)", () => {
+  const elements = new PlanckWorld({ table: TABLE_SPEC }).getElements();
+  const post = elements.find((e) => e.kind === "post");
+
+  it("LAMP_SAVE is lamp 8 of 9", () => {
+    expect(LAMP_SAVE).toBe(8);
+    expect(LAMP_COUNT).toBe(9);
+  });
+
+  it("buildLampShapes adds one closed 48-point SAVE_LIT / SAVE_UNLIT stroke around the post circle: centerline R + 0.02 + 0.035 / 2, width 0.035, halo 0.22", () => {
+    const shapes = buildLampShapes(elements);
+    const rings = shapes.filter((s) => s.lamp === LAMP_SAVE);
+    expect(rings).toHaveLength(1);
+    const s = rings[0];
+    const c = post?.circle;
+    expect(c).toBeTruthy();
+    if (!s || !c) return;
+    const R = c.radius;
+    const rc = R + 0.02 + 0.035 / 2;
+    expect(s.style).toBe("stroke");
+    expect(s.closed).toBe(true);
+    expect(s.elementDrawn).toBe(false);
+    expect(s.lineWidth).toBe(0.035);
+    expect(s.lit).toBe(SAVE_LIT);
+    expect(s.unlit).toBe(SAVE_UNLIT);
+    expect(s.haloRadius).toBe(0.22);
+    expect(s.cx).toBe(c.center.x);
+    expect(s.cy).toBe(c.center.y);
+    expect(s.lensRadius).toBeCloseTo(rc, 12);
+    expect(s.xs).toBeInstanceOf(Float64Array);
+    expect(s.ys).toBeInstanceOf(Float64Array);
+    expect(s.xs.length).toBe(48);
+    expect(s.ys.length).toBe(48);
+    for (let i = 0; i < s.xs.length; i++) {
+      const d = Math.hypot((s.xs[i] ?? 0) - c.center.x, (s.ys[i] ?? 0) - c.center.y);
+      expect(d).toBeCloseTo(rc, 12);
+    }
+    // Inner edge of the stroke sits 0.02 m outside the collider.
+    expect(rc - s.lineWidth / 2).toBeCloseTo(R + 0.02, 12);
+  });
+
+  it("a table without a post element yields no ring", () => {
+    const shapes = buildLampShapes(elements.filter((e) => e.kind !== "post"));
+    expect(shapes.find((s) => s.lamp === LAMP_SAVE)).toBeUndefined();
+    expect(shapes.length).toBe(buildLampShapes(elements).length - 1);
+  });
+});
+
+describe("LampTracker ball-save ring (plan 06-10, D-10, D-22)", () => {
+  it("steady lights the ring to exactly 1 and holds it; off fades it to exactly 0", () => {
+    const { rules, lamps } = makeRig();
+    rules.saveLamp = "steady";
+    for (let i = 0; i < 200; i++) {
+      lamps.update();
+      if (i >= LAMP_FADE_IN_STEPS - 1) expect(lamps.level(LAMP_SAVE, 1)).toBe(1);
+    }
+    rules.saveLamp = "off";
+    run(lamps, LAMP_FADE_OUT_STEPS);
+    expect(lamps.level(LAMP_SAVE, 1)).toBe(0);
+  });
+
+  it("blink follows the 60-step blink from the blink edge: on for 30 updates, off for 30", () => {
+    const { rules, lamps } = makeRig();
+    rules.saveLamp = "steady";
+    run(lamps, 41);
+    rules.saveLamp = "blink";
+    const half = LAMP_BLINK_PERIOD_STEPS / 2;
+    for (let i = 0; i < half; i++) {
+      lamps.update();
+      expect(lamps.level(LAMP_SAVE, 1)).toBe(1);
+    }
+    for (let i = 0; i < half; i++) {
+      lamps.update();
+      if (i >= LAMP_FADE_OUT_STEPS - 1) expect(lamps.level(LAMP_SAVE, 1)).toBe(0);
+      else expect(lamps.level(LAMP_SAVE, 1)).toBeGreaterThan(0);
+    }
+    run(lamps, LAMP_FADE_IN_STEPS);
+    expect(lamps.level(LAMP_SAVE, 1)).toBe(1);
+  });
+
+  it("blink limit: every on/off cycle of the blinking ring is exactly 60 updates (2 Hz)", () => {
+    const { rules, lamps } = makeRig();
+    rules.saveLamp = "blink";
+    const onEdges: number[] = [];
+    let last = 0;
+    for (let n = 0; n < 600; n++) {
+      lamps.update();
+      const lv = lamps.level(LAMP_SAVE, 1);
+      if (lv > 0 && last === 0) onEdges.push(n);
+      last = lv;
+    }
+    expect(onEdges.length).toBeGreaterThanOrEqual(9);
+    for (let i = 1; i < onEdges.length; i++) {
+      expect((onEdges[i] ?? 0) - (onEdges[i - 1] ?? 0)).toBe(LAMP_BLINK_PERIOD_STEPS);
+    }
+  });
+
+  it("game over (attract) keeps the ring at 0 whatever the save phase reads", () => {
+    const { rules, lamps } = makeRig();
+    rules.state = "game-over";
+    rules.saveLamp = "steady";
+    for (let i = 0; i < 300; i++) {
+      lamps.update();
+      expect(lamps.level(LAMP_SAVE, 1)).toBe(0);
+    }
+  });
+});
+
+describe("LampTracker post flourish clock (plan 06-10, D-07)", () => {
+  const TOTAL = POST_RISE_STEPS + POST_HOLD_STEPS + POST_SINK_STEPS;
+
+  it("the flourish constants are rise 3, hold 48, sink 24", () => {
+    expect(POST_RISE_STEPS).toBe(3);
+    expect(POST_HOLD_STEPS).toBe(48);
+    expect(POST_SINK_STEPS).toBe(24);
+  });
+
+  it("postAge is -1 before any kickback", () => {
+    const { lamps } = makeRig();
+    expect(lamps.postAge(0)).toBe(-1);
+    run(lamps, 50);
+    expect(lamps.postAge(0.5)).toBe(-1);
+  });
+
+  it("a kickback save-count increment starts the flourish: the update that sees it reads age 0 at alpha 0, then one step per update", () => {
+    const { rules, lamps } = makeRig();
+    run(lamps, 10);
+    rules.saves = 1;
+    rules.lastSaveKind = "kickback";
+    lamps.update();
+    expect(lamps.postAge(0)).toBe(0);
+    expect(lamps.postAge(0.5)).toBeCloseTo(0.5, 12);
+    expect(lamps.postAge(7)).toBeCloseTo(1, 12);
+    expect(lamps.postAge(-2)).toBe(0);
+    for (let k = 1; k < TOTAL; k++) {
+      lamps.update();
+      expect(lamps.postAge(0)).toBe(k);
+    }
+    // Past rise + hold + sink: no flourish showing.
+    lamps.update();
+    expect(lamps.postAge(0)).toBe(-1);
+    expect(lamps.postAge(1)).toBe(-1);
+  });
+
+  it("a backstop save-count increment never starts it", () => {
+    const { rules, lamps } = makeRig();
+    rules.saves = 1;
+    rules.lastSaveKind = "backstop";
+    for (let i = 0; i < 100; i++) {
+      lamps.update();
+      expect(lamps.postAge(0)).toBe(-1);
+    }
+  });
+
+  it("a kickback seen at construction (the snapshot) starts nothing", () => {
+    const rules = new FakeRules();
+    rules.saves = 2;
+    rules.lastSaveKind = "kickback";
+    const tracker = new LampTracker(new FakeLights(), rules);
+    run(tracker, 5);
+    expect(tracker.postAge(0)).toBe(-1);
+  });
+
+  it("a second kickback restarts the flourish at age 0", () => {
+    const { rules, lamps } = makeRig();
+    rules.saves = 1;
+    rules.lastSaveKind = "kickback";
+    lamps.update();
+    run(lamps, 20);
+    expect(lamps.postAge(0)).toBe(20);
+    rules.saves = 2;
+    lamps.update();
+    expect(lamps.postAge(0)).toBe(0);
+  });
+
+  it("frames with no update() leave the flourish age unchanged (it freezes with the sim)", () => {
+    const { rules, lamps } = makeRig();
+    rules.saves = 1;
+    rules.lastSaveKind = "kickback";
+    lamps.update();
+    run(lamps, 4);
+    for (let f = 0; f < 200; f++) lamps.postAge(f / 200);
+    expect(lamps.postAge(0.25)).toBeCloseTo(4.25, 12);
+  });
+});
+
+describe("postPose (plan 06-10, UI-SPEC post flourish)", () => {
+  function pose(age: number): PostPose {
+    const out: PostPose = { scale: -1, alpha: -1, flash: -1, visible: true };
+    postPose(age, out);
+    return out;
+  }
+
+  it("rises from 0.7R at age 0 to R at age 3", () => {
+    expect(pose(0).visible).toBe(true);
+    expect(pose(0).scale).toBeCloseTo(0.7, 12);
+    expect(pose(1.5).scale).toBeCloseTo(0.85, 12);
+    expect(pose(3).scale).toBeCloseTo(1, 12);
+    expect(pose(0).alpha).toBe(1);
+  });
+
+  it("holds scale 1 and alpha 1 from age 3 through 51", () => {
+    for (const age of [3, 10, 25.5, 40, 51]) {
+      const p = pose(age);
+      expect(p.visible).toBe(true);
+      expect(p.scale).toBeCloseTo(1, 12);
+      expect(p.alpha).toBeCloseTo(1, 12);
+    }
+  });
+
+  it("sinks from R to 0.7R with alpha 1 to 0 over 24 steps: age 63 gives scale 0.85 and alpha 0.5", () => {
+    const p = pose(63);
+    expect(p.visible).toBe(true);
+    expect(p.scale).toBeCloseTo(0.85, 12);
+    expect(p.alpha).toBeCloseTo(0.5, 12);
+    expect(pose(74.9).scale).toBeGreaterThan(0.7);
+  });
+
+  it("is invisible at age 75 and beyond, and for a negative or non-finite age", () => {
+    for (const age of [75, 76, 500, -0.001, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const p = pose(age);
+      expect(p.visible).toBe(false);
+      expect(p.alpha).toBe(0);
+      expect(p.flash).toBe(0);
+    }
+  });
+
+  it("flash equals flashLevel(age, 10, 2): 1 through age 2, then decaying", () => {
+    for (const age of [0, 1, 2, 2.5, 3, 5, 10, 20, 30, 41, 42, 50, 63, 74]) {
+      expect(pose(age).flash).toBeCloseTo(flashLevel(age, 10, 2), 12);
+    }
+    expect(pose(2).flash).toBe(1);
+    expect(pose(5).flash).toBeLessThan(1);
+    expect(pose(5).flash).toBeGreaterThan(0);
+  });
+
+  it("writes into the caller-owned pose (no new object)", () => {
+    const out: PostPose = { scale: 0, alpha: 0, flash: 0, visible: false };
+    const ref = out;
+    postPose(10, out);
+    expect(out).toBe(ref);
+    expect(out.visible).toBe(true);
+  });
+});
+
+/**
+ * Lamp state map backstop (06-UI-SPEC E5): every lamp's target in every FSM
+ * state the rules can show, driven through the tracker's read-only getters.
+ */
+describe("LampTracker state map (06-UI-SPEC E5 backstop)", () => {
+  type Scene = {
+    readonly name: string;
+    readonly set: (r: FakeRules, l: FakeLights) => void;
+    readonly lit: readonly number[];
+  };
+  const SCENES: readonly Scene[] = [
+    {
+      name: "serve: ball in the chute, skill rotating on 400, save armed (steady)",
+      set: (r) => {
+        r.phase = "rotating";
+        r.litLane = 400;
+        r.saveLamp = "steady";
+      },
+      lit: [LAMP_SKILL_400, LAMP_SAVE],
+    },
+    {
+      name: "armed play with rollover 401 lit and inlane 501 scored, save steady",
+      set: (r, l) => {
+        l.lit.add(401);
+        r.inlanes.add(501);
+        r.saveLamp = "steady";
+      },
+      lit: [LAMP_ROLLOVER_401, LAMP_INLANE_501, LAMP_SAVE],
+    },
+    {
+      name: "save spent: every save-ring level is 0",
+      set: (r) => {
+        r.saveLamp = "off";
+      },
+      lit: [],
+    },
+    {
+      name: "tilted: skill and save out, rollover 400 and inlane 500 keep rule state",
+      set: (r, l) => {
+        r.state = "tilted";
+        r.saveLamp = "off";
+        l.lit.add(400);
+        r.inlanes.add(500);
+      },
+      lit: [LAMP_ROLLOVER_400, LAMP_INLANE_500],
+    },
+  ];
+
+  for (const scene of SCENES) {
+    it(`${scene.name}`, () => {
+      const { rules, lights, lamps } = makeRig();
+      scene.set(rules, lights);
+      run(lamps, LAMP_FADE_OUT_STEPS + 1);
+      for (let i = 0; i < LAMP_COUNT; i++) {
+        expect(lamps.level(i, 1)).toBe(scene.lit.includes(i) ? 1 : 0);
+      }
+    });
+  }
+
+  it("frozen skill and the last 2 s of the save both blink at 2 Hz, each from its own edge", () => {
+    const { rules, lamps } = makeRig();
+    rules.phase = "rotating";
+    rules.litLane = 402;
+    rules.saveLamp = "steady";
+    run(lamps, 17);
+    rules.phase = "frozen";
+    run(lamps, LAMP_FADE_OUT_STEPS);
+    rules.saveLamp = "blink";
+    // Skill froze 15 updates before the save began blinking: when the skill
+    // chevron has faded out its off half, the ring is still in its on half.
+    const half = LAMP_BLINK_PERIOD_STEPS / 2;
+    run(lamps, half);
+    expect(lamps.level(LAMP_SKILL_402, 1)).toBe(0);
+    expect(lamps.level(LAMP_SAVE, 1)).toBe(1);
+    run(lamps, 1);
+    expect(lamps.level(LAMP_SAVE, 1)).toBeLessThan(1);
+  });
+
+  it("attract: only the chase lamps light; chevrons and the ring stay unlit", () => {
+    const { rules, lamps } = makeRig();
+    rules.state = "game-over";
+    rules.phase = "rotating";
+    rules.litLane = 401;
+    rules.saveLamp = "steady";
+    for (let n = 0; n < 400; n++) {
+      lamps.update();
+      for (const c of CHEVRONS) expect(lamps.level(c, 1)).toBe(0);
+      expect(lamps.level(LAMP_SAVE, 1)).toBe(0);
+    }
   });
 });
