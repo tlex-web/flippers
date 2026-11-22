@@ -185,10 +185,14 @@ function main(): void {
 
   // Phase-4 rules (GAME-01/GAME-02/ELEM-01..03): the session is the 3-ball FSM,
   // the rules gate and the score; it boots into game-over with no ball. The
-  // reactive elements score through it. Listener registration order is not
-  // load-bearing: both listeners only record or award, and the world is mutated
-  // only in the two service() calls, in the fixed order of onPostStep.
-  const session = new GameSession(world, router, BALL_SPAWN, flipperGate);
+  // reactive elements score through it. The session is also the rule hooks
+  // (06-01, PLSH-05): every registered scoring switch reaches session.onSwitch,
+  // which resolves the skill shot, and the session reads the plunger phase to
+  // freeze the lit lane. Listener registration order is not load-bearing: both
+  // listeners and the hooks only record or award (record-then-service), and the
+  // world is mutated only in the two service() calls, in the fixed order of
+  // onPostStep.
+  const session = new GameSession(world, router, BALL_SPAWN, flipperGate, { plunger });
   // Phase-5 cues (AUD-01): registered hits are recorded as scalar cues on the
   // step path (no allocation) and flushed to audio once per render frame.
   const cues = new CueQueue();
@@ -197,7 +201,7 @@ function main(): void {
   // the end of onPostStep and the renderer reads it at loop.alpha.
   const flash = new FlashTracker(maxElementId(world.getElements()));
   const cueFeedback = new CueFeedback(cues, flash);
-  const reactive = new ReactiveElements(world, router, session, cueFeedback);
+  const reactive = new ReactiveElements(world, router, session, cueFeedback, session);
   // Walls, the chute and the bats flash on a real hit straight off the bus,
   // silently (D-03): ContactFlash holds only the flash sink, never the cues.
   new ContactFlash(router, flash);
