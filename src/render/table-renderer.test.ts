@@ -20,7 +20,9 @@ import {
   type LampReader,
   type LampShape,
 } from "./lamps";
+import type { EffectsReader } from "./effects";
 import {
+  BG_BOTTOM,
   FLASH_FLIPPER,
   FLASH_WALL,
   LAMP_HOTSPOT,
@@ -35,6 +37,7 @@ import {
   SHADOW_OFFSET_Y_M,
   SHADOW_RADIUS_M,
 } from "./sprites";
+import { ShakeTracker, type ShakeOut } from "./shake";
 import { TableRenderer, type CanvasTarget, type RenderFrame } from "./table-renderer";
 import {
   createRecordingContext,
@@ -57,6 +60,10 @@ import { computeView, tableBounds, type ViewTransform } from "./view-transform";
  * Re-pinned by plan 06-03 (PLSH-04): resize also bakes one lamp halo per
  * distinct lit color in the lamp shape table (after the shadow), and the lamp
  * pass replaces the Phase-5 lit-rollover stroke as the first live pass.
+ *
+ * Re-pinned by plan 06-09 (PLSH-01, D-17): every frame fills BG_BOTTOM over the
+ * backing at identity before the static blit, and the blit and every world
+ * transform carry the sampled shake offset (zero under reducedMotion).
  */
 
 /** Halo sprites baked per resize: one bumper halo and one sensor halo (05-04). */
@@ -806,5 +813,156 @@ describe("TableRenderer lamp pass (PLSH-04, D-21, D-24)", () => {
       expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
     }
     expect(rig.layers.createCount).toBe(atResize);
+  });
+});
+
+/**
+ * A shake that always reports a fixed offset, ignoring reducedMotion, so the
+ * renderer's own reduced-motion guard is what the reduced case proves.
+ */
+class FixedShake extends ShakeTracker {
+  constructor(
+    private readonly fx: number,
+    private readonly fy: number,
+  ) {
+    super();
+  }
+  override sample(_alpha: number, _dpr: number, _reducedMotion: boolean, out: ShakeOut): void {
+    out.x = this.fx;
+    out.y = this.fy;
+  }
+}
+
+function fixedEffects(x: number, y: number): EffectsReader {
+  return { shake: new FixedShake(x, y) };
+}
+
+/** Every setTransform after the frame's opening identity, as its (e, f) pair. */
+function worldOffsets(calls: readonly CallEntry[], view: ViewTransform): [number, number][] {
+  const out: [number, number][] = [];
+  for (const c of calls.slice(1)) {
+    if (c.name !== "setTransform") continue;
+    expect(c.args.slice(0, 4)).toEqual([view.scale, 0, 0, view.scale]);
+    out.push([c.args[4] as number, c.args[5] as number]);
+  }
+  return out;
+}
+
+/** A frame exercising every world reset site: a flashed flipper, both bats and two balls. */
+function busyFrame(rig: Rig, extra: Partial<RenderFrame>): RenderFrame {
+  const flash = trackerFor(rig.world);
+  flash.record(0, CONTACT_FLASH_PEAK);
+  return frameOf(rig.world, { flash, balls: [ball(1.2, 3.4), ball(2, 5)], ...extra });
+}
+
+describe("TableRenderer screen shake (PLSH-01, D-17, D-18, Pitfall 8)", () => {
+  it("a shaken frame: identity, BG_BOTTOM fill over the backing, the static blit at (3, -2), and every world transform at offX + 3, offY - 2", () => {
+    const rig = makeRig();
+    const flippers = rig.world.getFlippers().length;
+    rig.renderer.draw(busyFrame(rig, { effects: fixedEffects(3, -2) }));
+    const calls = callsOf(rig.rec);
+
+    expect(calls[0]).toEqual({ kind: "call", name: "setTransform", args: [1, 0, 0, 1, 0, 0] });
+    expect(calls[1]).toEqual({
+      kind: "call",
+      name: "fillRect",
+      args: [0, 0, rig.view.backingW, rig.view.backingH],
+    });
+    expect(stateAt(rig.rec, rig.rec.log.indexOf(calls[1] as CallEntry), "fillStyle", "")).toBe(
+      BG_BOTTOM,
+    );
+    expect(calls[2]?.name).toBe("drawImage");
+    expect(calls[2]?.args[0]).toBe(rig.layers.layers[0]?.canvas);
+    expect(calls[2]?.args.slice(1)).toEqual([3, -2]);
+
+    const offsets = worldOffsets(calls, rig.view);
+    // The frame start, the flipper flash, one per bat and one per ball at least.
+    expect(offsets.length).toBeGreaterThanOrEqual(1 + 1 + flippers + 2);
+    for (const [e, f] of offsets) {
+      expect(e).toBe(rig.view.offX + 3);
+      expect(f).toBe(rig.view.offY - 2);
+    }
+    expect(calls.some((c) => isWorldTransform(c, rig.view))).toBe(false);
+  });
+
+  it("the shaken frame keeps the contract: no save/restore, no gradient, no blur, no text, ends at alpha 1 / source-over", () => {
+    const rig = makeRig();
+    rig.rec.ctx.globalAlpha = 0.3;
+    rig.rec.ctx.globalCompositeOperation = "lighter";
+    const atResize = rig.layers.createCount;
+    rig.renderer.draw(busyFrame(rig, { effects: fixedEffects(3, -2) }));
+    const calls = callsOf(rig.rec);
+    const banned = [
+      "save",
+      "restore",
+      "createLinearGradient",
+      "createRadialGradient",
+      "fillText",
+      "strokeText",
+    ];
+    expect(calls.filter((c) => banned.includes(c.name))).toEqual([]);
+    expect(rig.rec.sets("shadowBlur").filter((s) => s.value !== 0)).toEqual([]);
+    expect(rig.rec.sets("filter")).toEqual([]);
+    expect(rig.layers.createCount).toBe(atResize);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("with reducedMotion true the blit is at (0, 0) and every world transform uses offX/offY, even if the shake reports an offset", () => {
+    const rig = makeRig();
+    rig.renderer.draw(busyFrame(rig, { effects: fixedEffects(3, -2), reducedMotion: true }));
+    const calls = callsOf(rig.rec);
+    expect(calls[2]?.name).toBe("drawImage");
+    expect(calls[2]?.args.slice(1)).toEqual([0, 0]);
+    const offsets = worldOffsets(calls, rig.view);
+    expect(offsets.length).toBeGreaterThan(0);
+    for (const [e, f] of offsets) {
+      expect(e).toBe(rig.view.offX);
+      expect(f).toBe(rig.view.offY);
+    }
+  });
+
+  it("with reducedMotion true a live kick plus trauma 1 moves nothing, while the flash halo still draws", () => {
+    const rig = makeRig();
+    const shake = new ShakeTracker();
+    shake.kick("left");
+    shake.addTrauma(1);
+    shake.tick();
+    shake.tick();
+    const flash = trackerFor(rig.world);
+    flash.record(202, 1);
+    for (const alpha of [0, 0.5]) {
+      rig.rec.clear();
+      rig.renderer.draw(
+        frameOf(rig.world, { flash, alpha, effects: { shake }, reducedMotion: true }),
+      );
+      const calls = callsOf(rig.rec);
+      expect(calls[2]?.args.slice(1)).toEqual([0, 0]);
+      for (const [e, f] of worldOffsets(calls, rig.view)) {
+        expect(e).toBe(rig.view.offX);
+        expect(f).toBe(rig.view.offY);
+      }
+      expect(haloDraws(rig)).toHaveLength(1);
+    }
+    // The same state without reducedMotion does move the view.
+    rig.rec.clear();
+    rig.renderer.draw(frameOf(rig.world, { flash, effects: { shake } }));
+    const moved = callsOf(rig.rec)[2]?.args.slice(1) as number[];
+    expect(moved[0] !== 0 || moved[1] !== 0).toBe(true);
+  });
+
+  it("with no effects (absent or null) the frame is unshaken", () => {
+    const rig = makeRig();
+    const extras: readonly Partial<RenderFrame>[] = [{}, { effects: null }];
+    for (const extra of extras) {
+      rig.rec.clear();
+      rig.renderer.draw(busyFrame(rig, extra));
+      const calls = callsOf(rig.rec);
+      expect(calls[2]?.args.slice(1)).toEqual([0, 0]);
+      for (const [e, f] of worldOffsets(calls, rig.view)) {
+        expect(e).toBe(rig.view.offX);
+        expect(f).toBe(rig.view.offY);
+      }
+    }
   });
 });

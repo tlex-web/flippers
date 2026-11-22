@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
 import { BonusCounters, BonusTally } from "../game/bonus";
-import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
+import { SKILL_SHOT_MAX_POINTS, type NudgeDir } from "../game/tuning";
 import type { GameState } from "../game/game-session";
 import {
   PresentationObserver,
   type ObserverFlippers,
+  type ObserverFx,
   type ObserverPlunger,
   type ObserverSession,
 } from "./presentation-observer";
@@ -28,6 +29,8 @@ class FakeSession implements ObserverSession {
   lastSkillValue = 0;
   lastSkillLane = -1;
   drains = 0;
+  nudges = 0;
+  lastNudgeDir: NudgeDir = "left";
   elapsed = 0;
   readonly tally = new BonusTally();
   getState(): GameState {
@@ -50,6 +53,12 @@ class FakeSession implements ObserverSession {
   }
   getDrainCount(): number {
     return this.drains;
+  }
+  getNudgeCount(): number {
+    return this.nudges;
+  }
+  getLastNudgeDir(): NudgeDir {
+    return this.lastNudgeDir;
   }
   getBonusTally(): Readonly<BonusTally> {
     return this.tally;
@@ -107,12 +116,27 @@ class SpyFlash implements FlashSink {
   }
 }
 
+/** Records every effects call as "nudge:<dir>", "tilt" or "drain" (06-09). */
+class SpyFx implements ObserverFx {
+  readonly calls: string[] = [];
+  onNudge(dir: NudgeDir): void {
+    this.calls.push(`nudge:${dir}`);
+  }
+  onTilt(): void {
+    this.calls.push("tilt");
+  }
+  onDrain(): void {
+    this.calls.push("drain");
+  }
+}
+
 interface Rig {
   session: FakeSession;
   plunger: FakePlunger;
   flippers: FakeFlippers;
   cues: CueQueue;
   flash: SpyFlash;
+  fx: SpyFx;
   observer: PresentationObserver;
 }
 
@@ -124,6 +148,7 @@ function rig(state: GameState = "game-over", ball = 0): Rig {
   const flippers = new FakeFlippers();
   const cues = new CueQueue();
   const flash = new SpyFlash();
+  const fx = new SpyFx();
   const observer = new PresentationObserver(
     cues,
     flash,
@@ -132,8 +157,9 @@ function rig(state: GameState = "game-over", ball = 0): Rig {
     DRAIN,
     flippers,
     FLIPPER_IDS,
+    fx,
   );
-  return { session, plunger, flippers, cues, flash, observer };
+  return { session, plunger, flippers, cues, flash, fx, observer };
 }
 
 /** Run one observe() and return the kinds it pushed (then clear the ring). */
@@ -531,5 +557,135 @@ describe("PresentationObserver: bonus row ticks (06-06, D-25)", () => {
     observer.observe();
     expect(cues.size).toBe(1);
     expect(cues.at(0)?.kind).toBe("bonusTick");
+  });
+});
+
+describe("PresentationObserver: nudge thump and effects (06-09, D-17, D-25)", () => {
+  it("a nudge-count increment with last dir right pushes one nudge on element 1 at strength 1 and calls fx.onNudge(right) once", () => {
+    const r = rig("playing", 1);
+    r.session.nudges = 1;
+    r.session.lastNudgeDir = "right";
+    expect(step(r)).toEqual(["nudge"]);
+    const c = r.cues.at(0);
+    expect(c?.elementId).toBe(1);
+    expect(c?.strength).toBe(1);
+    expect(r.fx.calls).toEqual(["nudge:right"]);
+    expect(r.flash.records).toEqual([]);
+  });
+
+  it("the nudge cue carries its direction as the element id: left 0, right 1, up 2", () => {
+    const r = rig("playing", 1);
+    const dirs: readonly NudgeDir[] = ["left", "right", "up"];
+    const tags: string[] = [];
+    for (const dir of dirs) {
+      r.session.nudges++;
+      r.session.lastNudgeDir = dir;
+      tags.push(stepTagged(r));
+    }
+    expect(tags).toEqual(["nudge@0", "nudge@1", "nudge@2"]);
+    expect(r.fx.calls).toEqual(["nudge:left", "nudge:right", "nudge:up"]);
+  });
+
+  it("a step with no nudge-count increment pushes nothing and calls no effect", () => {
+    const r = rig("playing", 1);
+    r.session.lastNudgeDir = "up";
+    expect(step(r)).toEqual([]);
+    expect(step(r)).toEqual([]);
+    expect(r.fx.calls).toEqual([]);
+  });
+
+  it("a tilting nudge pushes nudge then tilt and calls onNudge then onTilt", () => {
+    const r = rig("playing", 1);
+    r.session.nudges = 1;
+    r.session.lastNudgeDir = "left";
+    r.session.state = "tilted";
+    expect(step(r)).toEqual(["nudge", "tilt"]);
+    expect(r.fx.calls).toEqual(["nudge:left", "tilt"]);
+  });
+
+  it("nudge sits after launch and before tilt in the push order", () => {
+    const r = rig("game-over", 0);
+    r.session.state = "playing";
+    r.session.ball = 1;
+    r.flippers.on[0] = 1;
+    r.flippers.off[1] = 1;
+    r.plunger.releases = 1;
+    r.session.nudges = 1;
+    r.session.lastNudgeDir = "up";
+    expect(stepTagged(r)).toBe("start@-1,flipperUp@0,flipperDown@1,launch@-1,nudge@2");
+    r.session.nudges = 2;
+    r.session.state = "tilted";
+    r.session.warning = true;
+    r.session.drains = 1;
+    expect(step(r)).toEqual(["nudge", "tilt", "warning", "drain"]);
+  });
+
+  it("a drain-count increment calls fx.onDrain() once, after its cue", () => {
+    const r = rig("playing", 1);
+    r.session.drain();
+    expect(step(r)).toEqual(["drain"]);
+    expect(r.fx.calls).toEqual(["drain"]);
+    r.session.elapsed = 60;
+    step(r);
+    expect(r.fx.calls).toEqual(["drain"]);
+  });
+
+  it("playing -> tilted calls fx.onTilt() once", () => {
+    const r = rig("playing", 1);
+    r.session.state = "tilted";
+    step(r);
+    step(r);
+    expect(r.fx.calls).toEqual(["tilt"]);
+  });
+
+  it("construction snapshots a non-zero nudge count, so the first observe pushes no nudge", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    session.nudges = 4;
+    session.lastNudgeDir = "right";
+    const cues = new CueQueue();
+    const fx = new SpyFx();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+      fx,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
+    expect(fx.calls).toEqual([]);
+  });
+
+  it("with fx null a nudge, a tilt and a drain push their cues and nothing throws", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+      null,
+    );
+    session.nudges = 1;
+    session.lastNudgeDir = "right";
+    session.state = "tilted";
+    session.drains = 1;
+    expect(() => {
+      observer.observe();
+    }).not.toThrow();
+    const kinds: CueKind[] = [];
+    for (let i = 0; i < cues.size; i++) {
+      const c = cues.at(i);
+      if (c) kinds.push(c.kind);
+    }
+    expect(kinds).toEqual(["nudge", "tilt", "drain"]);
   });
 });
