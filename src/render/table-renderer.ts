@@ -5,8 +5,9 @@
  * the CSS fit, Finding 1), bakes the static playfield once into an offscreen
  * layer and rebuilds the cached gradients. `draw(frame)` blits that layer with
  * one `drawImage` at identity, sets the world transform once and draws only what
- * moves: lit rollovers, element flashes, both bats at their interpolated angles,
- * the plunger and its charge meter, and every ball at its interpolated position.
+ * moves, in this order: lit rollovers, element flashes, both bats at their
+ * interpolated angles, the plunger and its charge meter, one baked soft shadow
+ * per ball (PLSH-03, D-20) and every ball at its interpolated position.
  *
  * Flash pass (RND-03): every flashable element reads its level from the frame's
  * `FlashReader` at `frame.alpha` with its kind's timing. A lit element draws only
@@ -15,6 +16,11 @@
  * outline (sling rubber, sensor, drain apron, wall, chute) or a glowing rim
  * around a bat. Nothing larger than the element is ever drawn (photosensitive
  * safety). Halos are baked once per resize (`bakeHalo`).
+ *
+ * Ball shadows (PLSH-03, D-20): one radial sprite baked per resize
+ * (`bakeShadow`), stamped source-over at globalAlpha 1 with one `drawImage` per
+ * ball at ball center + (SHADOW_OFFSET_X_M, SHADOW_OFFSET_Y_M), a fixed size
+ * that never scales with speed.
  *
  * Frame rules (Pitfalls 3-4): no string building, no gradient creation, no
  * closures and no shadowBlur in `draw()`; index loops only; every frame ends with
@@ -49,7 +55,15 @@ import {
   RUBBER_LINE_M,
   SENSOR_LINE_M,
 } from "./palette";
-import { bakeHalo, HALO_SCALE, SENSOR_HALO_M } from "./sprites";
+import {
+  bakeHalo,
+  bakeShadow,
+  HALO_SCALE,
+  SENSOR_HALO_M,
+  SHADOW_OFFSET_X_M,
+  SHADOW_OFFSET_Y_M,
+  SHADOW_RADIUS_M,
+} from "./sprites";
 import { bakeStatic, traceElement, type Layer, type LayerFactory } from "./static-layer";
 import {
   METER_GAP_M,
@@ -190,6 +204,7 @@ export class TableRenderer {
   private layer: Layer | null = null;
   private bumperHalo: Layer | null = null;
   private sensorHalo: Layer | null = null;
+  private ballShadow: Layer | null = null;
   private flashLit = false;
   private ballGradient: CanvasGradient | null = null;
   private flipperGradients: CanvasGradient[] = [];
@@ -306,6 +321,8 @@ export class TableRenderer {
       this.flashSensors.length > 0
         ? bakeHalo(this.layers, FLASH_SENSOR, 2 * SENSOR_HALO_M * view.scale)
         : null;
+    // One ball-shadow sprite at its on-screen device-pixel size.
+    this.ballShadow = bakeShadow(this.layers, 2 * SHADOW_RADIUS_M * view.scale);
     this.bakes++;
   }
 
@@ -326,6 +343,7 @@ export class TableRenderer {
     if (frame.flash) this.drawFlashes(frame.flash, frame.alpha, frame.flipperAngles);
     this.drawFlippers(frame.flipperAngles);
     this.drawPlunger(frame.plungerCharge);
+    this.drawBallShadows(frame.balls);
     this.drawBalls(frame.balls, view);
 
     ctx.globalAlpha = 1;
@@ -526,6 +544,27 @@ export class TableRenderer {
     ctx.moveTo(PLUNGER_REST.x, tipY + PLUNGER_TIP_THICK_M);
     ctx.lineTo(PLUNGER_REST.x, z.maxY + PULLBACK_MARGIN_Y_M);
     ctx.stroke();
+  }
+
+  /**
+   * One baked soft shadow per ball, source-over at full alpha, offset
+   * down-right of its drawn center at a fixed size (D-20). Drawn after the bats
+   * and plunger and before the balls.
+   */
+  private drawBallShadows(balls: readonly BallState[]): void {
+    const shadow = this.ballShadow;
+    if (!shadow || balls.length === 0) return;
+    const ctx = this.ctx;
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    const d = 2 * SHADOW_RADIUS_M;
+    const dx = SHADOW_OFFSET_X_M - SHADOW_RADIUS_M;
+    const dy = SHADOW_OFFSET_Y_M - SHADOW_RADIUS_M;
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i];
+      if (!b) continue;
+      ctx.drawImage(shadow.canvas, b.x + dx, b.y + dy, d, d);
+    }
   }
 
   /** Each ball with the cached gradient plus a fixed glint, at its drawn position. */

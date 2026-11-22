@@ -77,6 +77,42 @@ export const FLASH_FLIPPER = "#ffffff";
 /** Drain flash. */
 export const FLASH_DRAIN = "#ff4d6d";
 
+/** Phase-6 lamp, post, shadow and depth colors (06-UI-SPEC "New palette constants"). */
+/** Skill-shot chevron, unlit lens (30% value of the lit color). */
+export const SKILL_UNLIT = "#4d3f1f";
+/** Skill-shot chevron, lit. Equal to METER_FILL on purpose: the meter and the lane it aims at share one meaning, launch aim. */
+export const SKILL_LIT = "#ffd166";
+/** Inlane arrow, unlit lens. */
+export const INLANE_UNLIT = "#0e3b37";
+/** Inlane arrow, lit (equal to LANE): this inlane scored on this ball. */
+export const INLANE_LIT = "#2ec4b6";
+/** Ball-save ring lens, unlit. */
+export const SAVE_UNLIT = "#3c264d";
+/** Ball save: lamp, post rim, post flash and save sparks (a violet no other lit element uses). */
+export const SAVE_LIT = "#c77dff";
+/** Lit-lamp white hot-spot. */
+export const LAMP_HOTSPOT = "#ffffff";
+/** Faint specular rim on every unlit lens (baked). */
+export const LAMP_RIM = "rgba(232, 238, 252, 0.18)";
+/** Ball-save post cap. Same value as FLIPPER_BODY (moving playfield hardware). */
+export const POST_BODY = "#d0d6f9";
+/** Ball-shadow sprite, center stop. */
+export const SHADOW_CORE = "rgba(0, 0, 0, 0.4)";
+/** Ball-shadow sprite, 50 percent stop. */
+export const SHADOW_MID = "rgba(0, 0, 0, 0.25)";
+/** Ball-shadow sprite, edge stop. */
+export const SHADOW_FADE = "rgba(0, 0, 0, 0)";
+/** Bake-time drop shadows under bumpers, slings and walls. */
+export const DROP_SHADOW = "rgba(0, 0, 0, 0.35)";
+/** Baked vignette, clear inner stop. */
+export const VIGNETTE_CLEAR = "rgba(0, 0, 0, 0)";
+/** Baked vignette, darkened edge stop. */
+export const VIGNETTE_EDGE = "rgba(0, 0, 0, 0.4)";
+/** Baked lower-center light falloff, center stop (the CHUTE lavender hue). */
+export const LIGHT_POOL = "rgba(123, 140, 222, 0.08)";
+/** Baked lower-center light falloff, outer stop (same hue at zero alpha). */
+export const LIGHT_POOL_FADE = "rgba(123, 140, 222, 0)";
+
 /** Line widths (meters; drawn after the world transform). */
 /** Bright wall and chute line. */
 export const WALL_LINE_M = 0.014;

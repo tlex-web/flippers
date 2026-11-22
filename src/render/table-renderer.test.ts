@@ -13,7 +13,7 @@ import {
   maxElementId,
 } from "./flash";
 import { FLASH_FLIPPER, FLASH_WALL, ROLLOVER_LIT } from "./palette";
-import { HALO_SCALE } from "./sprites";
+import { HALO_SCALE, SHADOW_OFFSET_X_M, SHADOW_OFFSET_Y_M, SHADOW_RADIUS_M } from "./sprites";
 import {
   TableRenderer,
   type CanvasTarget,
@@ -34,10 +34,22 @@ import { computeView, tableBounds, type ViewTransform } from "./view-transform";
  * identity; draw() creates no gradient, never raises shadowBlur, paints no text
  * (D-01) and leaves globalAlpha 1 and source-over behind it. Driven over a real
  * PlanckWorld on TABLE_SPEC so the drawn geometry is the collider geometry.
+ *
+ * Re-pinned by plan 06-02 (PLSH-03): resize also bakes one ball-shadow sprite,
+ * and each frame stamps it once per ball between the bats and the balls.
  */
 
 /** Halo sprites baked per resize: one bumper halo and one sensor halo (05-04). */
 const HALO_LAYERS = 2;
+
+/** Ball-shadow sprites baked per resize (06-02, D-20). */
+const SHADOW_LAYERS = 1;
+
+/** Every layer one resize creates: the static layer, the halos and the shadow. */
+const LAYERS_PER_RESIZE = 1 + HALO_LAYERS + SHADOW_LAYERS;
+
+/** Index of the ball-shadow sprite among one resize's layers (baked after the halos). */
+const SHADOW_LAYER_INDEX = 1 + HALO_LAYERS;
 
 interface Rig {
   readonly world: PlanckWorld;
@@ -106,9 +118,9 @@ function drawFrames(rig: Rig, n: number, frame: RenderFrame): CallEntry[][] {
 describe("TableRenderer frame contract (RND-02)", () => {
   it("bakes once across ten draws: bakeCount 1 and no layer created by draw()", () => {
     const rig = makeRig();
-    // One static layer plus the halo sprites, all created by resize().
+    // One static layer plus the halo and shadow sprites, all created by resize().
     const atResize = rig.layers.createCount;
-    expect(atResize).toBe(1 + HALO_LAYERS);
+    expect(atResize).toBe(LAYERS_PER_RESIZE);
     drawFrames(rig, 10, frameOf(rig.world));
     expect(rig.renderer.bakeCount).toBe(1);
     expect(rig.layers.createCount).toBe(atResize);
@@ -127,7 +139,11 @@ describe("TableRenderer frame contract (RND-02)", () => {
       expect(calls[1]?.name).toBe("drawImage");
       expect(calls[1]?.args[0]).toBe(layer?.canvas);
       expect(calls[1]?.args.slice(1)).toEqual([0, 0]);
-      expect(calls.filter((c) => c.name === "drawImage")).toHaveLength(1);
+      // The static blit is the only drawImage of the static layer; the frame's
+      // one ball adds exactly one shadow stamp.
+      const draws = calls.filter((c) => c.name === "drawImage");
+      expect(draws.filter((c) => c.args[0] === layer?.canvas)).toHaveLength(1);
+      expect(draws).toHaveLength(1 + 1);
     }
   });
 
@@ -237,7 +253,135 @@ describe("TableRenderer frame contract (RND-02)", () => {
     expect(rig.canvas.style.width).toBe(`${next.cssW}px`);
     expect(rig.canvas.style.height).toBe(`${next.cssH}px`);
     expect(rig.renderer.bakeCount).toBe(2);
-    expect(rig.layers.createCount).toBe(2 * (1 + HALO_LAYERS));
+    expect(rig.layers.createCount).toBe(2 * LAYERS_PER_RESIZE);
+  });
+
+  it("a resize then two draws do not re-bake: bakeCount and createCount unchanged by draw()", () => {
+    const rig = makeRig();
+    const next = computeView(tableBounds(rig.world.getElements()), 1920, 1080, 2);
+    rig.renderer.resize(next);
+    const bakes = rig.renderer.bakeCount;
+    const created = rig.layers.createCount;
+    expect(bakes).toBe(2);
+    rig.renderer.draw(frameOf(rig.world));
+    rig.renderer.draw(frameOf(rig.world, { balls: [ball(1.2, 3.4), ball(2, 5)] }));
+    expect(rig.renderer.bakeCount).toBe(bakes);
+    expect(rig.layers.createCount).toBe(created);
+  });
+});
+
+/** The ball-shadow sprite's canvas from the rig's first resize. */
+function shadowCanvas(rig: Rig): unknown {
+  return rig.layers.layers[SHADOW_LAYER_INDEX]?.canvas;
+}
+
+/** drawImage calls that stamp the ball-shadow sprite. */
+function shadowDraws(rig: Rig): CallEntry[] {
+  const shadow = shadowCanvas(rig);
+  return rig.rec.calls("drawImage").filter((c) => c.args[0] === shadow);
+}
+
+describe("TableRenderer ball shadows (PLSH-03, D-20)", () => {
+  it("bakes the shadow sprite at resize at 2 * SHADOW_RADIUS_M * scale device px", () => {
+    const rig = makeRig();
+    const layer = rig.layers.layers[SHADOW_LAYER_INDEX];
+    expect(layer).toBeDefined();
+    const n = Math.max(2, Math.round(2 * SHADOW_RADIUS_M * rig.view.scale));
+    expect(layer?.width).toBe(n);
+    expect(layer?.height).toBe(n);
+    expect(SHADOW_RADIUS_M).toBeCloseTo(1.25 * BALL_RADIUS_M, 12);
+  });
+
+  it("a frame with N balls has the static blit plus N shadow stamps, each at ball + offset, sized 2 * SHADOW_RADIUS_M", () => {
+    const rig = makeRig();
+    const staticCanvas = rig.layers.layers[0]?.canvas;
+    const cases: BallState[][] = [
+      [],
+      [ball(1.2, 3.4)],
+      [ball(1.2, 3.4), ball(2.1, 5.3), ball(0.7, 1.9)],
+    ];
+    for (const balls of cases) {
+      rig.rec.clear();
+      rig.renderer.draw(frameOf(rig.world, { balls }));
+      const draws = rig.rec.calls("drawImage");
+      expect(draws.filter((c) => c.args[0] === staticCanvas)).toHaveLength(1);
+      const shadows = shadowDraws(rig);
+      expect(shadows).toHaveLength(balls.length);
+      expect(draws).toHaveLength(1 + balls.length);
+      const d = 2 * SHADOW_RADIUS_M;
+      for (let i = 0; i < balls.length; i++) {
+        const b = balls[i];
+        const [x, y, w, h] = (shadows[i]?.args.slice(1) ?? []) as number[];
+        expect(w).toBeCloseTo(d, 12);
+        expect(h).toBeCloseTo(d, 12);
+        expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo((b?.x ?? 0) + SHADOW_OFFSET_X_M, 12);
+        expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo((b?.y ?? 0) + SHADOW_OFFSET_Y_M, 12);
+      }
+    }
+  });
+
+  it("stamps every shadow after the last bat fill and before the first ball fill, source-over at alpha 1", () => {
+    const rig = makeRig();
+    const balls = [ball(1.2, 3.4), ball(2.1, 5.3)];
+    rig.renderer.draw(frameOf(rig.world, { balls }));
+    const log = rig.rec.log;
+    const shadow = shadowCanvas(rig);
+    const shadowAt: number[] = [];
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      if (e?.kind === "call" && e.name === "drawImage" && e.args[0] === shadow) shadowAt.push(i);
+    }
+    expect(shadowAt).toHaveLength(2);
+
+    // The first ball fill: the first fill after the translate to the first ball's center.
+    const ballTranslate = log.findIndex(
+      (e) => e.kind === "call" && e.name === "translate" && e.args[0] === 1.2 && e.args[1] === 3.4,
+    );
+    expect(ballTranslate).toBeGreaterThan(0);
+    const firstBallFill = log.findIndex(
+      (e, i) => i > ballTranslate && e.kind === "call" && e.name === "fill",
+    );
+    expect(firstBallFill).toBeGreaterThan(ballTranslate);
+
+    // The last bat fill: every bat rotates once, then fills, then resets to the world transform.
+    const flipperCount = rig.world.getFlippers().length;
+    expect(flipperCount).toBeGreaterThan(0);
+    let rotates = 0;
+    let lastBatFill = -1;
+    for (let i = 0; i < log.length; i++) {
+      const e = log[i];
+      if (e?.kind !== "call") continue;
+      if (e.name === "rotate") rotates++;
+      if (rotates === flipperCount && e.name === "fill") lastBatFill = i;
+      if (rotates === flipperCount && e.name === "setTransform") break;
+    }
+    expect(lastBatFill).toBeGreaterThan(0);
+    for (const at of shadowAt) {
+      expect(at).toBeGreaterThan(lastBatFill);
+      expect(at).toBeLessThan(firstBallFill);
+    }
+
+    // State in force at each shadow stamp: source-over, alpha 1.
+    for (const at of shadowAt) {
+      let op: unknown = "source-over";
+      let alpha: unknown = 1;
+      for (let i = 0; i < at; i++) {
+        const e = log[i];
+        if (e?.kind === "set" && e.name === "globalCompositeOperation") op = e.value;
+        if (e?.kind === "set" && e.name === "globalAlpha") alpha = e.value;
+      }
+      expect(op).toBe("source-over");
+      expect(alpha).toBe(1);
+    }
+  });
+
+  it("the shadow does not scale with speed: a fast ball stamps the same size as a resting one", () => {
+    const rig = makeRig();
+    const fast: BallState = { ...ball(1.2, 3.4), vx: 30, vy: -40 };
+    rig.renderer.draw(frameOf(rig.world, { balls: [fast] }));
+    const [, , w, h] = (shadowDraws(rig)[0]?.args.slice(1) ?? []) as number[];
+    expect(w).toBeCloseTo(2 * SHADOW_RADIUS_M, 12);
+    expect(h).toBeCloseTo(2 * SHADOW_RADIUS_M, 12);
   });
 });
 
@@ -246,10 +390,13 @@ function trackerFor(world: PlanckWorld): FlashTracker {
   return new FlashTracker(maxElementId(world.getElements()));
 }
 
-/** drawImage calls that are not the static-layer blit. */
+/** drawImage calls that are neither the static-layer blit nor a ball-shadow stamp. */
 function haloDraws(rig: Rig): CallEntry[] {
   const staticCanvas = rig.layers.layers[0]?.canvas;
-  return rig.rec.calls("drawImage").filter((c) => c.args[0] !== staticCanvas);
+  const shadow = shadowCanvas(rig);
+  return rig.rec
+    .calls("drawImage")
+    .filter((c) => c.args[0] !== staticCanvas && c.args[0] !== shadow);
 }
 
 function setsLighter(rec: Recorder): boolean {
@@ -310,19 +457,21 @@ describe("TableRenderer flash pass (RND-03, T-05-15)", () => {
     expect(rig.rec.ctx.globalAlpha).toBe(1);
   });
 
-  it("with no flash recorded, or frame.flash null, never sets lighter and blits only the static layer", () => {
+  it("with no flash recorded, or frame.flash null, never sets lighter and draws no halo (static blit plus one ball shadow)", () => {
     const rig = makeRig();
     const flash = trackerFor(rig.world);
 
     rig.renderer.draw(frameOf(rig.world, { flash }));
     expect(setsLighter(rig.rec)).toBe(false);
-    expect(rig.rec.calls("drawImage")).toHaveLength(1);
+    expect(haloDraws(rig)).toHaveLength(0);
+    expect(rig.rec.calls("drawImage")).toHaveLength(1 + 1);
 
     rig.rec.clear();
     flash.record(202, 1);
     rig.renderer.draw(frameOf(rig.world, { flash: null }));
     expect(setsLighter(rig.rec)).toBe(false);
-    expect(rig.rec.calls("drawImage")).toHaveLength(1);
+    expect(haloDraws(rig)).toHaveLength(0);
+    expect(rig.rec.calls("drawImage")).toHaveLength(1 + 1);
   });
 
   it("with every flashable id lit: no blur, no gradient, no new layer, and only element-local static and halo sprites", () => {
@@ -337,7 +486,7 @@ describe("TableRenderer flash pass (RND-03, T-05-15)", () => {
     const maxHalo = 2 * HALO_SCALE * maxR;
     const allowed = new Set<unknown>(rig.layers.layers.map((l) => l.canvas));
     const atResize = rig.layers.createCount;
-    expect(atResize).toBe(1 + HALO_LAYERS);
+    expect(atResize).toBe(LAYERS_PER_RESIZE);
 
     for (let i = 0; i < 10; i++) {
       rig.rec.clear();
