@@ -25,16 +25,27 @@
  * building (threats T-04-03, T-04-19). Text-only: it assigns `textContent`,
  * never parses markup (T-04-20).
  *
+ * The end-of-ball bonus overlay (`BonusView`, plan 06-06) is a separate,
+ * centered panel that reveals the drained ball's tally row by row from the
+ * session's tally getters and the closed-form schedule in `game/bonus.ts`.
+ *
  * No engine import and no DOM globals at module scope: the sinks are injected
  * as `TextSink`s (an `HTMLElement` satisfies it structurally), so this module is
  * testable in Vitest's node environment.
  */
 
-import { BALLS_PER_GAME, type GameState } from "../game/game-session";
+import { rowRevealed, rowShownValue, type BonusRowKind } from "../game/bonus";
+import { BALLS_PER_GAME, type GameSession, type GameState } from "../game/game-session";
 
 /** Where the HUD writes text. An `HTMLElement` satisfies it. */
 export interface TextSink {
   textContent: string | null;
+}
+
+/** Where a view toggles attributes (`hidden`, `data-revealed`). An `HTMLElement` satisfies it. */
+export interface AttrSink {
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
 }
 
 /** What the HUD reads. `GameSession` satisfies it. */
@@ -196,6 +207,172 @@ export class HudView {
     this.lastState = state;
     this.lastCode = code;
     this.lastValue = value;
+  }
+}
+
+/** What the bonus overlay reads. `GameSession` satisfies it. */
+export type BonusSource = Pick<GameSession, "getState" | "getBonusTally" | "getBonusElapsed">;
+
+/** The overlay label word for each row kind (06-UI-SPEC copywriting). */
+const BONUS_ROW_WORD: Readonly<Record<BonusRowKind, string>> = {
+  rollovers: "ROLLOVERS",
+  inlanes: "INLANES",
+  banks: "BANKS",
+};
+
+/**
+ * A bonus row label: `ROLLOVERS × 3` (U+00D7 with a space each side). The form
+ * is the same for every n, so n = 1 reads `BANKS × 1` (no plural change).
+ */
+export function bonusRowLabel(kind: BonusRowKind, count: number): string {
+  return `${BONUS_ROW_WORD[kind]} × ${count}`;
+}
+
+/** A cached attribute state: not yet written, off, on. */
+const UNKNOWN = -1;
+const OFF = 0;
+const ON = 1;
+
+/**
+ * The end-of-ball bonus overlay (`#hud-bonus`, 06-UI-SPEC, D-11, D-12): a
+ * centered panel that shows the tally of the drained ball row by row.
+ *
+ * - Hidden (`hidden` attribute) outside the `"bonus"` state and during a tilt
+ *   forfeit hold, which has nothing to tally (the status line reads
+ *   TILT · NO BONUS).
+ * - Every included row (n >= 1) is laid out from the first step with
+ *   `data-revealed="false"` (CSS `visibility: hidden`), so a partial reveal never
+ *   reflows the panel; unused rows carry `hidden`. Row i is revealed at elapsed
+ *   48 i and counts linearly from 0 to its value over its 48 steps
+ *   (`rowRevealed`, `rowShownValue` from `game/bonus.ts`). TOTAL is revealed
+ *   after the last row at full value; its text is written at the full total
+ *   from the first step, so the value column is sized before anything shows.
+ * - `reducedMotion`: a revealed row shows its final value at once; the reveal
+ *   timing is the rule's and does not change.
+ *
+ * Write-on-change per row (T-6-11): it caches each row's included flag, label
+ * inputs, shown integer and revealed flag, plus the overlay visibility and the
+ * TOTAL, and touches the DOM (and formats a string) only when one changes.
+ * Text-only: it assigns `textContent`, never markup.
+ */
+export class BonusView {
+  private readonly overlay: AttrSink;
+  private readonly rows: readonly AttrSink[];
+  private readonly labels: readonly TextSink[];
+  private readonly values: readonly TextSink[];
+  private readonly totalRow: AttrSink;
+  private readonly total: TextSink;
+
+  /** Overlay visibility last written (UNKNOWN until the first update). */
+  private visible = UNKNOWN;
+  /** Per row: included (not `hidden`) as last written. */
+  private readonly included: number[];
+  /** Per row: the label inputs last written (kind, count). */
+  private readonly labelKind: (BonusRowKind | null)[];
+  private readonly labelCount: number[];
+  /** Per row: the shown integer last written (-1 before any). */
+  private readonly shownValue: number[];
+  /** Per row: `data-revealed` as last written. */
+  private readonly revealed: number[];
+  private totalRevealed = UNKNOWN;
+  /** The TOTAL integer last written (-1 before any). */
+  private totalValue = -1;
+
+  constructor(
+    overlay: AttrSink,
+    rows: readonly AttrSink[],
+    labels: readonly TextSink[],
+    values: readonly TextSink[],
+    totalRow: AttrSink,
+    total: TextSink,
+  ) {
+    this.overlay = overlay;
+    this.rows = rows;
+    this.labels = labels;
+    this.values = values;
+    this.totalRow = totalRow;
+    this.total = total;
+    const n = rows.length;
+    this.included = new Array<number>(n).fill(UNKNOWN);
+    this.labelKind = new Array<BonusRowKind | null>(n).fill(null);
+    this.labelCount = new Array<number>(n).fill(-1);
+    this.shownValue = new Array<number>(n).fill(-1);
+    this.revealed = new Array<number>(n).fill(UNKNOWN);
+  }
+
+  /** Bring the overlay up to date with the tally; writes only what changed. */
+  update(src: BonusSource, reducedMotion = false): void {
+    const tally = src.getBonusTally();
+    const show = src.getState() === "bonus" && !tally.forfeit;
+    if (!show) {
+      if (this.visible !== OFF) {
+        this.overlay.setAttribute("hidden", "");
+        this.visible = OFF;
+      }
+      return;
+    }
+    if (this.visible !== ON) {
+      this.overlay.removeAttribute("hidden");
+      this.visible = ON;
+    }
+
+    const elapsed = src.getBonusElapsed();
+    const rowCount = tally.rows;
+    for (let i = 0; i < this.rows.length; i++) {
+      const row = this.rows[i];
+      if (row === undefined) continue;
+      if (i >= rowCount) {
+        if (this.included[i] !== OFF) {
+          row.setAttribute("hidden", "");
+          this.included[i] = OFF;
+        }
+        continue;
+      }
+      if (this.included[i] !== ON) {
+        row.removeAttribute("hidden");
+        this.included[i] = ON;
+      }
+
+      const kind = tally.kinds[i] ?? "rollovers";
+      const count = tally.counts[i] ?? 0;
+      const label = this.labels[i];
+      if (label !== undefined && (kind !== this.labelKind[i] || count !== this.labelCount[i])) {
+        label.textContent = bonusRowLabel(kind, count);
+        this.labelKind[i] = kind;
+        this.labelCount[i] = count;
+      }
+
+      const isRevealed = rowRevealed(i, elapsed);
+      this.writeRevealed(row, isRevealed, i);
+
+      const full = tally.values[i] ?? 0;
+      const shown = !isRevealed ? 0 : reducedMotion ? full : rowShownValue(full, i, elapsed);
+      const value = this.values[i];
+      if (value !== undefined && shown !== this.shownValue[i]) {
+        value.textContent = formatScore(shown);
+        this.shownValue[i] = shown;
+      }
+    }
+
+    // TOTAL: revealed after the last item row (at elapsed 48 * rows; at once
+    // for an all-zero tally), always at its full value.
+    const totalOn = rowRevealed(rowCount, elapsed) ? ON : OFF;
+    if (totalOn !== this.totalRevealed) {
+      this.totalRow.setAttribute("data-revealed", totalOn === ON ? "true" : "false");
+      this.totalRevealed = totalOn;
+    }
+    if (tally.total !== this.totalValue) {
+      this.total.textContent = formatScore(tally.total);
+      this.totalValue = tally.total;
+    }
+  }
+
+  /** Write row i's `data-revealed` only when it changed. */
+  private writeRevealed(row: AttrSink, isRevealed: boolean, i: number): void {
+    const on = isRevealed ? ON : OFF;
+    if (on === this.revealed[i]) return;
+    row.setAttribute("data-revealed", isRevealed ? "true" : "false");
+    this.revealed[i] = on;
   }
 }
 

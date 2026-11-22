@@ -40,7 +40,8 @@
  * changes).
  *
  * Fixed-step order:
- * - `onFixedStep` (top of each step): flipper edges then the flipper FSM; the
+ * - `onFixedStep` (top of each step): flipper edges (a press edge also latches
+ *   the bonus skip, `session.onFlipperPress()`) then the flipper FSM; the
  *   plunger edges through `applyEdges` (same-window order from the held state)
  *   then the charge; then the start edge (a started game resets the lights);
  *   then the nudge edges (`session.onNudge`); then `session.tick()`.
@@ -82,7 +83,7 @@ import { PlungerInput } from "../input/plunger-input";
 import { ballMass } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
-import { DiagView, HudView, MuteView, type DiagData, type TextSink } from "../ui/hud";
+import { BonusView, DiagView, HudView, MuteView, type DiagData, type TextSink } from "../ui/hud";
 import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
 import { ContactFlash } from "../render/contact-flash";
@@ -254,6 +255,11 @@ function main(): void {
     if (edges.leftRelease) controller.onReleaseEdge(leftFlipperId);
     if (edges.rightPress) controller.onPressEdge(rightFlipperId);
     if (edges.rightRelease) controller.onReleaseEdge(rightFlipperId);
+    // Bonus skip (D-12): a press on either side latched at the top of this step
+    // ends a running tally at once (the session ignores it outside "bonus" and
+    // for a tilt forfeit); the credit and the next serve land in this step's
+    // session.service().
+    if (edges.leftPress || edges.rightPress) session.onFlipperPress();
     controller.update();
 
     // Plunger: same top-of-step drain. All of this window's edges go through
@@ -360,6 +366,29 @@ function main(): void {
     requireTextSink("hud-score"),
     requireTextSink("hud-ball"),
     requireTextSink("hud-status"),
+  );
+  // End-of-ball bonus overlay (06-UI-SPEC, D-12): the tally row by row, shown
+  // only in the bonus state; each row, label, value and TOTAL written only when
+  // it changes. The elements satisfy both the attribute and the text sinks.
+  const bonusView = new BonusView(
+    requireElement("hud-bonus"),
+    [
+      requireElement("hud-bonus-row-0"),
+      requireElement("hud-bonus-row-1"),
+      requireElement("hud-bonus-row-2"),
+    ],
+    [
+      requireElement("hud-bonus-label-0"),
+      requireElement("hud-bonus-label-1"),
+      requireElement("hud-bonus-label-2"),
+    ],
+    [
+      requireElement("hud-bonus-value-0"),
+      requireElement("hud-bonus-value-1"),
+      requireElement("hud-bonus-value-2"),
+    ],
+    requireElement("hud-bonus-total-row"),
+    requireElement("hud-bonus-total"),
   );
   // Diagnosis readout: DOM text in its own panel (G-04-6), written only when a
   // throttled number changes.
@@ -480,6 +509,7 @@ function main(): void {
     // The score, ball and status land in the frame the session changes them
     // (each line written only on change).
     hudView.update(session);
+    bonusView.update(session);
     muteView.update(audio.isMuted());
     diagView.update(diag);
   }
@@ -489,6 +519,11 @@ function main(): void {
 
 /** The element with this id as a text sink; throws a clear error if missing. */
 function requireTextSink(id: string): TextSink {
+  return requireElement(id);
+}
+
+/** The element with this id (a text and an attribute sink); throws a clear error if missing. */
+function requireElement(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`sandbox HUD element #${id} not found`);
   return el;
