@@ -36,6 +36,14 @@
  * leave a rule half-applied (Pitfall 8). It receives scalars only and never
  * mutates rules or the world. The default is a frozen no-op.
  *
+ * Rule hooks (Phase 6, PLSH-05): an optional `RuleHooks` receives the same
+ * registered switches through `onSwitch(kind, elementId, bank)`, called right
+ * after the award (and, for a rollover, after the light and bank handling) and
+ * BEFORE the presentation feedback, because it is a rule. `GameSession`
+ * implements it to resolve the skill shot. It must not touch the world (the
+ * world is still written only in the `service()` calls). The default is a
+ * frozen no-op, so a `ReactiveElements` built without it scores as before.
+ *
  * Engine-agnostic: the world is a type-only `PhysicsWorld` slice. Steady state
  * allocates nothing (fixed kicker array, Map lookup, index loops).
  */
@@ -82,6 +90,26 @@ export interface ReactiveFeedback {
 const NO_FEEDBACK: ReactiveFeedback = Object.freeze({
   onKick(): void {},
   onSensor(): void {},
+});
+
+/** Every kind of scoring switch reported to the rule hooks. */
+export type SwitchKind = "bumper" | "slingshot" | "rollover" | "lane";
+
+/**
+ * Where registered scoring switches are reported for rules (the skill shot).
+ * A registered scoring switch has passed the same gates as `ReactiveFeedback`
+ * (cooldown, impulse threshold, face distance, `isLive()`); the call comes after
+ * the award and before the feedback call. `bank` is true only for the rollover
+ * that completed the 3-lit bank. Implementations may award through the gate
+ * but must not touch the world and must not allocate per call.
+ */
+export interface RuleHooks {
+  onSwitch(kind: SwitchKind, elementId: number, bank: boolean): void;
+}
+
+/** Default rule hooks: do nothing. Module-level and frozen, shared by all. */
+const NO_HOOKS: RuleHooks = Object.freeze({
+  onSwitch(): void {},
 });
 
 /** The world slice the reactive elements need. */
@@ -206,6 +234,7 @@ export class ReactiveElements {
   private readonly world: ReactiveWorld;
   private readonly gate: RulesGate;
   private readonly feedback: ReactiveFeedback;
+  private readonly hooks: RuleHooks;
   private readonly kickers: Kicker[] = [];
   private readonly kickerById = new Map<number, Kicker>();
   private readonly sensors: SensorRule[] = [];
@@ -221,10 +250,12 @@ export class ReactiveElements {
     router: CollisionRouter,
     gate: RulesGate,
     feedback: ReactiveFeedback = NO_FEEDBACK,
+    hooks: RuleHooks = NO_HOOKS,
   ) {
     this.world = world;
     this.gate = gate;
     this.feedback = feedback;
+    this.hooks = hooks;
     const elements = world.getElements();
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];
@@ -345,6 +376,7 @@ export class ReactiveElements {
     rule.armedAtStep = this.step + SENSOR_REARM_STEPS;
     if (rule.kind === "lane") {
       this.gate.award(INLANE_POINTS);
+      this.hooks.onSwitch("lane", rule.id, false);
       this.feedback.onSensor("lane", rule.id, false);
       return;
     }
@@ -362,6 +394,7 @@ export class ReactiveElements {
       this.gate.award(ROLLOVER_BANK_BONUS);
       this.resetLights();
     }
+    this.hooks.onSwitch("rollover", rule.id, bank);
     this.feedback.onSensor("rollover", rule.id, bank);
   }
 
@@ -389,6 +422,7 @@ export class ReactiveElements {
     k.armedAtStep = this.step + KICKER_REARM_STEPS;
     k.pendingBall = e.ballId;
     this.gate.award(k.points);
+    this.hooks.onSwitch(kind, e.elementId, false);
     this.feedback.onKick(kind, e.elementId, e.normalImpulse);
   };
 }

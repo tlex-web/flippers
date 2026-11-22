@@ -54,13 +54,26 @@
  * non-negative safe integer is ignored, and the sum saturates at
  * `Number.MAX_SAFE_INTEGER` so it never loses integer precision.
  *
+ * Skill shot (PLSH-05, D-01..D-05): the session composes a pure `SkillShot`.
+ * Every serve (game start and each next ball) arms it; `onStart()` first
+ * resets its value ladder (a new game). `tick()` feeds it the plunger phase
+ * read through `GameSessionOptions.plunger` (default: always idle), so the lit
+ * lane rotates on the step clock and freezes while the plunger charges. The
+ * session implements `RuleHooks`: `ReactiveElements` reports every registered
+ * scoring switch to `onSwitch()`, and the first one after the arm decides the
+ * shot (the lit rollover awards through `award()`, anything else disarms). A
+ * tilt and game over disarm it. `onSwitch()` only awards and records; the
+ * world is still written only in `service()`.
+ *
  * Engine-agnostic: type-only imports, talks to the `PhysicsWorld` interface
  * only. Steady state allocates nothing; remove/add run only on a start or drain.
  */
 
 import type { CollisionRouter } from "../app/collision-router";
+import type { PlungerController } from "../control/plunger-controller";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
-import type { RulesGate } from "./reactive-elements";
+import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
+import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
 import {
   NUDGE_COOLDOWN_STEPS,
@@ -91,13 +104,31 @@ export interface FlipperGate {
   setEnabled(enabled: boolean): void;
 }
 
+/** The read-only plunger slice the session reads for the skill shot. */
+export type SessionPlunger = Pick<PlungerController, "getPhase">;
+
+/** Optional collaborators; every field has a default. */
+export interface GameSessionOptions {
+  /**
+   * The plunger whose phase freezes the skill-shot lane (default: always idle,
+   * so the lane never freezes and existing compositions keep compiling).
+   */
+  readonly plunger?: SessionPlunger;
+}
+
+/** Default plunger: always idle. Module-level and frozen, shared by all. */
+const IDLE_PLUNGER: SessionPlunger = Object.freeze({
+  getPhase: () => "idle" as const,
+});
+
 /** `activeBallId` when no ball is in play. */
 const NO_BALL: BallId = -1;
 
-export class GameSession implements RulesGate {
+export class GameSession implements RulesGate, RuleHooks {
   private readonly world: GameSessionWorld;
   private readonly spawn: BallSpec;
   private readonly flippers: FlipperGate;
+  private readonly plunger: SessionPlunger;
 
   private state: GameState = "game-over";
   private score = 0;
@@ -120,24 +151,35 @@ export class GameSession implements RulesGate {
   /** First step at which the WARNING window is over. */
   private warningUntilStep = 0;
 
+  /** The rotating lit-lane skill shot (PLSH-05). */
+  private readonly skill = new SkillShot();
+
+  /** Step of the most recent skill-shot award, -1 before any. */
+  private lastSkillStep = -1;
+
+  /** Value of the most recent skill-shot award, 0 before any. */
+  private lastSkillValue = 0;
+
   constructor(
     world: GameSessionWorld,
     router: CollisionRouter,
     spawn: BallSpec,
     flippers: FlipperGate,
+    options: GameSessionOptions = {},
   ) {
     this.world = world;
     this.spawn = spawn;
     this.flippers = flippers;
+    this.plunger = options.plunger ?? IDLE_PLUNGER;
     router.register(this.onEvent);
     this.flippers.setEnabled(false); // boot into attract: the flippers are dead
   }
 
   /**
-   * Start a game, only from game-over: score 0, ball 1, the tilt meter and the
-   * warning cleared, one ball served to the spawn and the flippers switched
-   * on. Returns whether a game
-   * started; in any other state it returns false and changes nothing.
+   * Start a game, only from game-over: score 0, ball 1, the skill-shot ladder
+   * reset, then one ball served (tilt meter and warning cleared, flippers on,
+   * skill shot armed). Returns whether a game started; in any other state it
+   * returns false and changes nothing.
    */
   onStart(): boolean {
     switch (this.state) {
@@ -146,10 +188,10 @@ export class GameSession implements RulesGate {
         this.ball = 1;
         this.played = true;
         this.drained = NO_BALL;
-        this.clearTilt();
-        this.state = "playing";
-        this.active = this.world.addBall(this.spawn);
-        this.flippers.setEnabled(true);
+        this.skill.reset();
+        this.lastSkillStep = -1;
+        this.lastSkillValue = 0;
+        this.serveBall();
         return true;
       case "playing":
       case "tilted":
@@ -159,9 +201,9 @@ export class GameSession implements RulesGate {
 
   /**
    * Handle a drain recorded in this step's batch (while playing or tilted):
-   * remove the ball, then serve the next one with the tilt cleared and the
-   * flippers on, or end the game after the last with the flippers off. Call
-   * once per fixed step, right after
+   * remove the ball, then serve the next one (tilt cleared, flippers on, skill
+   * shot armed), or end the game after the last with the flippers off and the
+   * skill shot disarmed. Call once per fixed step, right after
    * `router.dispatch()`. No-op when nothing drained.
    */
   service(): void {
@@ -170,22 +212,20 @@ export class GameSession implements RulesGate {
     this.drained = NO_BALL;
     if (this.ball < BALLS_PER_GAME) {
       this.ball++;
-      this.clearTilt();
-      this.state = "playing";
-      this.active = this.world.addBall(this.spawn);
-      this.flippers.setEnabled(true);
+      this.serveBall();
     } else {
       this.state = "game-over";
       this.active = NO_BALL;
       this.flippers.setEnabled(false);
+      this.skill.disarm();
     }
   }
 
   /**
    * Nudge the table: while playing and outside the cooldown, apply
    * `NUDGE_IMPULSE` along `NUDGE_DIRS[dir]` to every ball, then feed the tilt
-   * meter (a warning opens the WARNING window, a tilt enters `"tilted"` and
-   * drops the flippers).
+   * meter (a warning opens the WARNING window, a tilt enters `"tilted"`, drops
+   * the flippers and disarms the skill shot).
    * Velocity only, never a position write. Call it at the top of a fixed step
    * (between steps, as the `applyImpulse` contract requires). Ignored in any
    * other state, so a tilted or game-over table neither moves nor fills the meter.
@@ -207,16 +247,72 @@ export class GameSession implements RulesGate {
     else if (outcome === "tilt") {
       this.state = "tilted";
       this.flippers.setEnabled(false);
+      this.skill.disarm();
     }
   }
 
   /**
-   * Advance the session clock by one fixed step and decay the tilt meter. Call
-   * once per fixed step, after the game edges.
+   * Advance the session clock by one fixed step, decay the tilt meter and step
+   * the skill shot with the plunger phase (read after `plunger.applyEdges`, so
+   * a press on this step freezes the lane shown on this step). Call once per
+   * fixed step, after the game edges.
    */
   tick(): void {
     this.step++;
     this.tilt.update();
+    this.skill.update(this.plunger.getPhase(), false);
+  }
+
+  /**
+   * Rule hook (`RuleHooks`): a registered scoring switch from
+   * `ReactiveElements`, after its own award. The first switch after the arm
+   * resolves the skill shot; the lit rollover awards its value through
+   * `award()`. Only awards and records; never touches the world.
+   */
+  onSwitch(kind: SwitchKind, elementId: number): void {
+    const v = this.skill.resolve(kind, elementId);
+    if (v > 0) {
+      this.award(v);
+      this.lastSkillStep = this.step;
+      this.lastSkillValue = v;
+    }
+  }
+
+  // Presentation counters: read-only getters that change no behavior.
+
+  /** Fixed steps advanced by `tick()` since construction. */
+  getStep(): number {
+    return this.step;
+  }
+
+  /** The skill-shot phase. */
+  getSkillPhase(): SkillPhase {
+    return this.skill.getPhase();
+  }
+
+  /** The lit skill-shot lane's element id, or -1 when not armed. */
+  getSkillLitLane(): number {
+    return this.skill.getLitLane();
+  }
+
+  /** Skill shots made this game. */
+  getSkillShotCount(): number {
+    return this.skill.getCount();
+  }
+
+  /** Value of the most recent skill shot this game (0 before any). */
+  getLastSkillValue(): number {
+    return this.lastSkillValue;
+  }
+
+  /** `getStep()` at the most recent skill shot this game (-1 before any). */
+  getLastSkillStep(): number {
+    return this.lastSkillStep;
+  }
+
+  /** Lane of the most recent skill shot this game (-1 before any). */
+  getLastSkillLane(): number {
+    return this.skill.getLastLane();
   }
 
   /**
@@ -271,6 +367,18 @@ export class GameSession implements RulesGate {
   /** The running score (kept after game over until the next start). */
   getScore(): number {
     return this.score;
+  }
+
+  /**
+   * Serve a ball: tilt cleared, state playing, one ball at the spawn, the
+   * flippers on, then the skill shot armed (game start and every next ball).
+   */
+  private serveBall(): void {
+    this.clearTilt();
+    this.state = "playing";
+    this.active = this.world.addBall(this.spawn);
+    this.flippers.setEnabled(true);
+    this.skill.arm();
   }
 
   /** Clear the tilt meter and the WARNING window (a new ball or a new game). */

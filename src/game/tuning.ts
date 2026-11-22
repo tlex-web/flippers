@@ -161,3 +161,35 @@ export const TILT_LEVEL = 3.0;
  * (120 steps = 1 s at 120 Hz). Read through `GameSession.isWarning()` (04-07).
  */
 export const WARNING_FLASH_STEPS = 120;
+
+// ---------------------------------------------------------------------------
+// Skill shot (PLSH-05)
+// ---------------------------------------------------------------------------
+//
+// The lit top rollover rotates while the served ball rests in the plunger lane
+// and freezes on the Space press edge; the ball's first scoring switch after
+// launch decides the shot (D-01, D-03). The table already maps the plunger
+// charge to a lane (D-01 probe: N=62 charging steps, 0.775, goes to 401), so a
+// learned hold length is the skill. There is no meter sweet-spot band and no
+// random source.
+
+/**
+ * The skill-shot lanes in rotation order: the three top rollovers (spec ids
+ * 400..402). Rotation starts at the first entry on every arm (D-01).
+ */
+export const SKILL_SHOT_LANES: readonly number[] = [400, 401, 402];
+
+/**
+ * Fixed steps each lane stays lit before the rotation moves on (72 steps =
+ * 0.6 s at 120 Hz), counted from the serve (D-01, UI-SPEC rotation rate).
+ */
+export const SKILL_SHOT_ROTATE_STEPS = 72;
+
+/** Value of the first skill shot of a game (D-04). */
+export const SKILL_SHOT_BASE_POINTS = 5000;
+
+/** Added to the value for each skill shot already made this game (D-04). */
+export const SKILL_SHOT_STEP_POINTS = 5000;
+
+/** Cap on one skill shot's value (D-04). */
+export const SKILL_SHOT_MAX_POINTS = 25000;
