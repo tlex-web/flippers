@@ -16,6 +16,9 @@
  *   counts here, ahead of `"tilt"`);
  * - `"launch"`: once per plunger release-count increment, at the charge that
  *   release ended at (a sub-window tap launches at 0, a cancel counts nothing);
+ * - `"nudge"` (element id = direction: left 0, right 1, up 2): once per
+ *   accepted nudge (`getNudgeCount()` increment) at strength 1, so the cabinet
+ *   thump is heard (06-09, D-17, D-25); a cooldown-rejected nudge counts nothing;
  * - `"tilt"`: the state became tilted;
  * - `"warning"`: a false -> true edge of `isWarning()`;
  * - `"skillShot"` (on the lane the shot went through): once per skill-shot
@@ -33,8 +36,9 @@
  *   was already pushed on the drain step).
  * A step with no change pushes nothing, so a held state never spams (T-05-17).
  *
- * Effects (06-09, D-17): with an `ObserverFx` attached, the tilt edge calls
- * `fx.onTilt()` after its cue and every drain-count increment calls
+ * Effects (06-09, D-17): with an `ObserverFx` attached, every nudge-count
+ * increment calls `fx.onNudge(dir)` after its cue (the view kicks), the tilt
+ * edge calls `fx.onTilt()` after its cue and every drain-count increment calls
  * `fx.onDrain()` after its cue and flash, so tilts and drains shake the view.
  * A backstop-saved drain (06-07) also raises the drain count, so it shakes too.
  *
@@ -61,6 +65,8 @@ export type ObserverSession = Pick<
   | "getLastSkillValue"
   | "getLastSkillLane"
   | "getDrainCount"
+  | "getNudgeCount"
+  | "getLastNudgeDir"
   | "getBonusTally"
   | "getBonusElapsed"
 >;
@@ -84,6 +90,11 @@ export interface ObserverFx {
 /** Element id for a cue that belongs to no table element. */
 const NO_ELEMENT = -1;
 
+/** The nudge cue's element id: its direction (left 0, right 1, up 2). */
+function nudgeElementId(dir: NudgeDir): number {
+  return dir === "left" ? 0 : dir === "right" ? 1 : 2;
+}
+
 export class PresentationObserver {
   private readonly cues: CueQueue;
   private readonly flash: FlashSink;
@@ -99,6 +110,7 @@ export class PresentationObserver {
   private prevReleases: number;
   private prevSkillShots: number;
   private prevDrains: number;
+  private prevNudges: number;
   /** Bonus tally rows revealed at the previous observe (0 outside a tickable tally). */
   private prevRevealed: number;
   /** Per watched flipper (same index as flipperIds), preallocated once. */
@@ -126,6 +138,7 @@ export class PresentationObserver {
     this.prevReleases = plunger.getReleaseCount();
     this.prevSkillShots = session.getSkillShotCount();
     this.prevDrains = session.getDrainCount();
+    this.prevNudges = session.getNudgeCount();
     this.prevRevealed = this.revealedRows(this.prevState);
     this.flippers = flippers;
     this.flipperIds = flipperIds;
@@ -145,6 +158,7 @@ export class PresentationObserver {
     const releases = this.plunger.getReleaseCount();
     const skillShots = this.session.getSkillShotCount();
     const drains = this.session.getDrainCount();
+    const nudges = this.session.getNudgeCount();
     const revealed = this.revealedRows(state);
     const prev = this.prevState;
 
@@ -168,6 +182,15 @@ export class PresentationObserver {
       const charge = this.plunger.getLastReleaseCharge();
       for (let n = this.prevReleases; n < releases; n++)
         this.cues.push("launch", NO_ELEMENT, charge);
+    }
+
+    if (nudges > this.prevNudges) {
+      const dir = this.session.getLastNudgeDir();
+      const id = nudgeElementId(dir);
+      for (let n = this.prevNudges; n < nudges; n++) {
+        this.cues.push("nudge", id, 1);
+        if (this.fx) this.fx.onNudge(dir);
+      }
     }
 
     if (state === "tilted" && prev !== "tilted") {
@@ -199,6 +222,7 @@ export class PresentationObserver {
     this.prevReleases = releases;
     this.prevSkillShots = skillShots;
     this.prevDrains = drains;
+    this.prevNudges = nudges;
     this.prevRevealed = revealed;
   }
 

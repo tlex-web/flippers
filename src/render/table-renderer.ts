@@ -36,8 +36,9 @@
  *
  * Screen shake (PLSH-01, D-17, D-18, research Pitfall 8): `frame.effects.shake`
  * is sampled once per `draw()` at `frame.alpha` into a renderer-owned
- * preallocated pair (whole device pixels, exactly 0 under
- * `frame.reducedMotion` or with no effects). The BG_BOTTOM fill comes first so a
+ * preallocated pair (whole device pixels, exactly 0 with no effects and under
+ * `frame.reducedMotion`, where draw() skips the sample, so no effects source can
+ * move the view against the preference). The BG_BOTTOM fill comes first so a
  * shaken blit never uncovers an edge strip, the static blit lands at
  * (shakeX, shakeY), and every world transform in the frame (the frame start, the
  * flipper flash, the bats and the balls) goes through one `resetWorld()` with
@@ -422,8 +423,11 @@ export class TableRenderer {
     ctx.fillRect(0, 0, view.backingW, view.backingH);
     const shake = this.shakeOut;
     const effects = frame.effects;
-    if (effects) {
-      effects.shake.sample(frame.alpha, view.dpr, frame.reducedMotion === true, shake);
+    // Reduced motion zeroes the whole-view offset here as well as in the
+    // tracker, so no effects source can move the view against the preference.
+    const reduced = frame.reducedMotion === true;
+    if (effects && !reduced) {
+      effects.shake.sample(frame.alpha, view.dpr, false, shake);
     } else {
       shake.x = 0;
       shake.y = 0;
