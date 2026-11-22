@@ -4,14 +4,15 @@ import { CollisionRouter } from "../app/collision-router";
 import { FlipperController, type FlipperPhase } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
 import { bonusDurationSteps } from "../game/bonus";
-import { GameSession, type FlipperGate } from "../game/game-session";
+import { GameSession, type FlipperGate, type GameSessionOptions } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
-import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE } from "../game/tuning";
+import { BALL_SAVE_STEPS, NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE } from "../game/tuning";
 import {
   BALL_LINEAR_DAMPING,
+  BALL_RADIUS_M,
   FIXED_DT,
   PLUNGER_CHARGE_RATE,
   PLUNGER_MAX_CHARGE,
@@ -20,7 +21,7 @@ import {
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallId, BallState } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
-import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
+import { CHUTE_X, PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
 import { formatScore, HudView, type TextSink } from "../ui/hud";
 
 // Heavy simulation suite: the 5 s default timeout is too tight under load, so
@@ -113,8 +114,11 @@ interface Game {
   ball(): BallState;
 }
 
-/** Mirror of `main.ts`'s composition and step bodies. */
-function makeGame(): Game {
+/**
+ * Mirror of `main.ts`'s composition and step bodies. `options` are merged over
+ * main.ts's `{ plunger }` (production defaults otherwise).
+ */
+function makeGame(options: GameSessionOptions = {}): Game {
   const world = new PlanckWorld();
 
   const input = new FlipperInput();
@@ -148,7 +152,7 @@ function makeGame(): Game {
     router,
     { x: PLUNGER_REST.x, y: PLUNGER_REST.y },
     flipperGate,
-    { plunger },
+    { plunger, ...options },
   );
   const reactive = new ReactiveElements(world, router, session, undefined, session);
 
@@ -220,6 +224,12 @@ function makeGame(): Game {
   return game;
 }
 
+/**
+ * The ball save disabled (plan 06-07): the legacy cases that launch and drain
+ * to count balls, whose early drains would otherwise be saved.
+ */
+const NO_SAVE: GameSessionOptions = { ballSaveSteps: 0 };
+
 /** Run render frames of `deltaMs` until `steps` fixed steps have elapsed. */
 function runSteps(g: Game, deltaMs: number, steps: number): void {
   let done = 0;
@@ -274,7 +284,7 @@ function launchAndDrain(g: Game, holdSteps: number): { scoreBefore: number; scor
 
 describe("game e2e (GAME-02): Enter, three balls on the real table, game over, restart", () => {
   it("plays a full 3-ball game through the main.ts composition", () => {
-    const g = makeGame();
+    const g = makeGame(NO_SAVE);
 
     // Boot: attract, no ball, and the plunger has nothing to launch.
     expect(g.world.getBalls()).toHaveLength(0);
@@ -616,7 +626,7 @@ const IN_FIELD_STEPS = 120;
 
 describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot to game over", () => {
   it("shows the start prompt, the ball number, WARNING, TILT, TILT · NO BONUS, BONUS, the next ball and GAME OVER", () => {
-    const g = makeGame();
+    const g = makeGame(NO_SAVE);
     const score = new CountingSink();
     const ball = new CountingSink();
     const status = new CountingSink();
@@ -764,7 +774,7 @@ describe("flipper relay (GAME-03, R11): dead outside a game, dropped by TILT, ba
   });
 
   it("a tilt drops a held-up bat and locks it; the key held through the drain raises it on ball 2; game over leaves both bats dead", () => {
-    const g = makeGame();
+    const g = makeGame(NO_SAVE);
     pressEnter(g);
 
     // Launch ball 1 into the field.
@@ -877,7 +887,7 @@ function shiftKeyEvent(code: string, shiftKey: boolean): KeyEventLike {
 
 describe("G-04-11: a stale Shift is not re-raised on the next serve", () => {
   it("a stale ShiftLeft is dropped by the launch key and the left bat stays down on ball 2", () => {
-    const g = makeGame();
+    const g = makeGame(NO_SAVE);
     pressEnter(g);
 
     // ShiftLeft goes down; its keyup is lost (taken by the OS).
@@ -958,5 +968,64 @@ describe("end-of-ball bonus (PLSH-06): a drained ball's tally is counted, then c
     expect(g.session.getState()).toBe("playing");
     expect(g.session.getBall()).toBe(2);
     expect(g.world.getBalls()).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * PLSH-07 (plan 06-07 Task 1, D-08, D-09): the ball-save backstop on the real
+ * table, through the main.ts composition with the production save window.
+ * ------------------------------------------------------------------------- */
+
+describe("ball save (PLSH-07): a launched ball that drains inside the window is re-served without costing the ball", () => {
+  it("a full plunge drains inside BALL_SAVE_STEPS of the chute exit, is re-served on the plunger as ball 1, and the next drain enters the bonus state", () => {
+    const g = makeGame(); // production options: the save on
+    pressEnter(g);
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    const first = g.session.activeBallId;
+    expect(g.session.getSaveLampPhase()).toBe("steady");
+
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, FULL_HOLD_STEPS);
+    g.plungerInput.handleKeyUp(SPACE);
+
+    // Run to the drain, noting the first step the ball has cleared the chute.
+    let step = 0;
+    let exitStep = -1;
+    while (!g.drainedIds.includes(first)) {
+      if (step >= DRAIN_CAP_STEPS) throw new Error(`ball ${first} did not drain`);
+      step += g.frame(FRAME_120_HZ);
+      if (g.drainedIds.includes(first)) break;
+      if (exitStep < 0 && ballById(g, first).x + BALL_RADIUS_M < CHUTE_X) exitStep = step;
+    }
+    // Precondition, asserted so a geometry or tuning change fails loudly
+    // instead of silently testing nothing: the drain lands inside the window.
+    expect(exitStep).toBeGreaterThan(0);
+    expect(step - exitStep).toBeLessThan(BALL_SAVE_STEPS);
+
+    // Saved: same ball number, still playing, flippers on, one backstop.
+    expect(g.session.getState()).toBe("playing");
+    expect(g.session.getBall()).toBe(1);
+    expect(g.session.getSaveCount()).toBe(1);
+    expect(g.session.getLastSaveKind()).toBe("backstop");
+    expect(g.controller.isEnabled()).toBe(true);
+    const second = g.session.activeBallId;
+    expect(second).not.toBe(first);
+    const balls = g.world.getBalls();
+    expect(balls).toHaveLength(1);
+    expect(balls[0]?.id).toBe(second);
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    expect(inZone(g.ball())).toBe(true);
+    expect(g.session.activeBallId).toBe(second);
+
+    // The save is spent (one per ball): the re-served ball's drain is real.
+    expect(g.session.getSaveLampPhase()).toBe("off");
+    launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(g.session.getState()).toBe("bonus");
+    expect(g.session.getSaveCount()).toBe(1);
+    expect(g.session.getBall()).toBe(1);
+    finishTally(g);
+    expect(g.session.getState()).toBe("playing");
+    expect(g.session.getBall()).toBe(2);
+    expect(g.session.getSaveLampPhase()).toBe("steady"); // re-armed on the next serve
   });
 });

@@ -89,7 +89,20 @@
  * Inlane flags (D-21): a "lane" switch while playing records its element id
  * for this ball, read through `isInlaneScored(id)` (the inlane arrow lamps).
  * Every serve clears them. A backstop re-serve (06-07) is the same ball and
- * must not clear them.
+ * does not clear them.
+ *
+ * Ball save (PLSH-07, D-08..D-10): the session composes a pure `BallSave`
+ * (window `GameSessionOptions.ballSaveSteps`, default `BALL_SAVE_STEPS`; 0
+ * disables it). Every serve arms it; `tick()` feeds it the active ball's x, so
+ * the timer starts on the chute exit. While it runs, a drain of the active ball
+ * is a backstop save: the ball is removed and a new one served to the plunger
+ * through the private `reServe()`, with the same ball number, state playing
+ * and the flippers on. That is the same ball (research A3): the bonus
+ * counters, inlane flags, tilt meter and skill shot carry over and the save is
+ * not re-armed, so it is one save per ball. `trySave(ballId)` spends the save
+ * as a kickback (the 06-08 center post); a drain on the very step of a
+ * kickback is kept as a backstop re-serve that counts once, as the kickback
+ * (research A4). A tilt, the bonus state and game over disarm it.
  *
  * Engine-agnostic: no engine import, talks to the `PhysicsWorld` interface
  * only. Steady state allocates nothing; remove/add run only on a start or drain.
@@ -103,11 +116,13 @@ import {
 } from "../control/plunger-controller";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
 import { PLUNGER_ZONE } from "../table/spec";
+import { BallSave, type SaveKind, type SaveLampPhase } from "./ball-save";
 import { BonusCounters, BonusTally, bonusDurationSteps } from "./bonus";
 import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
 import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
 import {
+  BALL_SAVE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_DIRS,
   NUDGE_IMPULSE,
@@ -146,6 +161,12 @@ export interface GameSessionOptions {
    * so the lane never freezes and existing compositions keep compiling).
    */
   readonly plunger?: SessionPlunger;
+  /**
+   * Ball-save window in fixed steps once the ball clears the chute (default
+   * `BALL_SAVE_STEPS`; 0 disables the save). Legacy FSM tests whose spy balls
+   * sit at x = 0 pass 0 explicitly; the live game uses the default.
+   */
+  readonly ballSaveSteps?: number;
 }
 
 /** Default plunger: always idle. Module-level and frozen, shared by all. */
@@ -225,6 +246,21 @@ export class GameSession implements RulesGate, RuleHooks {
   /** Direction of the most recent accepted nudge ("left" before any). */
   private lastNudgeDir: NudgeDir = "left";
 
+  /** The timed ball save (PLSH-07). */
+  private readonly save: BallSave;
+
+  /** Saves since construction, kickback or backstop (presentation counter). */
+  private saveCount = 0;
+
+  /** How the most recent save was spent ("none" before any). */
+  private lastSaveKind: SaveKind | "none" = "none";
+
+  /** `step` at the most recent save, -1 before any. */
+  private lastSaveStep = -1;
+
+  /** `step` of a kickback spent by `trySave()`, -1 once used or before any. */
+  private savedAtStep = -1;
+
   constructor(
     world: GameSessionWorld,
     router: CollisionRouter,
@@ -236,6 +272,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.spawn = spawn;
     this.flippers = flippers;
     this.plunger = options.plunger ?? IDLE_PLUNGER;
+    this.save = new BallSave(options.ballSaveSteps ?? BALL_SAVE_STEPS);
     router.register(this.onEvent);
     this.flippers.setEnabled(false); // boot into attract: the flippers are dead
   }
@@ -253,6 +290,7 @@ export class GameSession implements RulesGate, RuleHooks {
         this.ball = 1;
         this.played = true;
         this.drained = NO_BALL;
+        this.savedAtStep = -1;
         this.skill.reset();
         this.lastSkillStep = -1;
         this.lastSkillValue = 0;
@@ -268,7 +306,9 @@ export class GameSession implements RulesGate, RuleHooks {
   /**
    * Call once per fixed step, right after `router.dispatch()`.
    *
-   * A drain recorded in this step's batch (while playing or tilted) removes the
+   * A drain recorded while playing with the ball save running, or on the step
+   * a kickback spent it, is a backstop save: the ball is removed and re-served
+   * to the plunger (`reServe()`), costing no ball. Otherwise, a drain recorded in this step's batch (while playing or tilted) removes the
    * ball and enters `"bonus"`: the counters are snapshotted into the tally (a
    * tilted ball is a forfeit with zero rows), the tally is timed to end at
    * `step + bonusDurationSteps(...)`, the skill shot is disarmed and the
@@ -289,9 +329,14 @@ export class GameSession implements RulesGate, RuleHooks {
       return;
     }
     if (this.drained === NO_BALL) return;
+    if (this.state === "playing" && (this.save.canSave() || this.savedAtStep === this.step)) {
+      this.backstop();
+      return;
+    }
     this.world.removeBall(this.drained);
     this.drained = NO_BALL;
     this.drainCount++;
+    this.save.disarm();
     if (this.state === "tilted") this.tally.markForfeit();
     else this.tally.snapshot(this.bonusCounters);
     this.active = NO_BALL;
@@ -301,6 +346,24 @@ export class GameSession implements RulesGate, RuleHooks {
     this.skill.disarm();
     this.state = "bonus";
     this.flippers.setEnabled(false);
+  }
+
+  /**
+   * The backstop save (D-08): remove the drained ball and re-serve the same
+   * ball to the plunger. Spends the save as a backstop, unless a kickback
+   * already spent it on this very step (then it counts once, as the kickback).
+   */
+  private backstop(): void {
+    this.world.removeBall(this.drained);
+    this.drained = NO_BALL;
+    this.drainCount++;
+    if (this.savedAtStep !== this.step && this.save.consume("backstop")) {
+      this.saveCount++;
+      this.lastSaveKind = "backstop";
+      this.lastSaveStep = this.step;
+    }
+    this.savedAtStep = -1;
+    this.reServe();
   }
 
   /** End the tally: credit it (unless forfeit), then serve or end the game. */
@@ -315,6 +378,7 @@ export class GameSession implements RulesGate, RuleHooks {
       this.active = NO_BALL;
       this.flippers.setEnabled(false);
       this.skill.disarm();
+      this.save.disarm();
     }
   }
 
@@ -357,14 +421,16 @@ export class GameSession implements RulesGate, RuleHooks {
       this.state = "tilted";
       this.flippers.setEnabled(false);
       this.skill.disarm();
+      this.save.disarm();
     }
   }
 
   /**
-   * Advance the session clock by one fixed step, decay the tilt meter and step
+   * Advance the session clock by one fixed step, decay the tilt meter, step
    * the skill shot with the plunger phase (read after `plunger.applyEdges`, so
-   * a press on this step freezes the lane shown on this step). Call once per
-   * fixed step, after the game edges.
+   * a press on this step freezes the lane shown on this step) and step the ball
+   * save with the active ball's x (the chute-exit test). Call once per fixed
+   * step, after the game edges.
    */
   tick(): void {
     this.step++;
@@ -380,6 +446,18 @@ export class GameSession implements RulesGate, RuleHooks {
       phase === "idle" && this.prevPlungerPhase === "idle" && this.activeRestingInZone();
     this.prevPlungerPhase = phase;
     this.skill.update(phase, resting);
+    this.save.update(this.activeBallX());
+  }
+
+  /** The active ball's x, or NaN with no ball (which never starts the save). */
+  private activeBallX(): number {
+    if (this.active === NO_BALL) return Number.NaN;
+    const balls = this.world.getBalls();
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i];
+      if (b && b.id === this.active) return b.x;
+    }
+    return Number.NaN;
   }
 
   /** Whether the ball in play is resting in the plunger zone (false with no ball). */
@@ -413,7 +491,44 @@ export class GameSession implements RulesGate, RuleHooks {
     }
   }
 
+  /**
+   * Spend the ball save as a kickback (the 06-08 center post, through
+   * `RuleHooks`). Returns true only while playing, for the active ball, with
+   * the save timer running; otherwise returns false and changes nothing. A
+   * drain of the same ball on this step is then kept as a backstop re-serve
+   * that does not count again (research A4).
+   */
+  trySave(ballId: BallId): boolean {
+    if (this.state !== "playing" || ballId === NO_BALL || ballId !== this.active) return false;
+    if (!this.save.consume("kickback")) return false;
+    this.saveCount++;
+    this.lastSaveKind = "kickback";
+    this.lastSaveStep = this.step;
+    this.savedAtStep = this.step;
+    return true;
+  }
+
   // Presentation counters: read-only getters that change no behavior.
+
+  /** Saves since construction, kickback or backstop. */
+  getSaveCount(): number {
+    return this.saveCount;
+  }
+
+  /** How the most recent save was spent ("none" before any). */
+  getLastSaveKind(): SaveKind | "none" {
+    return this.lastSaveKind;
+  }
+
+  /** `getStep()` at the most recent save (-1 before any). */
+  getLastSaveStep(): number {
+    return this.lastSaveStep;
+  }
+
+  /** The save lamp: the `BallSave` phase while playing, off in any other state. */
+  getSaveLampPhase(): SaveLampPhase {
+    return this.state === "playing" ? this.save.lampPhase() : "off";
+  }
 
   /** Fixed steps advanced by `tick()` since construction. */
   getStep(): number {
@@ -450,7 +565,10 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.skill.getLastLane();
   }
 
-  /** Drains of the active ball since construction (a stray id never counts). */
+  /**
+   * Drains of the active ball since construction (a stray id never counts). A
+   * backstop save counts too: the ball did drain (06-06 keys the drain cue on it).
+   */
   getDrainCount(): number {
     return this.drainCount;
   }
@@ -561,9 +679,9 @@ export class GameSession implements RulesGate, RuleHooks {
 
   /**
    * Serve a ball: tilt cleared, inlane flags cleared, state playing, one ball
-   * at the spawn, the flippers on, then the skill shot armed (game start and
-   * every next ball). A backstop re-serve of the same ball (06-07) must not
-   * come through here, or it would clear the inlane flags.
+   * at the spawn, the flippers on, then the skill shot and the ball save armed
+   * (game start and every next ball). A backstop re-serve of the same ball
+   * goes through `reServe()` instead, or it would clear the inlane flags.
    */
   private serveBall(): void {
     this.clearTilt();
@@ -574,6 +692,17 @@ export class GameSession implements RulesGate, RuleHooks {
     this.active = this.world.addBall(this.spawn);
     this.flippers.setEnabled(true);
     this.skill.arm();
+    this.save.arm();
+  }
+
+  /**
+   * Re-serve the same ball after a backstop save: only a new ball at the spawn,
+   * made active. State stays playing and the flippers stay on; the counters,
+   * inlane flags, tilt meter and skill shot are untouched and the save is not
+   * re-armed (research A3).
+   */
+  private reServe(): void {
+    this.active = this.world.addBall(this.spawn);
   }
 
   /** Clear the tilt meter and the WARNING window (a new ball or a new game). */

@@ -233,3 +233,23 @@ export const BONUS_EMPTY_HOLD_STEPS = 60;
  * D-13). Not shortened by a flipper press, so the message can be read.
  */
 export const TILT_FORFEIT_HOLD_STEPS = 120;
+
+// ---------------------------------------------------------------------------
+// Ball save (PLSH-07)
+// ---------------------------------------------------------------------------
+//
+// The timed ball save (D-08, D-09, D-10). The timer starts on the first fixed
+// step the ball clears the launch chute (its center plus BALL_RADIUS_M left of
+// CHUTE_X), not at the serve, so a held plunger never burns it and a weak
+// plunge that falls straight back never starts it. While it runs, a drain costs
+// no ball (the backstop re-serve) or the center-post kickback saves it (06-08).
+// One save per ball; every serve re-arms it, the backstop re-serve does not.
+
+/** Fixed steps the save runs once started (840 steps = 7 s at 120 Hz, D-09). */
+export const BALL_SAVE_STEPS = 840;
+
+/**
+ * Remaining steps at or below which the save lamp blinks instead of glowing
+ * steady (240 steps = 2 s at 120 Hz, D-10, UI-SPEC).
+ */
+export const BALL_SAVE_BLINK_STEPS = 240;

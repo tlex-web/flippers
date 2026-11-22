@@ -181,8 +181,12 @@ export function mirrorPath(path: readonly PathNode[]): PathNode[] {
   );
 }
 
-/** Inner wall of the launch chute (x). Lane width 0.5 = ball diameter + 0.1. */
-const CHUTE_X = 2.9;
+/**
+ * Inner wall of the launch chute (x). Lane width 0.5 = ball diameter + 0.1.
+ * Also the ball-save chute-exit test (06-07): the save timer starts on the first
+ * step the ball center plus BALL_RADIUS_M is left of this line.
+ */
+export const CHUTE_X = 2.9;
 
 /** Top of the chute's inner wall (y): where a launched ball enters the field. */
 const CHUTE_TOP_Y = 1.9;

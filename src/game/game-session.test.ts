@@ -6,6 +6,7 @@ import {
   BALLS_PER_GAME,
   GameSession,
   type FlipperGate,
+  type GameSessionOptions,
   type GameSessionWorld,
 } from "./game-session";
 import { bonusDurationSteps } from "./bonus";
@@ -32,6 +33,12 @@ import {
  *   the counted "bonus" state before the serve or game over, so the legacy
  *   drain cases pass through it with `finishBonus` (a flipper-press skip, or a
  *   forfeit's full hold), and the gate logs record the bonus entry (false).
+ * - ball save (plan 06-07, PLSH-07, D-08..D-10): `makeRig` takes
+ *   `GameSessionOptions`. The spy balls report x = 0, left of the chute, so any
+ *   tick would start the save timer at once: every legacy drain/serve/
+ *   game-over/relay case passes `NO_SAVE` (`ballSaveSteps: 0`) explicitly, and
+ *   the save cases use the production default with `setBallX` to place the
+ *   ball in or out of the chute.
  */
 
 /** A flipper gate that ignores every call (the score and FSM cases do not read it). */
@@ -118,6 +125,8 @@ interface Rig {
   dispatchOnly(...events: CollisionEvent[]): void;
   /** Run one step whose bus batch is `events`: dispatch, then service. */
   step(...events: CollisionEvent[]): void;
+  /** Move every spy ball to `x` (default 0, left of the chute). */
+  setBallX(x: number): void;
 }
 
 function drainOf(ballId: BallId): CollisionEvent {
@@ -131,22 +140,27 @@ function drainOf(ballId: BallId): CollisionEvent {
   };
 }
 
-/** A spy ball snapshot: only the id is read. */
-function spyBall(id: BallId): BallState {
-  return { id, x: 0, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 };
+/** A spy ball snapshot: the id, and x for the ball-save chute-exit test. */
+function spyBall(id: BallId, x: number): BallState {
+  return { id, x, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 };
 }
+
+/** The ball save disabled: the legacy FSM cases, whose spy balls sit at x = 0. */
+const NO_SAVE: GameSessionOptions = { ballSaveSteps: 0 };
 
 /**
  * The spy world: addBall hands out increasing ids from FIRST_ID, getBalls
- * reports every live ball plus `extraBallIds` (untracked balls on the table),
- * and applyImpulse is recorded.
+ * reports every live ball plus `extraBallIds` (untracked balls on the table)
+ * at x = `ballX`, and applyImpulse is recorded. `options` go to the session
+ * (production defaults when omitted).
  */
-function makeRig(extraBallIds: readonly BallId[] = []): Rig {
+function makeRig(options: GameSessionOptions = {}, extraBallIds: readonly BallId[] = []): Rig {
   const calls: Call[] = [];
   const impulses: Impulse[] = [];
   const gate: boolean[] = [];
   const live = new Set<BallId>();
   let nextId: BallId = FIRST_ID;
+  let ballX = 0;
   const world: GameSessionWorld = {
     addBall: (spec) => {
       calls.push({ op: "add", spec });
@@ -157,18 +171,24 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
       calls.push({ op: "remove", id });
       live.delete(id);
     },
-    getBalls: () => [...live, ...extraBallIds].map(spyBall),
+    getBalls: () => [...live, ...extraBallIds].map((id) => spyBall(id, ballX)),
     applyImpulse: (id, ix, iy) => {
       impulses.push({ id, ix, iy });
     },
   };
   let batch: CollisionEvent[] = [];
   const router = new CollisionRouter({ drainEvents: () => batch });
-  const session = new GameSession(world, router, SPAWN, {
-    setEnabled: (enabled) => {
-      gate.push(enabled);
+  const session = new GameSession(
+    world,
+    router,
+    SPAWN,
+    {
+      setEnabled: (enabled) => {
+        gate.push(enabled);
+      },
     },
-  });
+    options,
+  );
   const dispatchOnly = (...events: CollisionEvent[]): void => {
     batch = events;
     router.dispatch();
@@ -187,6 +207,9 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
     step: (...events) => {
       dispatchOnly(...events);
       session.service();
+    },
+    setBallX: (x) => {
+      ballX = x;
     },
   };
 }
@@ -224,7 +247,7 @@ function startAndDrain(r: Rig, n: number): void {
 
 describe("GameSession 3-ball FSM (GAME-02)", () => {
   it("boots into game-over: ball 0, never played, no ball, not live, awards ignored", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     expect(r.session.getState()).toBe("game-over");
     expect(r.session.getBall()).toBe(0);
     expect(r.session.hasPlayed()).toBe(false);
@@ -236,7 +259,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("onStart() serves one ball to the spawn and starts ball 1 at score 0", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     expect(r.session.onStart()).toBe(true);
     expect(r.calls).toEqual([{ op: "add", spec: SPAWN }]);
     expect(r.session.activeBallId).toBe(FIRST_ID);
@@ -248,7 +271,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("a second onStart() while playing returns false and adds nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.award(500);
     expect(r.session.onStart()).toBe(false);
@@ -259,7 +282,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("a drain of the active ball removes it BEFORE serving the next, then ball 2", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.step(drainOf(FIRST_ID));
     expect(r.calls).toEqual([
@@ -280,7 +303,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("the bus listener only records: the world is touched in service(), not dispatch()", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.dispatchOnly(drainOf(FIRST_ID));
     expect(r.calls).toHaveLength(1);
@@ -296,7 +319,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("a drain event for a non-active id is ignored: no remove, no add", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.step(drainOf(FIRST_ID + 99));
     expect(r.calls).toHaveLength(1);
@@ -305,7 +328,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("600 steps with no drain event never remove or respawn the parked ball (CR-01)", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     for (let i = 0; i < 600; i++) r.step();
     expect(r.calls).toHaveLength(1);
@@ -314,7 +337,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("the third drain removes the ball, serves nothing, and ends the game with the score kept", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME - 1);
     r.session.award(4200);
     const last = r.session.activeBallId;
@@ -334,7 +357,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("after game over, steps and stray drain events change nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME);
     const callsBefore = r.calls.length;
     for (let i = 0; i < 120; i++) r.step(drainOf(-1));
@@ -343,7 +366,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("onStart() after game over resets the score to 0 and the ball to 1", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.award(7000);
     for (let i = 0; i < BALLS_PER_GAME; i++) drainAndFinish(r);
@@ -357,7 +380,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
   });
 
   it("two drain events for the active id in one batch remove it once and serve once", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.step(drainOf(FIRST_ID), drainOf(FIRST_ID));
     finishBonus(r);
@@ -380,7 +403,7 @@ function nudgeTimes(r: Rig, n: number): void {
 
 describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   it("direction table: left gives +x, right gives -x, up gives -y, to every ball", () => {
-    const r = makeRig([77]);
+    const r = makeRig(NO_SAVE, [77]);
     r.session.onStart();
     r.session.onNudge("left");
     r.tick(NUDGE_COOLDOWN_STEPS);
@@ -398,14 +421,14 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("onNudge in game-over applies nothing", () => {
-    const r = makeRig([77]);
+    const r = makeRig(NO_SAVE, [77]);
     r.session.onNudge("left");
     r.session.onNudge("up");
     expect(r.impulses).toEqual([]);
   });
 
   it("the third rapid nudge warns: isWarning() is true for exactly WARNING_FLASH_STEPS ticks", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     nudgeTimes(r, 2);
     expect(r.session.isWarning()).toBe(false);
@@ -421,7 +444,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("the fourth rapid nudge tilts: state tilted, not live, awards ignored, no warning shown", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.award(3000);
     nudgeTimes(r, 4);
@@ -435,7 +458,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("while tilted, onNudge applies no impulse and does not move the meter", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     nudgeTimes(r, 4);
     const impulsesAtTilt = r.impulses.length;
@@ -450,7 +473,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("a drain while tilted on ball 1 serves ball 2 playing, with a reset meter and the score kept", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.award(2500);
     nudgeTimes(r, 4);
@@ -477,7 +500,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("a serve clears a live warning window", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     nudgeTimes(r, 3);
     expect(r.session.isWarning()).toBe(true);
@@ -488,7 +511,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("a tilt on ball 3 followed by its drain ends the game with the score kept", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME - 1);
     r.session.award(9000);
     nudgeTimes(r, 4);
@@ -501,7 +524,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
   });
 
   it("onStart() after a tilted game over resets the meter: the first nudge of the new game does not warn", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME - 1);
     nudgeTimes(r, 4);
     drainAndFinish(r);
@@ -528,27 +551,27 @@ function expectRelayMatchesState(r: Rig): void {
 
 describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
   it("the constructor switches the flippers off (attract)", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     expect(r.gate).toEqual([false]);
     expectRelayMatchesState(r);
   });
 
   it("onStart switches them on, after serving", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     expect(r.gate).toEqual([false, true]);
     expectRelayMatchesState(r);
   });
 
   it("a refused onStart (already playing) records nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onStart();
     expect(r.gate).toEqual([false, true]);
   });
 
   it("the tilting nudge switches them off; the warning and earlier nudges do not", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     nudgeTimes(r, 3);
     expect(r.session.getState()).toBe("playing");
@@ -561,7 +584,7 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
   });
 
   it("the drain switches them off for the bonus tally and the serve after it switches them on, after a tilt or not", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.step(drainOf(r.session.activeBallId)); // plain drain: the tally
     expect(r.gate).toEqual([false, true, false]);
@@ -577,7 +600,7 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
   });
 
   it("the final drain switches them off", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME);
     expect(r.session.getState()).toBe("game-over");
     // Start on; each drain off (the tally) then on (the serve); the last drain
@@ -587,7 +610,7 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
   });
 
   it("a step with no drain records nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.step();
     r.tick(10);
@@ -595,7 +618,7 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
   });
 
   it("across two full games with tilts, the last value is on exactly while playing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     const check = (): void => expectRelayMatchesState(r);
     check();
     for (let game = 0; game < 2; game++) {
@@ -626,7 +649,7 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
 
 describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   it("while playing, a lane switch on 500 scores 500 only; a second call changes nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     expect(r.session.isInlaneScored(500)).toBe(false);
     expect(r.session.isInlaneScored(501)).toBe(false);
@@ -641,7 +664,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   });
 
   it("a drain followed by the next serve clears both", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onSwitch("lane", 500);
     r.session.onSwitch("lane", 501);
@@ -652,7 +675,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   });
 
   it("onStart clears both (a new game after game over)", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     drainAndFinish(r);
     drainAndFinish(r);
@@ -666,7 +689,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   });
 
   it("a non-lane switch sets nothing, and outside play a lane switch sets nothing", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onSwitch("lane", 500); // game over (attract)
     expect(r.session.isInlaneScored(500)).toBe(false);
     r.session.onStart();
@@ -678,7 +701,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   });
 
   it("an unknown id reads false", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onSwitch("lane", 500);
     for (const id of [-1, 0, 400, 502, 600, Number.NaN]) {
@@ -689,7 +712,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
 
 describe("GameSession end-of-ball bonus (plan 06-05 Task 1, PLSH-06, D-11, D-12)", () => {
   it("tracer: 2 rollovers and 1 inlane are tallied over 216 counted steps, credited, then ball 2 is served", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onSwitch("rollover", 400, false);
     r.session.onSwitch("rollover", 401, false);
@@ -739,7 +762,7 @@ function fillThreeRows(r: Rig): void {
 
 describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () => {
   it("at elapsed duration - 1 the state is still bonus and the score unchanged; at duration the credit lands and ball 2 is served in the same service()", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     fillThreeRows(r);
     const before = r.session.getScore();
@@ -765,7 +788,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("skip: onFlipperPress during a 3-row tally ends it on the next service with the full credit", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     fillThreeRows(r);
     const before = r.session.getScore(); // includes the skill shot on 400
@@ -782,7 +805,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("onFlipperPress while playing, tilted or game-over changes nothing and does not shorten a later tally", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onFlipperPress(); // game over (attract)
     expect(r.session.getState()).toBe("game-over");
     r.session.onStart();
@@ -814,7 +837,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("forfeit: a drain while tilted holds exactly 120 steps that onFlipperPress does not shorten, credits nothing, then ball 2 plays", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     fillThreeRows(r); // counted before the tilt, forfeit all the same
     r.session.award(2500);
@@ -840,7 +863,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("all zero: a drain with no switches holds 60 steps and credits 0", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onSwitch("bumper", 200, false);
     r.session.onSwitch("slingshot", 300, false);
@@ -858,7 +881,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("last ball: the third drain's tally ends in game over with the credit in the final score and the flippers off", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     startAndDrain(r, BALLS_PER_GAME - 1);
     fillThreeRows(r);
     const before = r.session.getScore();
@@ -874,7 +897,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("the credit keeps the saturating integer guard: a tally past MAX_SAFE_INTEGER saturates", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.session.onSwitch("rollover", 400, false);
     r.session.award(Number.MAX_SAFE_INTEGER - 500 - r.session.getScore());
@@ -886,7 +909,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("reset: counters are zero on every new serve and on onStart, so nothing carries between balls or games", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onStart();
     fillThreeRows(r);
     drainAndFinish(r); // ball 1: 3 rows
@@ -904,7 +927,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("switches outside play (game over, tilted, the tally itself) never count", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onSwitch("rollover", 400, true); // attract
     r.session.onStart();
     r.step(drainOf(FIRST_ID));
@@ -916,7 +939,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("getDrainCount() rises once per drain of the active ball, never for a stray id or a repeated event", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     expect(r.session.getDrainCount()).toBe(0);
     r.session.onStart();
     r.step(drainOf(FIRST_ID + 99)); // stray id
@@ -932,7 +955,7 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("getNudgeCount() rises only for accepted nudges and getLastNudgeDir() names the last accepted direction", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     r.session.onNudge("up"); // game over: refused
     expect(r.session.getNudgeCount()).toBe(0);
     r.session.onStart();
@@ -949,11 +972,45 @@ describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () 
   });
 
   it("getBonusElapsed() is 0 outside the bonus state", () => {
-    const r = makeRig();
+    const r = makeRig(NO_SAVE);
     expect(r.session.getBonusElapsed()).toBe(0);
     r.session.onStart();
     r.tick(50);
     expect(r.session.getBonusElapsed()).toBe(0);
     expect(r.session.isBonusForfeit()).toBe(false);
+  });
+});
+
+describe("GameSession ball save (plan 06-07 Task 1, PLSH-07, D-08, D-09)", () => {
+  it("tracer: a drain inside the save window costs no ball: remove then add, still ball 1 and playing, one backstop save; the re-served ball's drain enters the bonus state", () => {
+    const r = makeRig(); // production options: the save on
+    r.session.onStart();
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(10); // the spy ball is left of the chute: the timer starts and runs
+    const gateBefore = r.gate.slice();
+
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getBall()).toBe(1);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.calls).toEqual([
+      { op: "add", spec: SPAWN },
+      { op: "remove", id: FIRST_ID },
+      { op: "add", spec: SPAWN },
+    ]);
+    expect(r.session.activeBallId).toBe(FIRST_ID + 1);
+    expect(r.liveCount()).toBe(1);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getLastSaveKind()).toBe("backstop");
+    expect(r.session.getLastSaveStep()).toBe(10);
+    expect(r.session.getDrainCount()).toBe(1);
+    expect(r.gate).toEqual(gateBefore); // the flippers stayed on
+    expect(r.session.getSaveLampPhase()).toBe("off");
+
+    r.tick(10);
+    r.step(drainOf(FIRST_ID + 1));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(1);
+    finishBonus(r);
+    expect(r.session.getBall()).toBe(2);
   });
 });
