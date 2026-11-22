@@ -5,20 +5,24 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "[new, 9d1f3b1 WR-01 fix] Any activating gesture after expiry reopens the window, so a resume that never settles is unbounded again (regression of the previous WR-01 bound)"
+    disposition: open
+    title: "An activating gesture inside a live starting window gets no window of its own, so a late Enter's \"start\" figure is discarded if the device starts after the window"
   - id: WR-02
     severity: warning
-    disposition: fixed
-    title: "[new, 9d1f3b1 x 60c34ac] The reopen path discards and hard-cuts voices on a context that IN-05 already treats as rendering"
+    disposition: open
+    title: "A resume() that rejects re-arms the window on every gesture, so the bound only holds for a resume that stays pending"
+  - id: WR-03
+    severity: warning
+    disposition: open
+    title: "Impossible-state guard: `activationReopened = false` in the fresh-resume branch"
   - id: IN-01
     severity: info
-    disposition: fixed
-    title: "[new, 56df7b0 / 9d1f3b1 / 60c34ac] The window documentation still says \"at most STARTING_WINDOW_MS after the first resume()\""
+    disposition: open
+    title: "The \"settles\" test says every pending resume settles together, but only the last promise resolves"
   - id: IN-02
     severity: info
-    disposition: fixed
-    title: "[new, 47d0caa] `applyEnvelope` is now test-only, and the envelope header still describes \"one thin applier\""
+    disposition: open
+    title: "The remote-module asset pattern misses side-effect imports and template-literal specifiers"
   - id: IN-03
     severity: info
     disposition: fixed
@@ -39,21 +43,22 @@ findings:
     severity: info
     disposition: fixed
     title: "[new, f1b2a1e WR-01 fix code] Already-defended-elsewhere: `add()`'s steal loop, and the `rendering` flag added to it, never run from the engine"
-open: 0
-total: 9
-recorded: 2026-11-21T23:43:09.554Z
+open: 5
+total: 10
+recorded: 2026-11-22T00:01:05.577Z
 ---
 
 # Phase 05: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | fixed | 05-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 05-REVIEW-FIX.md |
-| IN-01 | info | fixed | 05-REVIEW-FIX.md |
-| IN-02 | info | fixed | 05-REVIEW-FIX.md |
-| IN-03 | info | fixed | 05-REVIEW-FIX.md |
-| IN-04 | info | fixed | 05-REVIEW-FIX.md |
+| WR-01 | warning | open | - |
+| WR-02 | warning | open | - |
+| WR-03 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
+| IN-04 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-05 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-06 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
 | IN-07 | info | fixed | 05-REVIEW-FIX.md (not in the current review) |
