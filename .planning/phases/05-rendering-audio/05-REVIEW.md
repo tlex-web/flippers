@@ -1,168 +1,138 @@
 ---
 phase: 05-rendering-audio
-reviewed: 2026-11-22T00:30:00Z
+reviewed: 2026-11-21T23:58:52Z
 depth: standard
-files_reviewed: 11
+files_reviewed: 5
 files_reviewed_list:
-  - index.html
   - src/audio/audio-engine.test.ts
   - src/audio/audio-engine.ts
-  - src/audio/envelope.test.ts
   - src/audio/envelope.ts
-  - src/audio/voice-pool.test.ts
-  - src/audio/voice-pool.ts
   - src/render/asset-free.test.ts
   - src/sandbox/main.ts
-  - src/ui/hud.test.ts
-  - src/ui/hud.ts
 findings:
   critical: 0
-  warning: 2
-  info: 4
-  total: 6
-  necessity: 0
+  warning: 3
+  info: 2
+  total: 5
+  necessity: 1
 status: issues_found
 ---
 
-# Phase 5: Code Review Report (incremental: fix commits 9d1f3b1..7534110)
+# Phase 5: Code Review Report (incremental: round-2 fix commits 660e019..0c11790)
 
-**Reviewed:** 2026-11-22
+**Reviewed:** 2026-11-21T23:58:52Z
 **Depth:** standard
-**Files Reviewed:** 11
+**Files Reviewed:** 5
 **Status:** issues_found
-**Scope:** `git diff 0ef68ab..HEAD -- index.html src`, which covers the 8 fix commits for WR-01 and IN-01 to IN-07 from the previous review. For context I also read `src/audio/audio-unlock.ts`, `src/input/flipper-input.ts` (the key bindings) and `src/audio/test/fake-audio-context.ts`.
+**Scope:** `git diff f6f6a1a..HEAD -- src`, the 7 fix commits for WR-01, WR-02 and IN-01..IN-04 of the previous review. For context I also read `src/audio/audio-unlock.ts`, `src/audio/test/fake-audio-context.ts` and the flipper key bindings in `src/input/flipper-input.ts:223-226`.
 
 ## Summary
 
-Seven of the eight fixes are correct and complete. They are IN-01, IN-02, IN-03 (as scoped), IN-04, IN-06, IN-07, and IN-05 on its own. I ran the affected test files and all 130 tests pass. The WR-01 fix does what the UAT confirmed: after a Shift-first unlock, the next Enter reopens the window and the "start" figure plays. But the fix gates the reopen on `navigator.userActivation.isActive`, and that is broader than "this gesture is the one that can start the context". This brings back the unbounded node growth that the previous WR-01 had bounded (new WR-01). The reopen path also interacts badly with the IN-05 fix (new WR-02). I reproduced both with a scratch vitest against the real engine and the fake context. The scratch file lives outside the repo and the source tree was not changed.
+All six fixes do what they claim. `vitest run src/audio src/render/asset-free.test.ts` passes (7 files, 97 tests). I traced the `unlock()` state machine through every flag transition. `activationReopened` implies `resumePending` on every path (set at `:322` just before `:327`, and cleared at `:331`, `:335` and `:341` together with `resumePending`). So "one activation reopen per stuck resume" holds, and the WR-02 `!isRendering(ctx)` guard does what it says. Both UAT paths trace through correctly.
+
+There are two remaining holes in the same state machine, and I reproduced both with scratch vitests (the scratch files are outside the repo and the tree was not changed):
+- **WR-01 is not complete for an Enter that lands late in the first window.** That Enter starts the context, but it does not get a window of its own. If the device needs longer than the time left in the window, the next flush discards the "start" figure.
+- **The window bound only covers a resume that stays pending.** A `resume()` that rejects clears `resumePending`, so every later gesture opens a fresh window. A held key then builds voices with no bound and logs an error on every keydown.
 
 **Per-fix verdicts:**
 
 | Fix | Verdict | Notes |
 |---|---|---|
-| WR-01 (9d1f3b1) | Fixed, with a regression | "start" after Shift then Enter now plays. But every activating gesture after the window expires reopens it, so a resume that never settles has unbounded node growth again (WR-01 below). |
-| IN-01 (56df7b0) | Fixed, then made stale by WR-01/IN-05 | The wording matches the engine as it was. "At most STARTING_WINDOW_MS" no longer holds with reopen and the clock-advancing path (IN-01 below). |
-| IN-02 (ad83a46) | Fixed | `#hud-mute` is no longer a live region. `#hud-mute-live` is the only other `role="status"` (checked `index.html:189`, `:207`). Toggles are announced and the boot state is not. Writing only on change means a mute and unmute inside one frame announces nothing, which is correct because nothing changed. |
-| IN-03 (3876b5b) | Fixed as scoped | All five suggested patterns are present, each with a sample, and the local `<script type="module" src="/...">` does not match. A few remaining gaps are listed as IN-03 below. |
-| IN-04 (47d0caa) | Fixed | `scheduleEnvelope` cancels from `points[0].time === lt`, the same as the old `applyEnvelope(env.gain, lt, …)`, so behaviour is unchanged. The handle stores the very array that was scheduled. `applyEnvelope` is now used only by tests (IN-02 below). |
-| IN-05 (60c34ac) | Fixed | `isRendering` is correct for flush. `startAudioT` is reset on every window open, so clock movement before the window does not count. Suspended with no pending resume stays not-rendering. The reopen path breaks the invariant, see WR-02. |
-| IN-06 (de4923e) | Fixed | Adding a suspended flush at +40 ms would catch a window that is too short. `fireAllEnded()` after the pool teardown is pinned. The useless `await` is gone. |
-| IN-07 (7534110) | Fixed | `rendering` is required on `admit` and `add`. tsc reports no other callers (`grep` shows the engine at `audio-engine.ts:422`/`:453` and the pool tests). |
+| WR-01 (660e019, 665dc82) | Fixed for a stuck resume, with gaps | Once per stuck resume is enforced and pinned by the 60 s held-key test. Not covered: an activating gesture inside a live window (WR-01 below), and a resume that rejects (WR-02 below). |
+| WR-02 (23f874d) | Fixed | The reopen requires `!isRendering(ctx)`, so the IN-05 interval no longer discards voices or re-anchors `startAudioT`. The reopen allowance stays unspent there, which is correct. |
+| IN-01 (ca0496d) | Fixed | The engine header, the `STARTING_WINDOW_MS` doc, the `flush()` doc and `main.ts:57-63` match the code. |
+| IN-02 (c4c8b53) | Fixed | `applyEnvelope` is used only by `envelope.test.ts` and `voice-pool.test.ts`, and production calls `scheduleEnvelope` plus `envelopeEnd` (`audio-engine.ts:542-544`). |
+| IN-03 (af96c21) | Fixed as suggested | The four patterns are in place and the tree scans clean. A small gap remains in the remote-module pattern (IN-02 below). |
+| IN-04 (0c11790) | Fixed | The clock now moves past `startAudioT` before the suspended flush, and `activeVoices()` is asserted. |
 
-**Necessity:** I read `necessity-review.md` and found no necessity findings in this diff.
+**Necessity:** I read `necessity-review.md`. There is one finding (WR-03).
+
+## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01: [new, 9d1f3b1 WR-01 fix] Any activating gesture after expiry reopens the window, so a resume that never settles is unbounded again (regression of the previous WR-01 bound)
+### WR-01: An activating gesture inside a live starting window gets no window of its own, so a late Enter's "start" figure is discarded if the device starts after the window
 
-**File:** `src/audio/audio-engine.ts:293-300` (reopen condition), `src/audio/audio-engine.ts:106-110` (`hasTransientActivation`), `src/input/flipper-input.ts:225-226` (flipper keys `KeyZ`, `ArrowLeft`, `Slash`, `ArrowRight`)
+**File:** `src/audio/audio-engine.ts:316-326` (the reopen requires `nowMs >= this.startingUntilMs`), `src/audio/audio-engine.ts:399-403` (the discard on expiry), `src/audio/audio-engine.test.ts:434-443` (this test pins the behaviour)
 
-**Issue:** The fix assumes that only a modifier-only keydown (held Shift) lacks activation, so only that case can repeat. That assumption is wrong for this table and for the browser's activation model:
-- `KeyZ`, `Slash`, `ArrowLeft` and `ArrowRight` are bound flipper keys, and they are not modifiers. In Chromium every keydown of them notifies user activation before dispatch, auto-repeat keydowns included.
-- `isActive` is *transient* activation. It stays true for the activation lifespan, about 5 s in Chromium and Firefox, after any activating input, and `AudioContext.resume()` does not consume it. So within 5 s of any Z or arrow press, even a held-Shift auto-repeat reads `isActive === true`.
-- In engines without `navigator.userActivation`, the fallback (`?? true`, line 109) treats every re-gesture as activating, Shift auto-repeat included.
+**Issue:** The WR-01 goal is that after a non-activating first gesture (Shift, which is also a flipper key), the Enter that really starts the context still gets its "start" cue played. The reopen only fires once the first window has expired. Here is what happens if Enter lands inside the window, for example at t0 + 230 ms:
+1. `unlock()` takes neither branch, so the deadline stays at t0 + 250 ms. Enter's `resume()` starts the audio device.
+2. The "start" cue is flushed at about t0 + 240 ms. It is inside the window, so it is scheduled on the frozen clock.
+3. The device needs some tens of ms to come up. The first flush after t0 + 250 ms sees a context that is neither rendering (the clock has not moved yet) nor starting, and `pool.discardAll()` stops and disconnects the whole "start" figure before it can sound.
 
-In the never-settling scenario that bounded the window in the first place (no output device, see the header at line 25), every flipper press after expiry discards the held voices and opens a fresh 250 ms window. Each window builds voices whose started sources cannot reach `stop()` on a context that never renders. The previous review already noted that the browser may keep those disconnected nodes alive. So node creation is now bounded per gesture, not per stuck resume.
+The "do not extend a live window" rule existed to stop re-gestures from extending the window without limit. Since 660e019 the `activationReopened` flag already caps activation reopens at one per stuck resume. Extending a live window once on the first activating gesture therefore keeps the same bound of two windows per stuck resume. The `expired` condition no longer protects anything, and it creates this gap. The UAT covered "Shift, **wait**, Enter", which waits past expiry, so it did not reach this case. A quick Shift-then-Enter, the natural start, does.
 
-**Reproduced:** I ran a scratch vitest with the real engine, a fake context whose resume never settles, and `isActivation` returning true (a held Z/arrow key). Over 60 s of frames there was a bumper cue every frame and `unlock()` every 2 frames (key auto-repeat). The result: **3520 voices started, 17600 nodes created**, 1801 `resume()` calls. Before 9d1f3b1 the same run starts at most one window's worth of voices, about 15.
+**Reproduced (scratch vitest, real engine and the fake context):** Shift-unlock at 1000 ms, then an activating unlock at 1230 ms. Flush "start" at 1240 ms, which returns 1. Then flush at 1257 ms with the clock still frozen: **6 of the 6 "start" nodes were disconnected**.
 
-The regression test models a re-gesture as `active: false`. It never covers a re-gesture with activation while a resume stays stuck, which is the case that grows.
-
-**Fix:** Allow at most one activation reopen per stuck resume. If the first activating `resume()` does not start the context, later gestures cannot either: all pending `resume()` promises settle together once the context is allowed to start.
+**Fix:** Let the first activating gesture while a resume is pending (re)arm the window whether or not it has expired. Discard old voices only when the window had expired:
 
 ```ts
-private activationReopened = false;
-
-// unlock():
-const nowMs = this.clock();
-const expired = nowMs >= this.startingUntilMs;
-const reopen =
-  this.resumePending && expired && !this.activationReopened && this.isActivation();
-if (!this.resumePending || reopen) {
-  if (reopen) {
-    this.activationReopened = true;
-    this.pool.discardAll(ctx.currentTime);
-  } else {
-    this.activationReopened = false;
-  }
-  this.startingUntilMs = nowMs + STARTING_WINDOW_MS;
-  this.startAudioT = ctx.currentTime;
+} else if (!this.activationReopened && !this.isRendering(ctx) && this.isActivation()) {
+  this.activationReopened = true;
+  // Voices from an expired window must not ride into the new one; a live
+  // window's voices are at most STARTING_WINDOW_MS old and may stay.
+  if (nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
+  this.openStartingWindow(ctx, nowMs);
 }
-// and clear `activationReopened` in both resume() settle callbacks.
 ```
 
-Add an engine test that uses `stuckRig` with `activation.active = true` throughout, unlocks every 2 frames for several seconds, and asserts that `started` stays within two windows' worth of voices.
+Update `audio-engine.test.ts:434` to expect a flush 20 ms past the original deadline to return 1, and a flush past `nowMs + STARTING_WINDOW_MS` to return 0. Add a test for the reproduced sequence (an activating unlock at t0 + 230 ms, "start" flushed, then a flush at t0 + 257 ms on a frozen clock, with no "start" node disconnected).
 
-### WR-02: [new, 9d1f3b1 x 60c34ac] The reopen path discards and hard-cuts voices on a context that IN-05 already treats as rendering
+### WR-02: A resume() that rejects re-arms the window on every gesture, so the bound only holds for a resume that stays pending
 
-**File:** `src/audio/audio-engine.ts:295-299`, `src/audio/audio-engine.ts:392-395`
+**File:** `src/audio/audio-engine.ts:313-315`, `src/audio/audio-engine.ts:333-337`
 
-**Issue:** IN-05's invariant is that once the audio clock has moved, the context is rendering, and its voices must not be torn down or discarded. The reopen branch does not check it. Suppose the context is in the IN-05 interval: rendering, `state` still `"suspended"`, `resumePending` true. If an activating gesture arrives after the window's wall-clock deadline, `unlock()`:
-1. calls `pool.discardAll(ctx.currentTime)`, and `discardAll` calls `steal(i, now, false)`, which disconnects every voice at once. The 5 ms fade it schedules is never heard, so audibly playing voices click off. This is the exact failure IN-05 was written to stop.
-2. resets `startAudioT` to the current clock, so `isRendering()` reads false until the clock moves again. A steal in that gap tears down at once.
+**Issue:** The window bound, and the round-2 WR-01 argument for it ("at most one activation reopen per stuck resume"), assume a resume that fails stays pending. A resume that rejects instead (a device start failure, which the header already treats as possible at `:17-18`) goes through the reject handler. That handler clears both `resumePending` and `activationReopened`. The next gesture then takes the `!this.resumePending` branch and opens a fresh 250 ms window, and its `resume()` rejects again. With a held flipper key (auto-repeat at about 30 Hz), every repeat re-arms the window:
+- voices are built on a context that never renders, about one per keydown, with no bound for as long as keys are pressed. The pool keeps the live graph at 16 voices, but node creation grows. That is the growth the previous two WR-01 rounds set out to bound.
+- `report("resume() was rejected", …)` runs on every keydown, which floods the console. `closedReported` already guards against the same flood for the closed state (`:290-297`).
 
-This is reachable when start-up takes longer than 250 ms after the reopening gesture (slow output devices such as Bluetooth sinks) and a flipper press lands in the state-lag interval. It is rare, but it is a logic hole between two fixes, and the reopen serves no purpose on a context that is already rendering.
+**Reproduced (scratch vitest):** `resume()` returns `Promise.reject(...)` every time, `isActivation` is true, and there is an unlock every 2 frames and a bumper cue every frame for 60 s. The result: **1800 voices started, 9002 nodes created, 1800 `console.error` lines**. The same run with a stuck resume stays within two windows, about 34 voices (the round-2 test at `audio-engine.test.ts:375`).
 
-**Reproduced (scratch vitest):** I flushed "start" on the stuck rig, set `currentTime = 0.02`, and moved the clock 260 ms on. The flush returned 1 (IN-05 path). Then `unlock()` with activation took the connected voice nodes **from 11 to 0** and `activeVoices()` to 0.
-
-**Fix:** Do not reopen, discard or re-anchor a context that is already rendering:
+**Fix:** Bound the windows per episode that ends in "running", not per promise, and report a rejection once. For example:
 
 ```ts
-if (!this.resumePending || (expired && !this.isRendering(ctx) && this.isActivation())) {
+/** Starting windows opened since the context last ran (or was created). */
+private windowsOpened = 0;
+private rejectReported = false;
+
+// unlock(), replacing the two branches' guards:
+const fresh = !this.resumePending && this.windowsOpened === 0;
+const reopen =
+  !fresh && this.windowsOpened < 2 && !this.isRendering(ctx) && this.isActivation();
+if (fresh || reopen) {
+  if (reopen && nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
+  this.windowsOpened++;
+  this.openStartingWindow(ctx, nowMs);
+}
+// resolve: this.resumePending = false; if (ctx.state === "running") this.windowsOpened = 0;
+// reject:  this.resumePending = false; if (!this.rejectReported) { this.rejectReported = true; report(...); }
 ```
 
-Add a test that sets the IN-05 state, lets the window expire, sends an activating `unlock()`, and asserts the voices stay connected.
+Also reset `windowsOpened` when `unlock()` sees `state === "running"`. Then a later OS-level suspend gets a fresh allowance. Add a test with a resume that always rejects, a held activating key and 60 s of frames, asserting that the voices started stay within two windows and that there is one `console.error`.
+
+### WR-03: Impossible-state guard: `activationReopened = false` in the fresh-resume branch
+
+**File:** `src/audio/audio-engine.ts:314`
+**Category:** necessity
+**Issue:** The fresh-resume branch runs only when `resumePending` is false. `activationReopened` is set true in only one place (`:322`), and `resumePending = true` follows unconditionally (`:327`). If anything in between throws, the catch at `:340-341` clears both. Every other write of `resumePending = false` (`:330`, `:334`, `:340`) also writes `activationReopened = false`. So `activationReopened` implies `resumePending`, and the reset at `:314` always writes `false` over `false`. It also suggests to the reader that the flag could be stale, which it cannot be. If the WR-02 fix changes how the flag is reset, the line should go with it.
+**Fix:** Remove line 314, or replace the separate flag with the per-episode counter from WR-02, where the reset has a real job.
 
 ## Info
 
-### IN-01: [new, 56df7b0 / 9d1f3b1 / 60c34ac] The window documentation still says "at most STARTING_WINDOW_MS after the first resume()"
+### IN-01: The "settles" test says every pending resume settles together, but only the last promise resolves
 
-**File:** `src/audio/audio-engine.ts:21-23`, `src/audio/audio-engine.ts:29-30`, `src/audio/audio-engine.ts:346-352`, `src/sandbox/main.ts:58-60`
+**File:** `src/audio/audio-engine.test.ts:404-432`
+**Issue:** `pending.settle` is overwritten on each `resume()` call, so `pending.settle?.()` at `:422` resolves only the third promise. The second (the reopen's) never settles, and neither does the first, which comes from `stuckRig`'s never-settling fake. The comment at `:421` says "Every pending resume settles together". The test passes because any one callback clears both flags. It therefore never shows that a late callback from an earlier resume is harmless after a fresh window has opened.
+**Fix:** Collect every resolver (`const resolvers: (() => void)[] = []`), install the override before the rig's first `unlock()`, and resolve them all at `:422`. Or reword the comment to say that only the latest resume is settled.
 
-**Issue:**
-- The engine header says a starting context "is playable for at most STARTING_WINDOW_MS after the first `resume()` call". After WR-01, an activating gesture reopens the window, so the time is measured from the latest (re)open, not the first resume.
-- After IN-05, a suspended context whose clock is moving is playable with no time limit, because it is rendering.
-- The `flush()` doc (`:348-349`) defines "playable" only as running or starting, and leaves out the clock-advancing case.
-- `main.ts:59` repeats "at most STARTING_WINDOW_MS", which IN-01 had just made accurate.
+### IN-02: The remote-module asset pattern misses side-effect imports and template-literal specifiers
 
-**Fix:** Say "from the window's (re)opening; an activating re-gesture can reopen an expired window once" (once, after the WR-01 fix), and add the rendering case: "a suspended context whose audio clock is already advancing counts as running". Mirror the same wording in `main.ts`.
-
-### IN-02: [new, 47d0caa] `applyEnvelope` is now test-only, and the envelope header still describes "one thin applier"
-
-**File:** `src/audio/envelope.ts:4`, `src/audio/envelope.ts:122-134`
-
-**Issue:** After IN-04, production calls `scheduleEnvelope` plus `envelopeEnd` directly (`audio-engine.ts:505-507`). `applyEnvelope` is imported only by `envelope.test.ts:5` and `voice-pool.test.ts:6`. The module header (line 4) still says "Pure point math plus one thin applier", but there are now two.
-
-**Fix:** Either mark `applyEnvelope` as a test convenience in its doc comment, or move the two test call sites to `scheduleEnvelope(param, envelopePoints(...))` and delete it. Update the header line either way.
-
-### IN-03: [new, 3876b5b] The asset gate still misses a few ways to pull assets into the page from script
-
-**File:** `src/render/asset-free.test.ts:35-96`
-
-**Issue:** The IN-03 patterns cover markup and CSS. None of the following matches any pattern:
-- a remote ES module specifier, `import x from "https://esm.sh/…"` or `import("https://…")`. Vite leaves `https:` specifiers external, so it is a runtime network fetch.
-- `document.createElement("img" | "audio" | "video")` with a `.src`. Only `new Image(`, `new Audio(` and the literal tags are caught.
-- `data:` URIs (`src = "data:image/png;base64,…"`).
-- `new Worker(` or `importScripts(` with a remote URL.
-
-The current tree is clean. This is only about the gate's coverage.
-
-**Fix:** Add patterns, each with a sample:
-- `/\bfrom\s*["'](https?:)?\/\/|\bimport\s*\(\s*["'](https?:)?\/\//`
-- `/\bcreateElement\s*\(\s*["'](img|audio|video|source)["']/i`
-- `/["'`]data:(image|audio|font|video)\//i`
-- `/\bnew\s+(Shared)?Worker\s*\(|\bimportScripts\s*\(/`
-
-### IN-04: [new, 60c34ac] IN-05's "suspended with no resume pending stays not-rendering" branch has no clock-advanced test
-
-**File:** `src/audio/audio-engine.ts:392-395`, `src/audio/audio-engine.test.ts:227-237`
-
-**Issue:** The fix report says a context suspended with no resume pending is still not rendering. The existing test at `:227` ("a suspended context with no resume in flight drops cues") predates `isRendering`. It does not pin the case where `currentTime > startAudioT` (a context that ran, then was suspended at the OS level, with its clock advanced). If someone drops the `this.resumePending &&` term from `isRendering`, flush would treat that suspended context as rendering. It would keep building voices that never end, and steals would skip teardown. That is the original leak.
-
-**Fix:** In that test, set `fake.currentTime` past the value it had at unlock before the suspended flush, and assert `flush()` returns 0 and `activeVoices()` is 0.
+**File:** `src/render/asset-free.test.ts:98-102`, `src/render/asset-free.test.ts:103-107`
+**Issue:** `import "https://esm.sh/x";` has no `from` and no `(`, so no pattern matches it (the URL pattern needs `href=`/`src=`). It is still a runtime fetch that Vite leaves external. `` import(`https://…`) `` and `` createElement(`img`) `` are also missed, because the character classes accept only `"` and `'`.
+**Fix:** Use `/\b(from|import)\s*["'`](https?:)?\/\/|\bimport\s*\(\s*["'`](https?:)?\/\//` and `["'`]` in the `createElement` pattern, with positive samples for `import "https://x/y.js";` and `` import(`https://x`) ``.
 
 ---
 
-_Reviewed: 2026-11-22_
+_Reviewed: 2026-11-21T23:58:52Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
