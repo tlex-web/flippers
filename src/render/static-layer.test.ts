@@ -2,8 +2,17 @@ import { describe, it, expect } from "vitest";
 
 import { resolve, type ResolvedElement } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
-import { DROP_SHADOW, LIGHT_POOL, LIGHT_POOL_FADE, VIGNETTE_CLEAR, VIGNETTE_EDGE } from "./palette";
-import { bakeStatic, traceElement } from "./static-layer";
+import { buildLampShapes, type LampShape } from "./lamps";
+import {
+  DROP_SHADOW,
+  LAMP_RIM,
+  LIGHT_POOL,
+  LIGHT_POOL_FADE,
+  ROLLOVER_UNLIT,
+  VIGNETTE_CLEAR,
+  VIGNETTE_EDGE,
+} from "./palette";
+import { bakeStatic, drawUnlitLenses, traceElement } from "./static-layer";
 import {
   createRecordingContext,
   GradientStub,
@@ -309,5 +318,206 @@ describe("bakeStatic depth (PLSH-03)", () => {
   it("keeps the drawn-id list in element order, mounts excluded", () => {
     const { ids } = bake();
     expect(ids).toEqual(elements.filter((el) => !el.mount).map((el) => el.id));
+  });
+});
+
+/**
+ * Unlit lens bake (plan 06-03 Task 3, D-21): every lamp in the shape table gets
+ * its unlit lens and a faint specular rim, after the element loop and before
+ * the vignette, generically over buildLampShapes.
+ */
+
+/** Index of the last draw of any element's own path (the end of the element loop). */
+function elementLoopEnd(rec: Recorder): number {
+  let end = -1;
+  for (const el of elements) {
+    if (el.mount) continue;
+    const want = expectedPath(el);
+    for (const d of draws(rec)) {
+      if (samePath(d.state.path, want) && d.index > end) end = d.index;
+    }
+  }
+  return end;
+}
+
+/** Index of the vignette (the last fillRect at identity). */
+function vignetteIndex(rec: Recorder): number {
+  const fills = draws(rec).filter(
+    (d) => d.call.name === "fillRect" && d.state.transform.every((v, i) => v === IDENTITY[i]),
+  );
+  return fills[fills.length - 1]?.index ?? -1;
+}
+
+/** The closed polygon path of a lens: moveTo, lineTo per vertex, closePath. */
+function polygonPath(s: LampShape): CallEntry[] {
+  const out: CallEntry[] = [];
+  for (let i = 0; i < s.xs.length; i++) {
+    out.push({ kind: "call", name: i === 0 ? "moveTo" : "lineTo", args: [s.xs[i], s.ys[i]] });
+  }
+  out.push({ kind: "call", name: "closePath", args: [] });
+  return out;
+}
+
+/** The segments of a stroke path as point quads (each moveTo followed by a lineTo). */
+function segmentsOf(path: readonly CallEntry[]): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [];
+  for (let i = 0; i + 1 < path.length; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    if (a?.name === "moveTo" && b?.name === "lineTo") {
+      out.push([
+        a.args[0] as number,
+        a.args[1] as number,
+        b.args[0] as number,
+        b.args[1] as number,
+      ]);
+    }
+  }
+  return out;
+}
+
+/** LAMP_RIM strokes 0.008 m wide after draw index `from`. */
+function rimsAfter(rec: Recorder, from: number): DrawCall[] {
+  return draws(rec).filter(
+    (d) =>
+      d.index > from &&
+      d.call.name === "stroke" &&
+      d.state.props.get("strokeStyle") === LAMP_RIM &&
+      d.state.props.get("lineWidth") === 0.008,
+  );
+}
+
+const lampShapes = buildLampShapes(elements);
+const fillShapes = lampShapes.filter((s) => s.style === "fill");
+const rolloverShapes = lampShapes.filter((s) => s.style === "stroke" && s.elementDrawn);
+
+describe("bakeStatic unlit lenses (D-21)", () => {
+  it("fills every fill lens (3 chevrons, 2 arrows) with its UNLIT color after the element loop, before the vignette", () => {
+    const { rec } = bake();
+    expect(fillShapes.length).toBe(5);
+    const end = elementLoopEnd(rec);
+    const vig = vignetteIndex(rec);
+    expect(end).toBeGreaterThan(0);
+    for (const s of fillShapes) {
+      const want = polygonPath(s);
+      const fills = draws(rec).filter(
+        (d) => d.call.name === "fill" && samePath(d.state.path, want),
+      );
+      expect(fills.length, `lamp ${s.lamp}`).toBe(1);
+      const f = fills[0];
+      if (!f) continue;
+      expect(f.state.props.get("fillStyle"), `lamp ${s.lamp}`).toBe(s.unlit);
+      expect(f.state.props.get("globalAlpha")).toBe(1);
+      expect([...f.state.transform]).toEqual([...WORLD]);
+      expect(f.index).toBeGreaterThan(end);
+      expect(f.index).toBeLessThan(vig);
+    }
+  });
+
+  it("rims every fill lens with one 0.008 m LAMP_RIM stroke along its upper-left outer edge", () => {
+    const { rec } = bake();
+    const vig = vignetteIndex(rec);
+    for (const s of fillShapes) {
+      const want = polygonPath(s);
+      const fill = draws(rec).find((d) => d.call.name === "fill" && samePath(d.state.path, want));
+      expect(fill).toBeDefined();
+      if (!fill) continue;
+      const rim = rimsAfter(rec, fill.index)[0];
+      expect(rim, `lamp ${s.lamp}`).toBeDefined();
+      if (!rim) continue;
+      expect(rim.index).toBeLessThan(vig);
+      expect([...rim.state.transform]).toEqual([...WORLD]);
+      // The upper-left outer edge: from the left foot (chevron) or the left head
+      // corner (arrow) up to the apex.
+      const xs = Array.from(s.xs);
+      const apexY = Math.min(...Array.from(s.ys));
+      const leftX = Math.min(...xs);
+      const leftY = s.ys[xs.indexOf(leftX)] ?? 0;
+      const segs = segmentsOf(rim.state.path);
+      expect(segs.length, `lamp ${s.lamp}`).toBe(1);
+      const seg = segs[0];
+      if (!seg) continue;
+      const pts = [
+        [seg[0], seg[1]],
+        [seg[2], seg[3]],
+      ].sort((p, q) => (p[0] ?? 0) - (q[0] ?? 0));
+      expect(pts[0]?.[0]).toBeCloseTo(leftX, 12);
+      expect(pts[0]?.[1]).toBeCloseTo(leftY, 12);
+      expect(pts[1]?.[0]).toBeCloseTo(s.cx, 12);
+      expect(pts[1]?.[1]).toBeCloseTo(apexY, 12);
+    }
+  });
+
+  it("rims every rollover with a 0.008 m LAMP_RIM line 0.012 m up-table, and strokes no second unlit lens", () => {
+    const { rec } = bake();
+    expect(rolloverShapes.length).toBe(3);
+    const end = elementLoopEnd(rec);
+    for (const s of rolloverShapes) {
+      const el = elements.find((e) => e.kind === "rollover" && e.vertices[0]?.x === s.xs[0]);
+      expect(el).toBeDefined();
+      if (!el) continue;
+      const unlit = drawsOf(rec, el, "stroke").filter(
+        (d) => d.state.props.get("strokeStyle") === ROLLOVER_UNLIT,
+      );
+      expect(unlit.length, `rollover ${el.id}`).toBe(1);
+      const want: CallEntry[] = [];
+      for (let i = 0; i < s.xs.length; i++) {
+        want.push({
+          kind: "call",
+          name: i === 0 ? "moveTo" : "lineTo",
+          args: [s.xs[i], (s.ys[i] ?? 0) - 0.012],
+        });
+      }
+      const rims = rimsAfter(rec, end).filter((d) => samePath(d.state.path, want));
+      expect(rims.length, `rollover ${el.id}`).toBe(1);
+    }
+  });
+
+  it("strokes a lens the elements do not draw in its UNLIT color at its lineWidth, then rims its upper-left quarter", () => {
+    // A synthetic closed ring lens (the shape class of the 06-10 save ring).
+    const n = 16;
+    const xs = new Float64Array(n);
+    const ys = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      xs[i] = 1 + 0.2 * Math.cos((i / n) * Math.PI * 2);
+      ys[i] = 3 + 0.2 * Math.sin((i / n) * Math.PI * 2);
+    }
+    const ring: LampShape = {
+      lamp: 0,
+      style: "stroke",
+      xs,
+      ys,
+      closed: true,
+      lineWidth: 0.035,
+      elementDrawn: false,
+      lit: "#c77dff",
+      unlit: "#3c264d",
+      haloRadius: 0.22,
+      cx: 1,
+      cy: 3,
+      lensRadius: 0.2,
+    };
+    const rec = createRecordingContext();
+    drawUnlitLenses(rec.ctx, [ring]);
+    const body = draws(rec).find(
+      (d) =>
+        d.call.name === "stroke" &&
+        d.state.props.get("strokeStyle") === "#3c264d" &&
+        samePath(d.state.path, polygonPath(ring)),
+    );
+    expect(body).toBeDefined();
+    if (!body) return;
+    expect(body.state.props.get("lineWidth")).toBe(0.035);
+    const rim = rimsAfter(rec, body.index)[0];
+    expect(rim).toBeDefined();
+    if (!rim) return;
+    const segs = segmentsOf(rim.state.path);
+    expect(segs.length).toBeGreaterThan(0);
+    for (const [ax, ay, bx, by] of segs) {
+      expect((ax + bx) / 2).toBeLessThan(1);
+      expect((ay + by) / 2).toBeLessThan(3);
+    }
+    expect(rec.ctx.globalAlpha).toBe(1);
+    expect(rec.ctx.globalCompositeOperation).toBe("source-over");
   });
 });

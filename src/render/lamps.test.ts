@@ -8,6 +8,7 @@ import {
   buildLampShapes,
   LAMP_AWARD_HOLD_STEPS,
   LAMP_BLINK_PERIOD_STEPS,
+  LAMP_CHASE_DWELL_STEPS,
   LAMP_COUNT,
   LAMP_FADE_IN_STEPS,
   LAMP_FADE_OUT_STEPS,
@@ -343,6 +344,114 @@ describe("LampTracker inlane arrows (plan 06-03 Task 2, D-21)", () => {
       expect(lamps.level(LAMP_INLANE_501, 1)).toBe(1);
       expect(lamps.level(LAMP_INLANE_500, 1)).toBe(0);
     }
+  });
+});
+
+/** The attract ping-pong order, as lamp indices (500 400 401 402 501 402 401 400). */
+const CHASE = [
+  LAMP_INLANE_500,
+  LAMP_ROLLOVER_400,
+  LAMP_ROLLOVER_401,
+  LAMP_ROLLOVER_402,
+  LAMP_INLANE_501,
+  LAMP_ROLLOVER_402,
+  LAMP_ROLLOVER_401,
+  LAMP_ROLLOVER_400,
+] as const;
+const CHASE_LAMPS = [
+  LAMP_INLANE_500,
+  LAMP_ROLLOVER_400,
+  LAMP_ROLLOVER_401,
+  LAMP_ROLLOVER_402,
+  LAMP_INLANE_501,
+] as const;
+const CHEVRONS = [LAMP_SKILL_400, LAMP_SKILL_401, LAMP_SKILL_402] as const;
+
+describe("LampTracker attract chase (plan 06-03 Task 3, D-22)", () => {
+  it("game over runs the 500 400 401 402 501 402 401 400 ping-pong, one lamp per 18-update dwell", () => {
+    const { rules, lights, lamps } = makeRig();
+    rules.state = "game-over";
+    // Rule light state and stale inlane flags are ignored in attract.
+    lights.lit.add(401);
+    rules.inlanes.add(501);
+    expect(LAMP_CHASE_DWELL_STEPS).toBe(18);
+    const dwell = LAMP_CHASE_DWELL_STEPS;
+    for (let d = 0; d < CHASE.length * 2; d++) {
+      const lamp = CHASE[d % CHASE.length] ?? -1;
+      const next = CHASE[(d + 1) % CHASE.length] ?? -1;
+      for (let i = 0; i < dwell; i++) {
+        lamps.update();
+        // The dwell lamp rises from its first update.
+        expect(lamps.level(lamp, 1), `dwell ${d} update ${i}`).toBeGreaterThan(0);
+      }
+      // End of the dwell: only that lamp is lit, the previous one has faded out.
+      for (const l of CHASE_LAMPS) {
+        expect(lamps.level(l, 1), `dwell ${d} lamp ${l}`).toBe(l === lamp ? 1 : 0);
+      }
+      expect(lamps.level(next, 1)).toBe(0);
+      for (const c of CHEVRONS) expect(lamps.level(c, 1)).toBe(0);
+    }
+  });
+
+  it("the chase stops when a game starts: the lamps follow rule state again", () => {
+    const { rules, lights, lamps } = makeRig();
+    rules.state = "game-over";
+    run(lamps, LAMP_CHASE_DWELL_STEPS * 3);
+    rules.state = "playing";
+    lights.lit.add(402);
+    run(lamps, LAMP_FADE_OUT_STEPS);
+    for (const l of CHASE_LAMPS) {
+      expect(lamps.level(l, 1)).toBe(l === LAMP_ROLLOVER_402 ? 1 : 0);
+    }
+  });
+
+  it("tilted: chevrons go out with the disarm, rollover and arrow lamps keep their rule state", () => {
+    const { rules, lights, lamps } = makeRig();
+    rules.phase = "rotating";
+    rules.litLane = 400;
+    lights.lit.add(401);
+    rules.inlanes.add(500);
+    run(lamps, LAMP_FADE_IN_STEPS);
+    expect(lamps.level(LAMP_SKILL_400, 1)).toBe(1);
+    rules.state = "tilted";
+    rules.phase = "off";
+    rules.litLane = -1;
+    run(lamps, LAMP_FADE_OUT_STEPS);
+    for (const c of CHEVRONS) expect(lamps.level(c, 1)).toBe(0);
+    expect(lamps.level(LAMP_ROLLOVER_401, 1)).toBe(1);
+    expect(lamps.level(LAMP_INLANE_500, 1)).toBe(1);
+    expect(lamps.level(LAMP_ROLLOVER_400, 1)).toBe(0);
+    expect(lamps.level(LAMP_INLANE_501, 1)).toBe(0);
+  });
+
+  it("blink limit: across 600 frozen updates every on/off cycle of the blinking chevron is exactly 60 updates", () => {
+    const { rules, lamps } = makeRig();
+    rules.phase = "rotating";
+    rules.litLane = 402;
+    run(lamps, 37);
+    rules.phase = "frozen";
+    const onEdges: number[] = [];
+    const offEdges: number[] = [];
+    let last = lamps.level(LAMP_SKILL_402, 1);
+    let lastDelta = 0;
+    for (let n = 0; n < 600; n++) {
+      lamps.update();
+      const lv = lamps.level(LAMP_SKILL_402, 1);
+      const delta = lv - last;
+      if (delta > 0 && lastDelta <= 0) onEdges.push(n);
+      if (delta < 0 && lastDelta >= 0) offEdges.push(n);
+      if (delta !== 0) lastDelta = delta;
+      last = lv;
+    }
+    expect(onEdges.length).toBeGreaterThanOrEqual(9);
+    expect(offEdges.length).toBeGreaterThanOrEqual(9);
+    for (const edges of [onEdges, offEdges]) {
+      for (let i = 1; i < edges.length; i++) {
+        expect((edges[i] ?? 0) - (edges[i - 1] ?? 0)).toBe(LAMP_BLINK_PERIOD_STEPS);
+      }
+    }
+    // The first blink is a full on half, never a short flash.
+    expect(offEdges[0]).toBe(LAMP_BLINK_PERIOD_STEPS / 2);
   });
 });
 
