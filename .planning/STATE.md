@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-11-22T20:30:37.354Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-11-22T21:07:23.399Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 11d190322aecc61eb62b0e2e523ffb4d5da14716
+state_head: 7007b7d988fc23f002f2097fcb7d82097da43dc7
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 44
+  completed_plans: 45
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 3 of 14
+Plan: 4 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -106,6 +106,7 @@ Progress: [████████░░] 83%
 | Phase 05 P06 | 15 min | 3 tasks | 6 files |
 | Phase 06 P01 | 13 min | 3 tasks | 9 files |
 | Phase 06 P02 | 46min | 2 tasks | 6 files |
+| Phase 06 P03 | 35 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,9 @@ Recent decisions affecting current work:
 - [Phase 06]: isRestingInZone(ball, PlungerZone) is the single plunger rest test shared by the release gate and the skill-shot fall-back
 - [Phase 06]: 06-02: light pool fills tableBounds(elements) in world meters, not the whole backing, so the lift stays on the table
 - [Phase 06]: 06-02: vignette gradient inner radius 0.5 x half-diagonal, stops CLEAR 0 / EDGE 1; tests pin effective radii
+- [Phase 06]: 06-03: lamp blink and attract chase count from their own entry step (blinkStart, attractStart), never a global modulo, so every blink cycle is exactly 60 steps
+- [Phase 06]: 06-03: one buildLampShapes table drives the live lamp pass, the per-colour halo bake and the unlit lens bake; a new lamp (06-10 save ring) is one row
+- [Phase 06]: 06-03: inlane flags live in GameSession, set by a lane switch while playing and cleared in serveBall(); the 06-07 backstop re-serve must not call serveBall()
 
 ### Pending Todos
 
@@ -250,6 +254,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T20:30:35.270Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-11-22T21:07:21.929Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
