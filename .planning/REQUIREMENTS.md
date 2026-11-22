@@ -53,7 +53,7 @@ Requirements for the initial release: a polished, browser-playable core pinball 
 
 ### Polish (PLSH — portfolio "juice", in scope for v1)
 
-- [ ] **PLSH-01**: Subtle, decaying screen shake / camera kick on big hits and nudges
+- [x] **PLSH-01**: Subtle, decaying screen shake / camera kick on big hits and nudges
 - [ ] **PLSH-02**: Particle bursts and light flares on bumper/target hits
 - [ ] **PLSH-03**: Depth cues — a soft ball-drop shadow and playfield shading/vignette that imply 2.5D depth
 - [ ] **PLSH-04**: Glowing insert/lane lights with a lit-vs-unlit playfield state
@@ -117,7 +117,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RND-02 | Phase 5 | Complete |
 | RND-03 | Phase 5 | Complete |
 | AUD-01 | Phase 5 | Complete |
-| PLSH-01 | Phase 6 | Pending |
+| PLSH-01 | Phase 6 | Complete |
 | PLSH-02 | Phase 6 | Pending |
 | PLSH-03 | Phase 6 | Pending |
 | PLSH-04 | Phase 6 | Pending |
