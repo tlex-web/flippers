@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 
+import { BonusCounters, BonusTally } from "../game/bonus";
 import type { GameState } from "../game/game-session";
 import {
   ballText,
+  BonusView,
   DiagView,
   diagText,
   formatScore,
@@ -12,6 +14,8 @@ import {
   muteText,
   STATUS_TRANSIENT_STEPS,
   statusText,
+  type AttrSink,
+  type BonusSource,
   type DiagData,
   type HudSource,
   type TextSink,
@@ -515,5 +519,206 @@ describe("HudView bonus rows (plan 06-05 Task 2, 06-UI-SPEC rows 2 and 3, PLSH-0
     view.update(src);
     expect(status.writes).toBe(writes + 1);
     expect(status.textContent).toBe("");
+  });
+});
+
+/** Fake element attributes: records every set/remove call. */
+class FakeAttrSink implements AttrSink {
+  readonly attrs = new Map<string, string>();
+  calls = 0;
+  setAttribute(name: string, value: string): void {
+    this.calls++;
+    this.attrs.set(name, value);
+  }
+  removeAttribute(name: string): void {
+    this.calls++;
+    this.attrs.delete(name);
+  }
+  get hidden(): boolean {
+    return this.attrs.has("hidden");
+  }
+  get revealed(): string | undefined {
+    return this.attrs.get("data-revealed");
+  }
+}
+
+/** A settable bonus source over a real tally. */
+class FakeBonusSource implements BonusSource {
+  state: GameState = "playing";
+  elapsed = 0;
+  readonly tally = new BonusTally();
+  getState(): GameState {
+    return this.state;
+  }
+  getBonusTally(): Readonly<BonusTally> {
+    return this.tally;
+  }
+  getBonusElapsed(): number {
+    return this.elapsed;
+  }
+  /** Enter the bonus state with these counters (elapsed 0). */
+  enter(rollovers: number, inlanes: number, banks: number): void {
+    const c = new BonusCounters();
+    c.rollovers = rollovers;
+    c.inlanes = inlanes;
+    c.banks = banks;
+    this.tally.snapshot(c);
+    this.state = "bonus";
+    this.elapsed = 0;
+  }
+}
+
+/** A bonus view over fake sinks: the overlay, 3 rows (label, value) and TOTAL. */
+function makeBonusView(): {
+  view: BonusView;
+  overlay: FakeAttrSink;
+  rows: FakeAttrSink[];
+  labels: CountingSink[];
+  values: CountingSink[];
+  totalRow: FakeAttrSink;
+  total: CountingSink;
+  writes: () => number;
+} {
+  const overlay = new FakeAttrSink();
+  const rows = [new FakeAttrSink(), new FakeAttrSink(), new FakeAttrSink()];
+  const labels = [new CountingSink(), new CountingSink(), new CountingSink()];
+  const values = [new CountingSink(), new CountingSink(), new CountingSink()];
+  const totalRow = new FakeAttrSink();
+  const total = new CountingSink();
+  const writes = (): number =>
+    overlay.calls +
+    totalRow.calls +
+    total.writes +
+    rows.reduce((n, r) => n + r.calls, 0) +
+    labels.reduce((n, s) => n + s.writes, 0) +
+    values.reduce((n, s) => n + s.writes, 0);
+  return {
+    view: new BonusView(overlay, rows, labels, values, totalRow, total),
+    overlay,
+    rows,
+    labels,
+    values,
+    totalRow,
+    total,
+    writes,
+  };
+}
+
+describe("BonusView overlay (plan 06-06 Task 1, 06-UI-SPEC bonus overlay, D-12)", () => {
+  it("outside bonus the overlay is hidden; entering bonus removes hidden once", () => {
+    const { view, overlay } = makeBonusView();
+    const src = new FakeBonusSource();
+    view.update(src);
+    expect(overlay.hidden).toBe(true);
+    src.enter(3, 0, 1);
+    view.update(src);
+    expect(overlay.hidden).toBe(false);
+    const callsAfterEntry = overlay.calls;
+    for (let i = 0; i < 10; i++) view.update(src);
+    expect(overlay.calls).toBe(callsAfterEntry);
+    src.state = "playing";
+    view.update(src);
+    expect(overlay.hidden).toBe(true);
+  });
+
+  it("a forfeit tally keeps the overlay hidden", () => {
+    const { view, overlay } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.state = "bonus";
+    src.tally.markForfeit();
+    view.update(src);
+    expect(overlay.hidden).toBe(true);
+  });
+
+  it("rows ROLLOVERS 3 and BANKS 1 get labels, the third row is hidden, and at elapsed 0 only row 0 is revealed", () => {
+    const { view, rows, labels, totalRow } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(3, 0, 1);
+    view.update(src);
+    expect(labels[0]?.textContent).toBe("ROLLOVERS × 3");
+    expect(labels[1]?.textContent).toBe("BANKS × 1");
+    expect(rows[0]?.hidden).toBe(false);
+    expect(rows[1]?.hidden).toBe(false);
+    expect(rows[2]?.hidden).toBe(true);
+    expect(rows[0]?.revealed).toBe("true");
+    expect(rows[1]?.revealed).toBe("false");
+    expect(totalRow.revealed).toBe("false");
+  });
+
+  it("row 0 counts 1,500 at elapsed 24 and 3,000 at 48, when row 1 is revealed at 0; TOTAL 8,000 shows at 96", () => {
+    const { view, rows, values, totalRow, total } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(3, 0, 1);
+    view.update(src);
+    src.elapsed = 24;
+    view.update(src);
+    expect(values[0]?.textContent).toBe("1,500");
+    src.elapsed = 48;
+    view.update(src);
+    expect(values[0]?.textContent).toBe("3,000");
+    expect(rows[1]?.revealed).toBe("true");
+    expect(values[1]?.textContent).toBe("0");
+    expect(totalRow.revealed).toBe("false");
+    src.elapsed = 96;
+    view.update(src);
+    expect(values[1]?.textContent).toBe("5,000");
+    expect(totalRow.revealed).toBe("true");
+    expect(total.textContent).toBe("8,000");
+  });
+
+  it("with reducedMotion a revealed row shows its full value at once", () => {
+    const { view, values } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(3, 0, 1);
+    view.update(src, true);
+    expect(values[0]?.textContent).toBe("3,000");
+    src.elapsed = 48;
+    view.update(src, true);
+    expect(values[1]?.textContent).toBe("5,000");
+  });
+
+  it("an all-zero tally hides all three item rows and shows TOTAL 0 revealed from elapsed 0", () => {
+    const { view, overlay, rows, totalRow, total } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(0, 0, 0);
+    view.update(src);
+    expect(overlay.hidden).toBe(false);
+    expect(rows.map((r) => r.hidden)).toEqual([true, true, true]);
+    expect(totalRow.revealed).toBe("true");
+    expect(total.textContent).toBe("0");
+  });
+
+  it("an INLANES row reads INLANES × 2 and n = 1 keeps the same form", () => {
+    const { view, labels } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(1, 2, 0);
+    view.update(src);
+    expect(labels[0]?.textContent).toBe("ROLLOVERS × 1");
+    expect(labels[1]?.textContent).toBe("INLANES × 2");
+  });
+
+  it("write-on-change: 30 updates at an unchanged source and elapsed write nothing after the first", () => {
+    const { view, writes } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(3, 2, 1);
+    src.elapsed = 30;
+    view.update(src);
+    const first = writes();
+    expect(first).toBeGreaterThan(0);
+    for (let i = 0; i < 30; i++) view.update(src);
+    expect(writes()).toBe(first);
+  });
+
+  it("a counted step that does not change any shown integer writes nothing", () => {
+    const { view, writes } = makeBonusView();
+    const src = new FakeBonusSource();
+    src.enter(0, 0, 0);
+    view.update(src);
+    const first = writes();
+    for (let e = 1; e < 60; e++) {
+      src.elapsed = e;
+      view.update(src);
+    }
+    expect(writes()).toBe(first);
   });
 });
