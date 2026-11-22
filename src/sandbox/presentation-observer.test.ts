@@ -31,6 +31,7 @@ class FakeSession implements ObserverSession {
   drains = 0;
   nudges = 0;
   lastNudgeDir: NudgeDir = "left";
+  saves = 0;
   elapsed = 0;
   readonly tally = new BonusTally();
   getState(): GameState {
@@ -59,6 +60,9 @@ class FakeSession implements ObserverSession {
   }
   getLastNudgeDir(): NudgeDir {
     return this.lastNudgeDir;
+  }
+  getSaveCount(): number {
+    return this.saves;
   }
   getBonusTally(): Readonly<BonusTally> {
     return this.tally;
@@ -687,5 +691,56 @@ describe("PresentationObserver: nudge thump and effects (06-09, D-17, D-25)", ()
       if (c) kinds.push(c.kind);
     }
     expect(kinds).toEqual(["nudge", "tilt", "drain"]);
+  });
+});
+
+describe("PresentationObserver: save sting (06-10, D-10, D-25)", () => {
+  it("a save-count increment with no drain (kickback) pushes exactly ballSave on no element at strength 1", () => {
+    const r = rig("playing", 1);
+    r.session.saves = 1;
+    expect(step(r)).toEqual(["ballSave"]);
+    const c = r.cues.at(0);
+    expect(c?.elementId).toBe(-1);
+    expect(c?.strength).toBe(1);
+  });
+
+  it("a backstop save (drain-count and save-count increments in one step) pushes drain then ballSave", () => {
+    const r = rig("playing", 1);
+    r.session.drains = 1;
+    r.session.saves = 1;
+    expect(step(r)).toEqual(["drain", "ballSave"]);
+  });
+
+  it("a step with no save increment pushes nothing", () => {
+    const r = rig("playing", 1);
+    r.session.saves = 1;
+    step(r);
+    expect(step(r)).toEqual([]);
+  });
+
+  it("construction with count 2 pushes nothing on the first observe", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    session.ball = 2;
+    session.saves = 2;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
+  });
+
+  it("ballSave sits after drain and before bonusTick in the push order", () => {
+    const r = rig("playing", 1);
+    r.session.drain(2, 0, 0);
+    r.session.saves = 1;
+    expect(step(r)).toEqual(["drain", "ballSave", "bonusTick"]);
   });
 });

@@ -57,6 +57,8 @@ class FakeSource implements HudSource {
   skillStep = -1;
   bonusTotal = 0;
   bonusForfeit = false;
+  saveCount = 0;
+  saveStep = -1;
   getScore(): number {
     return this.score;
   }
@@ -89,6 +91,12 @@ class FakeSource implements HudSource {
   }
   isBonusForfeit(): boolean {
     return this.bonusForfeit;
+  }
+  getSaveCount(): number {
+    return this.saveCount;
+  }
+  getLastSaveStep(): number {
+    return this.saveStep;
   }
 }
 
@@ -522,6 +530,135 @@ describe("HudView bonus rows (plan 06-05 Task 2, 06-UI-SPEC rows 2 and 3, PLSH-0
     view.update(src);
     expect(status.writes).toBe(writes + 1);
     expect(status.textContent).toBe("");
+  });
+});
+
+describe("HudView BALL SAVED row (plan 06-10 Task 2, 06-UI-SPEC row 5, D-10)", () => {
+  /** A view mid-game on ball 1 at the given step, already written once (plain play). */
+  function playing(stepAt: number) {
+    const v = makeView();
+    const src = new FakeSource();
+    src.state = "playing";
+    src.ball = 1;
+    src.played = true;
+    src.step = stepAt;
+    v.view.update(src);
+    return { ...v, src };
+  }
+
+  /** Record a save at `at` (the session's save counter and step). */
+  function save(src: FakeSource, at: number): void {
+    src.saveCount++;
+    src.saveStep = at;
+  }
+
+  it("statusText(ballSaved) reads BALL SAVED", () => {
+    expect(statusText("ballSaved", 0)).toBe("BALL SAVED");
+  });
+
+  it("a save at step 100 shows BALL SAVED through step 279 and not at 280", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+    src.step = 100 + STATUS_TRANSIENT_STEPS - 1;
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+    src.step = 100 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
+  it("no save yet (count 0) shows nothing even with the step inside a stale window", () => {
+    const { view, src, status } = playing(100);
+    src.saveStep = 100;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
+  it("a skill shot at 150 is newer than a save at 100 and shows SKILL SHOT", () => {
+    const { view, src, status } = playing(170);
+    save(src, 100);
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = 150;
+    view.update(src);
+    expect(status.textContent).toBe("SKILL SHOT 5,000");
+  });
+
+  it("a save at 160 is newer than a skill shot at 150 and shows BALL SAVED", () => {
+    const { view, src, status } = playing(170);
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = 150;
+    save(src, 160);
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+  });
+
+  it("the newer save keeps showing after the older skill shot's window has expired", () => {
+    const { view, src, status } = playing(160);
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = 100;
+    save(src, 160);
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+    src.step = 100 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+  });
+
+  it("BALL SAVED outranks WARNING", () => {
+    const { view, src, status } = playing(100);
+    src.warning = true;
+    save(src, 100);
+    view.update(src);
+    expect(status.textContent).toBe("BALL SAVED");
+  });
+
+  it("tilted shows TILT inside the save window (row 1 outranks row 5)", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    src.state = "tilted";
+    view.update(src);
+    expect(status.textContent).toBe("TILT");
+  });
+
+  it("a bonus tally inside the save window shows BONUS (row 3 outranks row 5)", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    src.state = "bonus";
+    src.bonusTotal = 8000;
+    view.update(src);
+    expect(status.textContent).toBe("BONUS 8,000");
+  });
+
+  it("a forfeit hold inside the save window shows TILT · NO BONUS (row 2 outranks row 5)", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    src.state = "bonus";
+    src.bonusForfeit = true;
+    view.update(src);
+    expect(status.textContent).toBe("TILT · NO BONUS");
+  });
+
+  it("write-on-change: one write when BALL SAVED appears, none inside the window, one when it expires", () => {
+    const { view, src, status } = playing(100);
+    const before = status.writes;
+    save(src, 100);
+    view.update(src);
+    expect(status.writes).toBe(before + 1);
+    for (let s = 101; s < 100 + STATUS_TRANSIENT_STEPS; s++) {
+      src.step = s;
+      view.update(src);
+    }
+    expect(status.writes).toBe(before + 1);
+    src.step = 100 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    src.step++;
+    view.update(src);
+    expect(status.writes).toBe(before + 2);
   });
 });
 
