@@ -8,7 +8,13 @@ import {
   type FlipperGate,
   type GameSessionWorld,
 } from "./game-session";
-import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuning";
+import { bonusDurationSteps } from "./bonus";
+import {
+  NUDGE_COOLDOWN_STEPS,
+  NUDGE_IMPULSE,
+  TILT_FORFEIT_HOLD_STEPS,
+  WARNING_FLASH_STEPS,
+} from "./tuning";
 
 /**
  * GameSession contracts:
@@ -714,5 +720,240 @@ describe("GameSession end-of-ball bonus (plan 06-05 Task 1, PLSH-06, D-11, D-12)
     expect(r.session.getBall()).toBe(2);
     expect(r.session.activeBallId).toBe(FIRST_ID + 1);
     expect(r.liveCount()).toBe(1);
+  });
+});
+
+/** Tick and service one fixed step with no events (no flipper press). */
+function idleStep(r: Rig): void {
+  r.tick(1);
+  r.step();
+}
+
+/** Three rollovers (the third completing the bank) and one inlane: 3 rows, 10,000. */
+function fillThreeRows(r: Rig): void {
+  r.session.onSwitch("rollover", 400, false);
+  r.session.onSwitch("rollover", 401, false);
+  r.session.onSwitch("rollover", 402, true);
+  r.session.onSwitch("lane", 500, false);
+}
+
+describe("GameSession bonus edges (plan 06-05 Task 2, PLSH-06, D-11..D-13)", () => {
+  it("at elapsed duration - 1 the state is still bonus and the score unchanged; at duration the credit lands and ball 2 is served in the same service()", () => {
+    const r = makeRig();
+    r.session.onStart();
+    fillThreeRows(r);
+    const before = r.session.getScore();
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getBonusTally().rows).toBe(3);
+    expect(r.session.getBonusTotal()).toBe(10000);
+    const duration = bonusDurationSteps(3, false);
+    expect(duration).toBe(264);
+    expect(r.session.getBonusElapsed()).toBe(0);
+    for (let i = 1; i < duration; i++) {
+      idleStep(r);
+      expect(r.session.getBonusElapsed()).toBe(i);
+    }
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getScore()).toBe(before);
+    expect(r.liveCount()).toBe(0);
+    idleStep(r);
+    expect(r.session.getScore()).toBe(before + 10000);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(2);
+    expect(r.liveCount()).toBe(1);
+    expect(r.session.getBonusElapsed()).toBe(0);
+  });
+
+  it("skip: onFlipperPress during a 3-row tally ends it on the next service with the full credit", () => {
+    const r = makeRig();
+    r.session.onStart();
+    fillThreeRows(r);
+    const before = r.session.getScore(); // includes the skill shot on 400
+    r.step(drainOf(FIRST_ID));
+    idleStep(r);
+    idleStep(r);
+    expect(r.session.getState()).toBe("bonus");
+    r.session.onFlipperPress();
+    expect(r.session.getState()).toBe("bonus"); // latched, not acted on yet
+    idleStep(r);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getScore()).toBe(before + 10000);
+    expect(r.session.getBall()).toBe(2);
+  });
+
+  it("onFlipperPress while playing, tilted or game-over changes nothing and does not shorten a later tally", () => {
+    const r = makeRig();
+    r.session.onFlipperPress(); // game over (attract)
+    expect(r.session.getState()).toBe("game-over");
+    r.session.onStart();
+    r.session.onSwitch("rollover", 400, false);
+    const before = r.session.getScore(); // includes the skill shot on 400
+    r.session.onFlipperPress(); // playing
+    expect(r.session.getState()).toBe("playing");
+    expect(r.calls).toHaveLength(1);
+    r.step(drainOf(FIRST_ID));
+    let steps = 0;
+    while (r.session.getState() === "bonus") {
+      idleStep(r);
+      steps++;
+    }
+    expect(steps).toBe(bonusDurationSteps(1, false));
+    expect(r.session.getScore()).toBe(before + 1000);
+
+    // Tilted: a press before the drain does not shorten the forfeit or a skip.
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    r.session.onFlipperPress();
+    r.step(drainOf(r.session.activeBallId));
+    steps = 0;
+    while (r.session.getState() === "bonus") {
+      idleStep(r);
+      steps++;
+    }
+    expect(steps).toBe(TILT_FORFEIT_HOLD_STEPS);
+  });
+
+  it("forfeit: a drain while tilted holds exactly 120 steps that onFlipperPress does not shorten, credits nothing, then ball 2 plays", () => {
+    const r = makeRig();
+    r.session.onStart();
+    fillThreeRows(r); // counted before the tilt, forfeit all the same
+    r.session.award(2500);
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    const scoreAtTilt = r.session.getScore();
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.isBonusForfeit()).toBe(true);
+    expect(r.session.getBonusTotal()).toBe(0);
+    expect(r.session.getBonusTally().rows).toBe(0);
+    for (let i = 1; i < TILT_FORFEIT_HOLD_STEPS; i++) {
+      r.session.onFlipperPress();
+      idleStep(r);
+      expect(r.session.getState()).toBe("bonus");
+    }
+    r.session.onFlipperPress();
+    idleStep(r);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.isBonusForfeit()).toBe(false);
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.getScore()).toBe(scoreAtTilt);
+  });
+
+  it("all zero: a drain with no switches holds 60 steps and credits 0", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.onSwitch("bumper", 200, false);
+    r.session.onSwitch("slingshot", 300, false);
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getBonusTally().rows).toBe(0);
+    expect(r.session.getBonusTotal()).toBe(0);
+    let steps = 0;
+    while (r.session.getState() === "bonus") {
+      idleStep(r);
+      steps++;
+    }
+    expect(steps).toBe(60);
+    expect(r.session.getScore()).toBe(0);
+    expect(r.session.getBall()).toBe(2);
+  });
+
+  it("last ball: the third drain's tally ends in game over with the credit in the final score and the flippers off", () => {
+    const r = makeRig();
+    startAndDrain(r, BALLS_PER_GAME - 1);
+    fillThreeRows(r);
+    const before = r.session.getScore();
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("bonus");
+    finishBonus(r);
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.getScore()).toBe(before + 10000);
+    expect(r.session.activeBallId).toBe(-1);
+    expect(r.liveCount()).toBe(0);
+    expect(lastGate(r)).toBe(false);
+    expect(r.calls.filter((c) => c.op === "add")).toHaveLength(BALLS_PER_GAME);
+  });
+
+  it("the credit keeps the saturating integer guard: a tally past MAX_SAFE_INTEGER saturates", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.onSwitch("rollover", 400, false);
+    r.session.award(Number.MAX_SAFE_INTEGER - 500 - r.session.getScore());
+    expect(r.session.getScore()).toBe(Number.MAX_SAFE_INTEGER - 500);
+    r.step(drainOf(FIRST_ID));
+    finishBonus(r);
+    expect(r.session.getScore()).toBe(Number.MAX_SAFE_INTEGER);
+    expect(Number.isSafeInteger(r.session.getScore())).toBe(true);
+  });
+
+  it("reset: counters are zero on every new serve and on onStart, so nothing carries between balls or games", () => {
+    const r = makeRig();
+    r.session.onStart();
+    fillThreeRows(r);
+    drainAndFinish(r); // ball 1: 3 rows
+    r.step(drainOf(r.session.activeBallId)); // ball 2: nothing scored
+    expect(r.session.getBonusTally().rows).toBe(0);
+    expect(r.session.getBonusTotal()).toBe(0);
+    finishBonus(r);
+    fillThreeRows(r);
+    drainAndFinish(r); // ball 3 ends the game with its counters
+    expect(r.session.getState()).toBe("game-over");
+    r.session.onStart();
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getBonusTally().rows).toBe(0);
+    expect(r.session.getBonusTotal()).toBe(0);
+  });
+
+  it("switches outside play (game over, tilted, the tally itself) never count", () => {
+    const r = makeRig();
+    r.session.onSwitch("rollover", 400, true); // attract
+    r.session.onStart();
+    r.step(drainOf(FIRST_ID));
+    r.session.onSwitch("rollover", 400, true); // during the tally
+    expect(r.session.getBonusTotal()).toBe(0);
+    finishBonus(r);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getBonusTally().rows).toBe(0);
+  });
+
+  it("getDrainCount() rises once per drain of the active ball, never for a stray id or a repeated event", () => {
+    const r = makeRig();
+    expect(r.session.getDrainCount()).toBe(0);
+    r.session.onStart();
+    r.step(drainOf(FIRST_ID + 99)); // stray id
+    expect(r.session.getDrainCount()).toBe(0);
+    r.step(drainOf(FIRST_ID), drainOf(FIRST_ID));
+    expect(r.session.getDrainCount()).toBe(1);
+    r.step(drainOf(-1)); // during the tally: no active ball
+    expect(r.session.getDrainCount()).toBe(1);
+    finishBonus(r);
+    expect(r.session.getDrainCount()).toBe(1);
+    drainAndFinish(r);
+    expect(r.session.getDrainCount()).toBe(2);
+  });
+
+  it("getNudgeCount() rises only for accepted nudges and getLastNudgeDir() names the last accepted direction", () => {
+    const r = makeRig();
+    r.session.onNudge("up"); // game over: refused
+    expect(r.session.getNudgeCount()).toBe(0);
+    r.session.onStart();
+    r.session.onNudge("right");
+    expect(r.session.getNudgeCount()).toBe(1);
+    expect(r.session.getLastNudgeDir()).toBe("right");
+    r.session.onNudge("up"); // inside the cooldown: refused
+    expect(r.session.getNudgeCount()).toBe(1);
+    expect(r.session.getLastNudgeDir()).toBe("right");
+    r.tick(NUDGE_COOLDOWN_STEPS);
+    r.session.onNudge("up");
+    expect(r.session.getNudgeCount()).toBe(2);
+    expect(r.session.getLastNudgeDir()).toBe("up");
+  });
+
+  it("getBonusElapsed() is 0 outside the bonus state", () => {
+    const r = makeRig();
+    expect(r.session.getBonusElapsed()).toBe(0);
+    r.session.onStart();
+    r.tick(50);
+    expect(r.session.getBonusElapsed()).toBe(0);
+    expect(r.session.isBonusForfeit()).toBe(false);
   });
 });

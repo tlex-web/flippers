@@ -438,3 +438,82 @@ describe("MuteView write-on-change (05-REVIEW IN-03)", () => {
     expect(live.textContent).toBe("Sound on");
   });
 });
+
+describe("HudView bonus rows (plan 06-05 Task 2, 06-UI-SPEC rows 2 and 3, PLSH-06)", () => {
+  it("ballText reads BALL n / 3 during the bonus tally", () => {
+    expect(ballText("bonus", 2)).toBe("BALL 2 / 3");
+    expect(ballText("bonus", 3)).toBe("BALL 3 / 3");
+  });
+
+  it("statusText: BONUS <total> with separators, and TILT · NO BONUS", () => {
+    expect(statusText("bonus", 12000)).toBe("BONUS 12,000");
+    expect(statusText("bonus", 0)).toBe("BONUS 0");
+    expect(statusText("tiltNoBonus", 0)).toBe("TILT · NO BONUS");
+  });
+
+  /** A source in the bonus state on ball 2 with an 8,000 tally. */
+  function inBonus(): FakeSource {
+    const src = new FakeSource();
+    src.state = "bonus";
+    src.ball = 2;
+    src.played = true;
+    src.step = 500;
+    src.bonusTotal = 8000;
+    return src;
+  }
+
+  it("a bonus source shows BONUS 8,000, written once for the whole tally", () => {
+    const { view, status, ball } = makeView();
+    const src = inBonus();
+    view.update(src);
+    expect(status.textContent).toBe("BONUS 8,000");
+    expect(ball.textContent).toBe("BALL 2 / 3");
+    const writes = status.writes;
+    for (let i = 0; i < 264; i++) {
+      src.step++;
+      view.update(src);
+    }
+    expect(status.writes).toBe(writes);
+    expect(status.textContent).toBe("BONUS 8,000");
+  });
+
+  it("a forfeit source shows TILT · NO BONUS", () => {
+    const { view, status } = makeView();
+    const src = inBonus();
+    src.bonusTotal = 0;
+    src.bonusForfeit = true;
+    view.update(src);
+    expect(status.textContent).toBe("TILT · NO BONUS");
+  });
+
+  it("tilted still wins (row 1)", () => {
+    const { view, status } = makeView();
+    const src = inBonus();
+    src.state = "tilted";
+    src.bonusForfeit = true;
+    view.update(src);
+    expect(status.textContent).toBe("TILT");
+  });
+
+  it("a skill transient inside a bonus shows BONUS (row 3 outranks row 5)", () => {
+    const { view, status } = makeView();
+    const src = inBonus();
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = src.step;
+    view.update(src);
+    expect(status.textContent).toBe("BONUS 8,000");
+  });
+
+  it("the tally ending rewrites the status once (BONUS to the next row)", () => {
+    const { view, status } = makeView();
+    const src = inBonus();
+    view.update(src);
+    const writes = status.writes;
+    src.state = "playing";
+    src.ball = 3;
+    view.update(src);
+    expect(status.writes).toBe(writes + 1);
+    expect(status.textContent).toBe("");
+  });
+});
