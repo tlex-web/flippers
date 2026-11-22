@@ -27,6 +27,10 @@
  * - `"drain"` (on the drain element, plus a drain-apron flash): once per
  *   `getDrainCount()` increment, i.e. on the drain step itself, not when the
  *   next ball is served after the bonus tally (06-06, research Pitfall 2);
+ * - `"ballSave"`: once per `getSaveCount()` increment, kickback or backstop, at
+ *   strength 1 on no element (06-10, D-10, D-25); a backstop save also raises
+ *   the drain count on the same step, so it is heard as the drain growl, then
+ *   the save sting;
  * - `"bonusTick"`: once per increase of `revealedRowCount(rows, elapsed)`
  *   while in a non-forfeit `"bonus"` tally with rows > 0, so one tick per item
  *   row reveal (the first on the drain step, after the drain cue), none per
@@ -67,6 +71,7 @@ export type ObserverSession = Pick<
   | "getDrainCount"
   | "getNudgeCount"
   | "getLastNudgeDir"
+  | "getSaveCount"
   | "getBonusTally"
   | "getBonusElapsed"
 >;
@@ -111,6 +116,7 @@ export class PresentationObserver {
   private prevSkillShots: number;
   private prevDrains: number;
   private prevNudges: number;
+  private prevSaves: number;
   /** Bonus tally rows revealed at the previous observe (0 outside a tickable tally). */
   private prevRevealed: number;
   /** Per watched flipper (same index as flipperIds), preallocated once. */
@@ -139,6 +145,7 @@ export class PresentationObserver {
     this.prevSkillShots = session.getSkillShotCount();
     this.prevDrains = session.getDrainCount();
     this.prevNudges = session.getNudgeCount();
+    this.prevSaves = session.getSaveCount();
     this.prevRevealed = this.revealedRows(this.prevState);
     this.flippers = flippers;
     this.flipperIds = flipperIds;
@@ -159,6 +166,7 @@ export class PresentationObserver {
     const skillShots = this.session.getSkillShotCount();
     const drains = this.session.getDrainCount();
     const nudges = this.session.getNudgeCount();
+    const saves = this.session.getSaveCount();
     const revealed = this.revealedRows(state);
     const prev = this.prevState;
 
@@ -213,6 +221,8 @@ export class PresentationObserver {
       if (this.fx) this.fx.onDrain();
     }
 
+    for (let n = this.prevSaves; n < saves; n++) this.cues.push("ballSave", NO_ELEMENT, 1);
+
     for (let n = this.prevRevealed; n < revealed; n++) this.cues.push("bonusTick", NO_ELEMENT, 1);
 
     if (state === "game-over" && prev !== "game-over") this.cues.push("gameOver", NO_ELEMENT, 1);
@@ -223,6 +233,7 @@ export class PresentationObserver {
     this.prevSkillShots = skillShots;
     this.prevDrains = drains;
     this.prevNudges = nudges;
+    this.prevSaves = saves;
     this.prevRevealed = revealed;
   }
 

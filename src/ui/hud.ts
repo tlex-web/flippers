@@ -18,8 +18,9 @@
  *   empty in game-over (`ballText`);
  * - status: one message at a time, resolved by the 06-UI-SPEC priority table
  *   (TILT, then TILT · NO BONUS for a forfeit hold, then BONUS <total> for the
- *   whole tally, then SKILL SHOT <value> for `STATUS_TRANSIENT_STEPS` fixed steps
- *   after an award, then the attract and game-over prompts, then WARNING, else empty;
+ *   whole tally, then SKILL SHOT <value> or BALL SAVED for `STATUS_TRANSIENT_STEPS`
+ *   fixed steps after an award or a save (the newer of the two wins), then the
+ *   attract and game-over prompts, then WARNING, else empty;
  *   `StatusCode`, `statusText`). It is the only HUD line announced to assistive tech;
  *   the score changes too often to announce. The mute announcer (`MuteView`'s
  *   second sink, a visually hidden live region) is the page's other one.
@@ -70,6 +71,10 @@ export interface HudSource {
   getBonusTotal(): number;
   /** Whether the tally in progress is a tilt forfeit (read in the `"bonus"` state). */
   isBonusForfeit(): boolean;
+  /** Saves since construction, kickback or backstop. */
+  getSaveCount(): number;
+  /** `getStep()` at the most recent save (-1 before any). */
+  getLastSaveStep(): number;
 }
 
 /** Built once: en-US thousands grouping, integers only. */
@@ -108,15 +113,23 @@ export function ballText(state: GameState, ball: number): string {
 /**
  * What the status line shows, resolved from the 06-UI-SPEC priority table
  * (highest wins): 1 `tilt`, 2 `tiltNoBonus` (a forfeit hold), 3 `bonus` (the
- * whole tally), 5 `skillShot`, 6 `attract` / `gameOver` (the prompts),
- * 7 `warning`, 8 `none`. Later plans add their rows (NEW HIGH SCORE, BALL SAVED)
- * as new codes.
+ * whole tally), 5 `skillShot` / `ballSaved` (the newer of the two),
+ * 6 `attract` / `gameOver` (the prompts), 7 `warning`, 8 `none`. Later plans
+ * add their rows (NEW HIGH SCORE) as new codes.
  */
 export type StatusCode =
-  "none" | "tilt" | "tiltNoBonus" | "bonus" | "skillShot" | "attract" | "gameOver" | "warning";
+  | "none"
+  | "tilt"
+  | "tiltNoBonus"
+  | "bonus"
+  | "skillShot"
+  | "ballSaved"
+  | "attract"
+  | "gameOver"
+  | "warning";
 
 /**
- * How long a transient status (SKILL SHOT) holds, in fixed physics steps:
+ * How long a transient status (SKILL SHOT, BALL SAVED) holds, in fixed physics steps:
  * 180 steps = 1.5 s at 120 Hz. Counted on the session's step clock, never the
  * wall clock, so it freezes on tab blur.
  */
@@ -139,6 +152,8 @@ export function statusText(code: StatusCode, value: number): string {
       return `BONUS ${formatScore(value)}`;
     case "skillShot":
       return `SKILL SHOT ${formatScore(value)}`;
+    case "ballSaved":
+      return "BALL SAVED";
     case "attract":
       return "PRESS ENTER TO START";
     case "gameOver":
@@ -210,8 +225,14 @@ export class HudView {
     }
 
     // Status priority (06-UI-SPEC): 1 TILT, 2 TILT · NO BONUS, 3 BONUS,
-    // 5 SKILL SHOT, 6 prompts, 7 WARNING, 8 empty. The bonus total is fixed for
-    // the whole tally, so BONUS is written (and announced) once.
+    // 5 SKILL SHOT / BALL SAVED (the newer of the two inside its window wins),
+    // 6 prompts, 7 WARNING, 8 empty. The bonus total is fixed for the whole
+    // tally, so BONUS is written (and announced) once.
+    const now = src.getStep();
+    const skillStep = src.getLastSkillStep();
+    const saveStep = src.getLastSaveStep();
+    const skillOn = src.getSkillShotCount() > 0 && now < skillStep + STATUS_TRANSIENT_STEPS;
+    const saveOn = src.getSaveCount() > 0 && now < saveStep + STATUS_TRANSIENT_STEPS;
     let code: StatusCode;
     let value = 0;
     if (state === "tilted") {
@@ -221,10 +242,9 @@ export class HudView {
     } else if (state === "bonus") {
       code = "bonus";
       value = src.getBonusTotal();
-    } else if (
-      src.getSkillShotCount() > 0 &&
-      src.getStep() < src.getLastSkillStep() + STATUS_TRANSIENT_STEPS
-    ) {
+    } else if (saveOn && (!skillOn || saveStep > skillStep)) {
+      code = "ballSaved";
+    } else if (skillOn) {
       code = "skillShot";
       value = src.getLastSkillValue();
     } else if (state === "game-over") {
