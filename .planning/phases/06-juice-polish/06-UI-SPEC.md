@@ -1,10 +1,11 @@
 ---
 phase: "6"
 slug: "juice-polish"
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-11-22"
+reviewed_at: "2026-11-22"
 ---
 
 # Phase 6 — UI Design Contract
@@ -147,6 +148,8 @@ Each new CSS color must carry a comment naming the `palette.ts` constant it echo
 
 ## Canvas Visual Contract
 
+**Focal hierarchy:** the ball is the primary anchor and lit lamps come second. The vignette and light pool frame the lower-center play area, which is where the eye should rest. Particles are fleeting and thin: no particle ever out-glows the ball or stays longer than its 0.45 s life. Unlit lenses and walls recede.
+
 ### Live frame draw order (replaces the order in `TableRenderer.draw`)
 
 1. At identity, `fillRect` the whole backing with `BG_BOTTOM`. A shaken blit then never uncovers an edge strip **[CTX D-17]**.
@@ -237,8 +240,8 @@ The ball-save post and its sensor are one spec value: the drawn post radius equa
 
 | Emitter | Particles |
 |---------|-----------|
-| Bumper hit | **1 shockwave ring**: radius 1.0R → 2.0R over 24 steps, line width 0.02 → 0.006 m, alpha 0.9 → 0. **Sparks**: count = round(8 + 6 · strength), so up to 14. They spawn at the contact point on the rim and fly within ±80° of the outward normal at 1.5–3.0 m/s, with life 0.30–0.45 s, drag 4/s and gravity +2 m/s² along +y. Each is a streak with length = speed × 0.025 s (minimum 0.02 m) and width 0.012 m |
-| Sling kick | Count = round(4 + 4 · strength), so up to 8. They fly within ±35° of the `deriveKickFace` normal from the contact point at 1.2–2.4 m/s, with life 0.20–0.32 s and the same drag, gravity and streak model |
+| Bumper hit | **1 shockwave ring**: radius 1.0R → 2.0R over 24 steps, line width 0.02 → 0.006 m, alpha 0.9 → 0. **Sparks**: count = round(12 + 4 · strength), so 12–16 **[CTX D-19]**. They spawn at the contact point on the rim and fly within ±80° of the outward normal at 1.5–3.0 m/s, with life 0.30–0.45 s, drag 4/s and gravity +2 m/s² along +y. Each is a streak with length = speed × 0.025 s (minimum 0.02 m) and width 0.012 m |
+| Sling kick | Count = round(6 + 4 · strength), so 6–10, centered on the "about 8" of **[CTX D-19]**. They fly within ±35° of the `deriveKickFace` normal from the contact point at 1.2–2.4 m/s, with life 0.20–0.32 s and the same drag, gravity and streak model |
 | Rollover, inlane or skill-shot award | **1 baked star glint**: a 4-point star sprite of 0.24 m across, baked once per color, scaling 0.6 → 1.0 while alpha goes 1 → 0 over 42 steps (0.35 s). **3–4 motes**: discs of radius 0.018 m drifting upward (−y) at 0.15–0.30 m/s, life 0.6–0.8 s |
 | Ball save | 10 sparks (see the post flourish) |
 
@@ -275,7 +278,7 @@ The ball-save post and its sensor are one spec value: the drawn post radius equa
 | 7 | Playing with the warning open | `WARNING` **[CODE]** | The existing window |
 | 8 | Plain play | empty **[CODE]** | — |
 
-Transient durations are counted on the fixed-step clock, never the wall clock, so they freeze on tab blur. Every status text keeps the existing `--status` magenta style. The longest new text, `TILT · NO BONUS` at 15 characters, is shorter than the existing 23-character `GAME OVER · PRESS ENTER`, so the panel never widens.
+Transient durations are counted on the fixed-step clock, never the wall clock, so they freeze on tab blur. Every status text keeps the existing `--status` magenta style. The longest new text, `SKILL SHOT 25,000` at 17 characters, is shorter than the existing 23-character `GAME OVER · PRESS ENTER`, so the panel never widens.
 
 ### End-of-ball bonus overlay (`#hud-bonus`, new) **[CTX D-11, D-12, SPEC layout]**
 
@@ -348,22 +351,46 @@ Copy rules:
 
 ## UI Considerations
 
-Applicable state considerations resolved: 9 covered, 3 backstop, 0 unresolved.
+This section was produced by the post-verification UI-consideration probe on 2026-11-22, with element kinds confirmed by the user. Empty-state and error-state copy lives in the Copywriting Contract, and the rows below refer to it rather than repeat it.
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| empty | High-score line (`#hud-best`) | ✅ covered | When the stored best is 0 or unreadable, `#hud-best` is empty in game over and no `HIGH SCORE 0` is shown (Copywriting: Empty state) |
-| error | High-score storage | ✅ covered | When localStorage throws or is corrupt, nothing is shown, play continues, and the in-memory best appears once it is above 0 (Copywriting: Error state, D-16) |
-| loading | High-score storage | ✅ covered | Read synchronously once at boot, so there is no loading state; the first HUD write already has the best |
-| zero-one-many | Bonus overlay rows | ✅ covered | Rows with n = 0 are omitted. n = 1 reads `BANKS × 1`. Any n reads `× n` with no plural change, because labels are fixed nouns. All-zero shows only `TOTAL` · `0` for 60 steps |
-| populated | Bonus overlay | ✅ covered | Up to 3 item rows plus TOTAL, revealed in order at 48 steps each, TOTAL held 120 steps, 264 steps at most |
-| partial | Bonus overlay mid-tally | ✅ covered | Every included row is laid out from step 0 with `visibility: hidden`, so the panel size is fixed and partial reveals never reflow |
-| overflow | Bonus overlay values | ✅ covered | `white-space: nowrap`, the grid sizes to its content from `min-width: 240px`, and tabular-nums are used. A 7-digit row value or a 3-digit count widens the panel instead of wrapping |
-| long-text | Status line | ✅ covered | Every new status text is ≤ 15 characters, shorter than the existing 23-character `GAME OVER · PRESS ENTER`, so the panel width is unchanged. A new best uses a transient `NEW HIGH SCORE` instead of a longer combined string |
-| long-text | HUD score during count-up | ✅ covered | tabular-nums keeps the digits from shifting sideways. A thousands separator appearing during the chase widens the line by one column, which is acceptable because the panel is left-anchored |
-| populated | Lamp state map | 🧪 backstop | Each lamp's lit/unlit/blink state must match its rule state in every FSM state (attract, serve, rotating, frozen, armed, last 2 s, tilted). Verify with a held-out renderer recorder test that drives the rule states and asserts the lamp levels |
-| populated | Shake under reduced motion | 🧪 backstop | With the reduced-motion boolean set, the shake offset is exactly 0 for nudge, bumper, drain and tilt, while particles and blinks still draw. Verify with a recorder test of the `setTransform` and `drawImage` offsets |
-| populated | Count-up snap rules | 🧪 backstop | On a new game the score snaps to 0 with no countdown, and under reduced motion it snaps with no animation. `getScore()` stays the true value throughout. Verify with HUD unit tests using a fake `TextSink` |
+**Element kinds (confirmed):**
+
+| Id | Element | Kind |
+|----|---------|------|
+| E1 | HUD score (`#hud-score`) | static-content |
+| E2 | High-score line (`#hud-best`) | static-content |
+| E3 | Status line (`#hud-status`) | static-content |
+| E4 | Bonus overlay (`#hud-bonus`) | list-collection |
+| E5–E9 | Lamps, screen shake, particles, ball-save post, depth | Opted out (`elements: []`). These are canvas surfaces with no content or data states, so the closed taxonomy does not apply. Their state coverage is the backstop rows below |
+
+**Probe coverage:** 13 applicable, with 11 resolved (explicit) and 2 dismissed. 0 unresolved.
+
+| Id | Category | Status | Truth / reason |
+|----|----------|--------|----------------|
+| E1 | overflow | ✅ resolved (explicit) | The score uses `white-space: nowrap` and tabular-nums in the left-anchored panel. As digits are added, the panel grows rightward and never wraps |
+| E1 | long-text | ✅ resolved (explicit) | During the count-up, digits never shift sideways. A thousands separator appearing during the chase widens the line by exactly one column |
+| E2 | overflow | ✅ resolved (explicit) | The line uses `nowrap`. Through an 8-digit best (`HIGH SCORE 99,999,999`, 21 characters) it stays under the 23-character `GAME OVER · PRESS ENTER`. Beyond that, the left-anchored panel grows rightward instead of wrapping |
+| E2 | long-text | ✅ resolved (explicit) | The line is fixed text plus a formatted number and contains nothing user-authored. There is no initials entry, which is deferred |
+| E3 | overflow | ✅ resolved (explicit) | The status line uses `nowrap`, and every status text fits the existing panel width |
+| E3 | long-text | ✅ resolved (explicit) | The longest new text is `SKILL SHOT 25,000` at 17 characters, under the existing 23-character maximum. A new best uses the transient `NEW HIGH SCORE` and never a combined string |
+| E4 | empty | ✅ resolved (explicit) | When every row is zero, only the heading and `TOTAL` · `0` show, for a 60-step hold (Copywriting: Empty state) |
+| E4 | loading | ⊘ dismissed | Reason: bonus totals are computed synchronously from rule counters on the drain step. Nothing is async, so there is no loading state |
+| E4 | error | ⊘ dismissed | Reason: the tally is pure integer arithmetic on rule counters, with no I/O and no failure path, so there is no error state |
+| E4 | populated | ✅ resolved (explicit) | Up to 3 item rows plus TOTAL are revealed in order, 48 steps per row, with TOTAL held for 120 steps. The tally runs at most 264 steps |
+| E4 | partial | ✅ resolved (explicit) | Every included row is laid out from step 0 with `visibility: hidden`, so a partial reveal never reflows or resizes the panel |
+| E4 | overflow | ✅ resolved (explicit) | The overlay uses `nowrap`, a grid sized to its content from `min-width: 240px`, and tabular-nums. A 7-digit value or a 3-digit count widens the panel instead of wrapping |
+| E4 | zero-one-many | ✅ resolved (explicit) | Rows with n = 0 are omitted. At n = 1 a row reads `BANKS × 1`, and any larger n reads `× n` the same way. Labels are fixed nouns with no plural change |
+
+**Rows outside the closed taxonomy** (researcher-authored; open subset):
+
+| Element | Kind of row | Status | Statement |
+|---------|-------------|--------|-----------|
+| E2 storage | empty | ✅ resolved (explicit) | When the stored best is 0 or unreadable, `#hud-best` is empty in game over and never shows `HIGH SCORE 0` |
+| E2 storage | error | ✅ resolved (explicit) | When localStorage throws or is corrupt, nothing is shown and play continues. The in-memory best appears once it is above 0 **[CTX D-16]** |
+| E2 storage | loading | ✅ resolved (explicit) | The best is read synchronously once at boot, so the first HUD write already has it |
+| E5 lamps | state map | 🧪 `{ statement: "Each lamp's lit, unlit or blink state matches its rule state in every FSM state: attract, serve, rotating, frozen, armed, the last 2 s and tilted", verification: backstop }` | Verified by a held-out renderer recorder test that drives the rule states and asserts the lamp levels |
+| E6 shake | reduced motion | 🧪 `{ statement: "With reduced motion set, the shake offset is exactly 0 for nudge, bumper, drain and tilt, while particles and blinks still draw", verification: backstop }` | Verified by a recorder test of the `setTransform` and `drawImage` offsets |
+| E1 score | count-up snap | 🧪 `{ statement: "On a new game the score snaps to 0 with no countdown, under reduced motion it snaps with no animation, and getScore() stays the true value throughout", verification: backstop }` | Verified by HUD unit tests with a fake `TextSink` |
 
 ---
 
@@ -388,12 +415,14 @@ Applicable state considerations resolved: 9 covered, 3 backstop, 0 unresolved.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS (not applicable, Tool is none, so the section is omitted)
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS (FLAG resolved: focal hierarchy line added)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: FLAG accepted. 11px and 12px are pre-existing **[CODE]** sizes; merging them is deferred to a later pass
+- [x] Dimension 5 Spacing: FLAG accepted. 10px, 6px and 12px are frozen pre-existing exceptions that new elements may not reuse
+- [x] Dimension 6 Registry Safety: PASS (not applicable)
+- [x] Dimension 7 Inventory Provenance: PASS (not applicable, Tool is none, so the section is omitted)
 
-**Approval:** pending
+Also resolved from the checker: the D-19 spark counts (bumper 12–16, sling about 8) and the longest-status-text figure (17 characters).
+
+**Approval:** approved 2026-11-22
