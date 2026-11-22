@@ -566,8 +566,16 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
   const FRAME_MS = 1000 / 60;
   /** Most frames one starting window can play (its frames plus one for rounding). */
   const FRAMES_PER_WINDOW = Math.ceil(STARTING_WINDOW_MS / FRAME_MS) + 1;
-  /** Outcome "runs": the device starts this long after the first activating gesture. */
+  /**
+   * The device starts this long after the gesture whose resume starts it: the
+   * first activating gesture ("runs") or the recovering one ("fails-then-runs").
+   */
   const START_DELAY_MS = 60;
+  /**
+   * "fails-then-runs": the device recovers and an activating gesture (Enter)
+   * arrives this long after the first gesture, after every second gesture.
+   */
+  const RECOVER_AT_MS = 1500;
   /**
    * On an advancing clock, `state` flips to "running" (and the resumes
    * resolve) this long after rendering starts: longer than a window, the
@@ -576,8 +584,15 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
   const STATE_LAG_MS = 300;
   const RUN_MS = 2000;
 
-  /** "runs": every resume stays pending until the device starts, then all resolve. */
-  type Outcome = "runs" | "pending" | "rejects";
+  /**
+   * "runs": every resume stays pending until the device starts, then all
+   * resolve. "fails-then-runs": the device start fails, so every resume
+   * rejects (an activating gesture's included) until an activating gesture at
+   * RECOVER_AT_MS, whose resume starts the device START_DELAY_MS later; from
+   * then on it behaves as "runs". It is only paired with rows that have an
+   * activating gesture before the recovery.
+   */
+  type Outcome = "runs" | "pending" | "rejects" | "fails-then-runs";
   /**
    * "frozen": `currentTime` never moves, and `state` flipping to "running" at
    * the device start is the only signal. "advancing": `currentTime` moves
@@ -608,16 +623,22 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
     clock: { ms: number };
     activation: { active: boolean };
     resolveAll: () => void;
+    /** "fails-then-runs": the device has recovered, so resumes stop rejecting. */
+    recover: () => void;
   } {
     const fake = new FakeAudioContext();
     fake.state = "suspended";
     const resolvers: (() => void)[] = [];
+    let failing = outcome === "rejects" || outcome === "fails-then-runs";
     fake.resume = () => {
       fake.resumeCalls++;
-      if (outcome === "rejects") return Promise.reject(new Error("device failed to start"));
+      if (failing) return Promise.reject(new Error("device failed to start"));
       return new Promise<void>((resolve) => {
-        if (outcome === "runs") resolvers.push(resolve);
+        if (outcome === "runs" || outcome === "fails-then-runs") resolvers.push(resolve);
       });
+    };
+    const recover = (): void => {
+      if (outcome === "fails-then-runs") failing = false;
     };
     const clock = { ms: T0 };
     const activation = { active: false };
@@ -630,11 +651,14 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
     const resolveAll = (): void => {
       for (const r of resolvers.splice(0)) r();
     };
-    return { fake, engine, clock, activation, resolveAll };
+    return { fake, engine, clock, activation, resolveAll, recover };
   }
 
   interface Trace {
-    /** The "start" flush's result, or null when no activating gesture occurred. */
+    /**
+     * The "start" flush's result, or null when no activating gesture occurred.
+     * Under "fails-then-runs" it is the recovering gesture's "start".
+     */
     readonly startFlushed: number | null;
     /** Nodes of the "start" voice disconnected by the end of the run. */
     readonly startCut: number;
@@ -649,18 +673,22 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
   /**
    * Run one row for RUN_MS at 60 fps: a bumper cue every third frame, and a
    * "start" cue flushed on its own on the frame after the first activating
-   * gesture (Enter starting the game). Microtasks drain after each gesture,
-   * as after a real event handler.
+   * gesture (Enter starting the game), or under "fails-then-runs" after the
+   * recovering gesture. Microtasks drain after each gesture, as after a real
+   * event handler.
    */
   async function simulate(row: Row): Promise<Trace> {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const { fake, engine, clock, activation, resolveAll } = scenarioRig(row.outcome);
+      const { fake, engine, clock, activation, resolveAll, recover } = scenarioRig(row.outcome);
       const gestures: Gesture[] = [{ atMs: 0, activating: row.first }];
       if (row.second) gestures.push(row.second);
-      const starter = gestures.find((g) => g.activating) ?? null;
+      const recovery: Gesture | null =
+        row.outcome === "fails-then-runs" ? { atMs: RECOVER_AT_MS, activating: true } : null;
+      if (recovery) gestures.push(recovery);
+      const starter = recovery ?? gestures.find((g) => g.activating) ?? null;
       const deviceAt =
-        row.outcome === "runs" && starter
+        (row.outcome === "runs" || row.outcome === "fails-then-runs") && starter
           ? starter.atMs + START_DELAY_MS
           : Number.POSITIVE_INFINITY;
       const runningAt = deviceAt + (row.clock === "advancing" ? STATE_LAG_MS : 0);
@@ -691,6 +719,7 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
           next++;
           await advanceTo(g.atMs);
           const rendering = fake.currentTime > 0;
+          if (g === recovery) recover();
           activation.active = g.activating;
           const before = disconnected();
           engine.unlock();
@@ -731,13 +760,24 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
   const rows: Row[] = [];
   for (const first of [true, false]) {
     for (const second of seconds) {
-      for (const outcome of ["runs", "pending", "rejects"] as const) {
+      const activatingBefore = first || second?.activating === true;
+      for (const outcome of ["runs", "pending", "rejects", "fails-then-runs"] as const) {
+        // "fails-then-runs" needs an activating gesture whose start fails.
+        if (outcome === "fails-then-runs" && !activatingBefore) continue;
         for (const clock of ["frozen", "advancing"] as const) {
           rows.push({ first, second, outcome, clock });
         }
       }
     }
   }
+
+  /**
+   * "fails-then-runs": whether the recovering gesture still gets a window.
+   * The opener takes the first window and the first activating re-gesture the
+   * second, so the recovery gets one only when no activating second gesture
+   * spent the episode before it.
+   */
+  const recoveryGetsWindow = (r: Row): boolean => r.second?.activating !== true;
   const act = (a: boolean): string => (a ? "activating" : "non-activating");
   const label = (r: Row): string =>
     `first ${act(r.first)}, second ${r.second ? `+${r.second.atMs} ms ${act(r.second.activating)}` : "none"}, ` +
@@ -745,20 +785,30 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
 
   it.each(rows.map((r) => [label(r), r] as const))("%s", async (_name, row) => {
     const t = await simulate(row);
-    const starts = row.outcome === "runs" && (row.first || row.second?.activating === true);
+    const starts =
+      (row.outcome === "runs" && (row.first || row.second?.activating === true)) ||
+      (row.outcome === "fails-then-runs" && recoveryGetsWindow(row));
     if (starts) {
-      // 2. The device starts START_DELAY_MS (inside a window) after the
-      // activating gesture: its "start" figure is scheduled and never cut.
+      // 2. The device starts START_DELAY_MS (inside a window) after a gesture
+      // that got a window, the opener or the first activating re-gesture: its
+      // "start" figure is scheduled and never cut.
       expect(t.startFlushed).toBeGreaterThanOrEqual(1);
       expect(t.startCut).toBe(0);
+    } else if (row.outcome === "fails-then-runs") {
+      // 2, its documented limit: the recovering gesture comes after the
+      // episode is spent, so it gets no window, even though its own resume
+      // starts the device. Its "start" figure is dropped (the cost of the
+      // two-window bound).
+      expect(t.startFlushed).toBe(0);
     }
     // 3. No gesture hard-cuts sounding voices while the clock advances.
     expect(t.cutByGestureWhileRendering).toBe(0);
     // 4. One episode: a failed resume is reported once.
-    expect(t.errors).toBe(row.outcome === "rejects" ? 1 : 0);
+    const fails = row.outcome === "rejects" || row.outcome === "fails-then-runs";
+    expect(t.errors).toBe(fails ? 1 : 0);
   });
 
-  it("the table reaches the late re-arm and a gesture while rendering", async () => {
+  it("the table reaches the late re-arm, a gesture while rendering and a recovery after a spent episode", async () => {
     // The WR-01 sequence: Shift, then Enter at +230 ms, the device up 60 ms later.
     const late = await simulate({
       first: false,
@@ -777,6 +827,27 @@ describe("starting episodes: invariants over gestures, resume outcomes and clock
     });
     expect(lagging.gesturesWhileRendering).toBe(1);
     expect(lagging.cutByGestureWhileRendering).toBe(0);
+    // 05-REVIEW WR-01's sequence: Shift, then Z whose device start fails,
+    // then Enter once the device recovers. Z spent the episode, so Enter's
+    // "start" figure is dropped although its resume starts the device.
+    const spent = await simulate({
+      first: false,
+      second: { atMs: 100, activating: true },
+      outcome: "fails-then-runs",
+      clock: "frozen",
+    });
+    expect(spent.startFlushed).toBe(0);
+    expect(spent.errors).toBe(1);
+    // With the opener as the failing activating gesture, Enter is the first
+    // activating re-gesture and still gets the episode's second window.
+    const recovered = await simulate({
+      first: true,
+      second: null,
+      outcome: "fails-then-runs",
+      clock: "frozen",
+    });
+    expect(recovered.startFlushed).toBe(1);
+    expect(recovered.startCut).toBe(0);
   });
 
   const heldRows: [boolean, "pending" | "rejects", "before" | "after"][] = [];

@@ -28,6 +28,14 @@
  *   expired window are discarded first; a live window's are kept;
  * - nothing else opens a window: not a further gesture, and not a `resume()`
  *   settling or rejecting, which only clears the in-flight flag.
+ * Only two gestures per episode get a window: its opener and its first
+ * activating, non-rendering re-gesture. So the "start" figure survives only
+ * when the device starts within STARTING_WINDOW_MS of one of those two. A
+ * later gesture in a spent episode gets no window, even when its own
+ * `resume()` is the one that starts the device (say, after an activating
+ * gesture's device start failed), and its "start" figure is dropped. That is
+ * the cost of the two-window bound: reopening a window on a rejection would
+ * unbound node creation again (05-REVIEW WR-01).
  * While a window is open and a resume is in flight, the suspended context is
  * playable: nodes scheduled at its frozen `currentTime` sound as soon as it
  * runs. A `resume()` can stay pending forever or reject on every call (no
