@@ -12,12 +12,15 @@ import {
   deriveKickFace,
   ReactiveElements,
   type KickFace,
+  type ReactiveConfig,
   type ReactiveWorld,
+  type RuleHooks,
   type RulesGate,
 } from "./reactive-elements";
 import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
+  KICKBACK_SPEED,
   KICKER_REARM_STEPS,
   ROLLOVER_POINTS,
   SLING_KICK_SPEED,
@@ -332,11 +335,23 @@ function pointSegmentDistance(
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+interface Region {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
+
 /**
  * Draw ENERGY_DROPS seeded origins from OPEN_FIELD_REGION, rejecting any within
  * ENERGY_CLEARANCE of a solid segment or a bumper rim (the 03-03 soak idea).
  */
 function energyOrigins(): { x: number; y: number }[] {
+  return seededOrigins(OPEN_FIELD_REGION);
+}
+
+/** The energyOrigins draw over any region (same seed, count and clearance). */
+function seededOrigins(r: Region): { x: number; y: number }[] {
   const probe = new PlanckWorld();
   const segments = probe.getBoundarySegments();
   const circles = probe
@@ -344,7 +359,6 @@ function energyOrigins(): { x: number; y: number }[] {
     .map((el) => el.circle)
     .filter((c): c is NonNullable<typeof c> => c !== null);
   const rand = mulberry32(ENERGY_SEED);
-  const r = OPEN_FIELD_REGION;
   const out: { x: number; y: number }[] = [];
   for (let draw = 0; draw < ENERGY_MAX_DRAWS && out.length < ENERGY_DROPS; draw++) {
     const x = r.minX + rand() * (r.maxX - r.minX);
@@ -414,5 +428,149 @@ describe("energy bound with every kick live (ELEM-01/02)", () => {
     expect(drained).toBe(ENERGY_DROPS);
     expect(maxSpeed).toBeLessThanOrEqual(ENERGY_MAX_SPEED);
     expect(kicks).toBeGreaterThan(0);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * Center-post kickback (PLSH-07, plan 06-08): the virtual post (element 610)
+ * kicks an armed center drain back up the table with the bumper kick law.
+ * ------------------------------------------------------------------------- */
+
+/** The virtual center post's id and center, read through the one resolve. */
+const POST_ID = 610;
+
+function postCenter(world: PlanckWorld): { x: number; y: number } {
+  const c = world.getElements().find((el) => el.id === POST_ID)?.circle;
+  if (!c) throw new Error("post 610 missing");
+  return c.center;
+}
+
+/**
+ * Center drop region (research Pattern 4): the open field's x span, low in it
+ * (y 3.6 to 4.0), so a dead-flipper ball rolls off a drooped tip into the
+ * center drain and over the post.
+ */
+const CENTER_DROP_REGION: Region = { ...OPEN_FIELD_REGION, minY: 3.6, maxY: 4.0 };
+
+/** A post overlap delivered by the bus, copied out. */
+interface PostSeen {
+  readonly step: number;
+  readonly ballId: BallId;
+  readonly y: number;
+}
+
+/** One applied impulse, tagged with the step whose service() applied it. */
+interface KickSeen {
+  readonly step: number;
+  readonly ballId: BallId;
+}
+
+interface ArmedRig {
+  readonly world: PlanckWorld;
+  readonly posts: PostSeen[];
+  readonly kicks: KickSeen[];
+  /** Steps on which trySave granted a save (the post kick is applied that step). */
+  readonly grants: number[];
+  /** Kicks applied on a granted step: the post kicks. */
+  postKicks(): KickSeen[];
+  drained(): boolean;
+  run(n: number): void;
+  steps(): number;
+}
+
+/**
+ * A real-table rig with dead, drooped bats whose rule hooks grant up to
+ * `saves` kickbacks (main.ts order: rules first, service() after dispatch()).
+ */
+function makeArmedRig(saves: number, config: ReactiveConfig = {}): ArmedRig {
+  const world = new PlanckWorld();
+  new FlipperController(world);
+  const router = new CollisionRouter(world);
+  let step = 0;
+  let left = saves;
+  const grants: number[] = [];
+  const kicks: KickSeen[] = [];
+  const posts: PostSeen[] = [];
+  const hooks: RuleHooks = {
+    onSwitch(): void {},
+    trySave(): boolean {
+      if (left <= 0) return false;
+      left--;
+      grants.push(step);
+      return true;
+    },
+  };
+  const counted: ReactiveWorld = {
+    getElements: () => world.getElements(),
+    getBalls: () => world.getBalls(),
+    applyImpulse: (ballId, ix, iy) => {
+      kicks.push({ step, ballId });
+      world.applyImpulse(ballId, ix, iy);
+    },
+  };
+  const reactive = new ReactiveElements(
+    counted,
+    router,
+    new SumGate(() => 0),
+    undefined,
+    hooks,
+    config,
+  );
+  let drained = false;
+  router.register((e) => {
+    if (e.elementKind === "post") posts.push({ step, ballId: e.ballId, y: e.point.y });
+    if (e.elementKind === "drain" && e.elementId === 600) drained = true;
+  });
+  const loop = new FixedStepLoop(world);
+  const onPostStep = (): void => {
+    router.dispatch();
+    reactive.service();
+    step++;
+  };
+  const run = (n: number): void => {
+    for (let i = 0; i < n; i++) loop.advance(FIXED_DT * 1000, undefined, onPostStep);
+  };
+  return {
+    world,
+    posts,
+    kicks,
+    grants,
+    postKicks: () => kicks.filter((k) => grants.includes(k.step)),
+    drained: () => drained,
+    run,
+    steps: () => step,
+  };
+}
+
+/** Ball velocity along normalize(ball - post center), plus vy. */
+function postExit(rig: ArmedRig, ballId: BallId): { vn: number; vy: number } {
+  const b = rig.world.getBalls().find((x) => x.id === ballId);
+  if (!b) throw new Error("ball missing");
+  const c = postCenter(rig.world);
+  const dx = b.x - c.x;
+  const dy = b.y - c.y;
+  const len = Math.hypot(dx, dy);
+  return { vn: (b.vx * dx + b.vy * dy) / len, vy: b.vy };
+}
+
+describe("center-post kickback (PLSH-07)", () => {
+  it("tracer: an armed center drain on the real table is kicked back up off the virtual post", () => {
+    const origin = seededOrigins(CENTER_DROP_REGION)[0];
+    if (!origin) throw new Error("no center origin");
+    const rig = makeArmedRig(1);
+    const ballId = rig.world.addBall(origin);
+    for (let i = 0; i < SIXTY_SECONDS && rig.postKicks().length === 0 && !rig.drained(); i++) {
+      rig.run(1);
+    }
+    // The bus delivered a post overlap for this ball, above the post center.
+    expect(rig.posts.some((p) => p.ballId === ballId)).toBe(true);
+    // Exactly one post kick, through the counted world slice.
+    expect(rig.postKicks()).toHaveLength(1);
+    expect(rig.postKicks()[0]?.ballId).toBe(ballId);
+    // One step after it the ball heads up-table at the kickback speed.
+    rig.run(1);
+    const out = postExit(rig, ballId);
+    expect(out.vy).toBeLessThan(0);
+    expect(out.vn).toBeGreaterThanOrEqual(KICKBACK_SPEED - 0.25);
   });
 });

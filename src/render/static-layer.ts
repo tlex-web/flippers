@@ -458,6 +458,11 @@ export function bakeStatic(
       case "flipper":
         // A flipper element without a mount has nothing static to draw.
         continue;
+      case "post":
+        // The virtual center post (PLSH-07) rises and falls with the ball
+        // save, so it is drawn live (06-10), never baked, and has no drop
+        // shadow here.
+        continue;
       default: {
         const unknown: never = el.kind;
         throw new Error(`bakeStatic: unhandled element kind ${String(unknown)}`);

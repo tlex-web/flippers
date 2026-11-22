@@ -28,6 +28,14 @@ import { computeView, tableBounds } from "./view-transform";
  */
 
 const elements = resolve(TABLE_SPEC);
+
+/**
+ * Whether bakeStatic draws `el`: every non-mount element except the virtual
+ * center post (PLSH-07), which rises and falls with the save and is drawn live.
+ */
+function isBaked(el: ResolvedElement): boolean {
+  return !el.mount && el.kind !== "post";
+}
 const view = computeView(tableBounds(elements), 1280, 684, 1.5);
 
 function bake(): { rec: Recorder; ids: readonly number[] } {
@@ -58,7 +66,7 @@ function isPolyline(el: ResolvedElement): boolean {
 describe("bakeStatic (RND-01)", () => {
   it("returns exactly the set of non-mount element ids", () => {
     const { ids } = bake();
-    const expected = elements.filter((el) => !el.mount).map((el) => el.id);
+    const expected = elements.filter(isBaked).map((el) => el.id);
     expect(expected.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort((a, b) => a - b)).toEqual([...expected].sort((a, b) => a - b));
@@ -69,7 +77,7 @@ describe("bakeStatic (RND-01)", () => {
   it("draws at least one arc at every circle element's centre and radius", () => {
     const { rec } = bake();
     const arcs = worldCalls(rec).filter((c) => c.name === "arc");
-    const circles = elements.filter((el) => !el.mount && el.circle);
+    const circles = elements.filter((el) => isBaked(el) && el.circle);
     expect(circles.length).toBeGreaterThan(0);
     for (const el of circles) {
       const c = el.circle;
@@ -317,7 +325,23 @@ describe("bakeStatic depth (PLSH-03)", () => {
 
   it("keeps the drawn-id list in element order, mounts excluded", () => {
     const { ids } = bake();
-    expect(ids).toEqual(elements.filter((el) => !el.mount).map((el) => el.id));
+    expect(ids).toEqual(elements.filter(isBaked).map((el) => el.id));
+  });
+
+  it("never bakes the virtual center post (610), not even an arc at its circle", () => {
+    const { rec, ids } = bake();
+    const post = elements.find((el) => el.kind === "post");
+    const c = post?.circle;
+    if (!post || !c) throw new Error("post 610 missing");
+    expect(ids).not.toContain(post.id);
+    const hits = worldCalls(rec).filter(
+      (a) =>
+        a.name === "arc" &&
+        a.args[0] === c.center.x &&
+        a.args[1] === c.center.y &&
+        a.args[2] === c.radius,
+    );
+    expect(hits).toHaveLength(0);
   });
 });
 

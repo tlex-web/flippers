@@ -5,7 +5,7 @@ import { FlipperController, type FlipperPhase } from "../control/flipper-control
 import { PlungerController } from "../control/plunger-controller";
 import { bonusDurationSteps } from "../game/bonus";
 import { GameSession, type FlipperGate, type GameSessionOptions } from "../game/game-session";
-import { ReactiveElements } from "../game/reactive-elements";
+import { ReactiveElements, type RuleHooks } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
@@ -116,9 +116,14 @@ interface Game {
 
 /**
  * Mirror of `main.ts`'s composition and step bodies. `options` are merged over
- * main.ts's `{ plunger }` (production defaults otherwise).
+ * main.ts's `{ plunger }` (production defaults otherwise). `hooksFor` replaces
+ * the rule hooks main.ts passes (the session itself), e.g. to deny the
+ * center-post kickback so a drain falls to the backstop.
  */
-function makeGame(options: GameSessionOptions = {}): Game {
+function makeGame(
+  options: GameSessionOptions = {},
+  hooksFor: (session: GameSession) => RuleHooks = (session) => session,
+): Game {
   const world = new PlanckWorld();
 
   const input = new FlipperInput();
@@ -154,7 +159,7 @@ function makeGame(options: GameSessionOptions = {}): Game {
     flipperGate,
     { plunger, ...options },
   );
-  const reactive = new ReactiveElements(world, router, session, undefined, session);
+  const reactive = new ReactiveElements(world, router, session, undefined, hooksFor(session));
 
   const loop = new FixedStepLoop(world);
 
@@ -976,9 +981,23 @@ describe("end-of-ball bonus (PLSH-06): a drained ball's tally is counted, then c
  * table, through the main.ts composition with the production save window.
  * ------------------------------------------------------------------------- */
 
+/**
+ * Rule hooks that forward every switch to the session but never grant the
+ * center-post kickback (06-08): the ball drains past the post, as a ball that
+ * misses it would, so the drain reaches the 06-07 backstop.
+ */
+function noKickback(session: GameSession): RuleHooks {
+  return {
+    onSwitch: (kind, elementId, bank) => session.onSwitch(kind, elementId, bank),
+    trySave: () => false,
+  };
+}
+
 describe("ball save (PLSH-07): a launched ball that drains inside the window is re-served without costing the ball", () => {
   it("a full plunge drains inside BALL_SAVE_STEPS of the chute exit, is re-served on the plunger as ball 1, and the next drain enters the bonus state", () => {
-    const g = makeGame(); // production options: the save on
+    // Production options with the save on; the kickback is denied so this
+    // drain reaches the backstop (the kickback path is pinned below).
+    const g = makeGame({}, noKickback);
     pressEnter(g);
     runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
     const first = g.session.activeBallId;
@@ -1027,5 +1046,45 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(g.session.getState()).toBe("playing");
     expect(g.session.getBall()).toBe(2);
     expect(g.session.getSaveLampPhase()).toBe("steady"); // re-armed on the next serve
+  });
+
+  it("in the live composition the same plunge is kicked back up off the center post: one kickback save, same ball, and its next drain enters the bonus state", () => {
+    const g = makeGame(); // main.ts composition: the session is the rule hooks
+    pressEnter(g);
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    const first = g.session.activeBallId;
+
+    g.plungerInput.handleKeyDown(SPACE);
+    runSteps(g, FRAME_120_HZ, FULL_HOLD_STEPS);
+    g.plungerInput.handleKeyUp(SPACE);
+
+    // Run to the kickback (the session's save counter), noting the chute exit.
+    let step = 0;
+    let exitStep = -1;
+    while (g.session.getSaveCount() === 0) {
+      if (step >= DRAIN_CAP_STEPS) throw new Error("no kickback save");
+      if (g.drainedIds.includes(first)) throw new Error(`ball ${first} drained unsaved`);
+      step += g.frame(FRAME_120_HZ);
+      if (exitStep < 0 && ballById(g, first).x + BALL_RADIUS_M < CHUTE_X) exitStep = step;
+    }
+    expect(exitStep).toBeGreaterThan(0);
+    expect(step - exitStep).toBeLessThan(BALL_SAVE_STEPS);
+    expect(g.session.getLastSaveKind()).toBe("kickback");
+    // One step later (the kick lands in that step's service()), the same ball
+    // is still in play and heading back up the table.
+    step += g.frame(FRAME_120_HZ);
+    expect(g.drainedIds).not.toContain(first);
+    expect(g.session.activeBallId).toBe(first);
+    expect(ballById(g, first).vy).toBeLessThan(0);
+    expect(g.session.getBall()).toBe(1);
+
+    // One save per ball: the kicked ball's next drain is real.
+    while (!g.drainedIds.includes(first)) {
+      if (step >= 2 * DRAIN_CAP_STEPS) throw new Error(`ball ${first} did not drain`);
+      step += g.frame(FRAME_120_HZ);
+    }
+    expect(g.session.getState()).toBe("bonus");
+    expect(g.session.getSaveCount()).toBe(1);
+    expect(g.session.getBall()).toBe(1);
   });
 });

@@ -104,6 +104,8 @@ const KIND_STYLE: Readonly<
   lane: { stroke: "#2a9d8f", fill: "#2a9d8f" },
   rollover: { stroke: "#8ac926", fill: "#3d5a12" },
   flipper: { stroke: COL_FLIPPER, fill: COL_FLIPPER },
+  // The virtual center post (a ball-save sensor): the bumper family's colors.
+  post: { stroke: "#f4a261", fill: "#7a4a24" },
 };
 
 /** Dash pattern for sensors (CSS px), and the empty pattern restoring solid. */

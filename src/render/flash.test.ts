@@ -136,7 +136,7 @@ describe("FlashTracker", () => {
 });
 
 describe("maxElementId", () => {
-  it("is 600 (the drain) for TABLE_SPEC", () => {
-    expect(maxElementId(resolve(TABLE_SPEC))).toBe(600);
+  it("is 610 (the virtual center post) for TABLE_SPEC", () => {
+    expect(maxElementId(resolve(TABLE_SPEC))).toBe(610);
   });
 });

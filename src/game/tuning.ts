@@ -253,3 +253,13 @@ export const BALL_SAVE_STEPS = 840;
  * steady (240 steps = 2 s at 120 Hz, D-10, UI-SPEC).
  */
 export const BALL_SAVE_BLINK_STEPS = 240;
+
+/**
+ * Center-post kickback target speed (m/s, D-07). The post kicker uses the
+ * bumper kick law: the ball's speed along the post-center -> ball-center normal
+ * is raised to this, its tangential velocity is kept. Probe bounds on 16 seeded
+ * dead-flipper drops: 5.5 m/s peaks at 7.44 m/s and 4.0 m/s at 6.97 m/s, both
+ * inside the 15 m/s energy bound; 20 m/s peaks at 19.96 m/s and breaks it (the
+ * RED control). Starts at the bumper's 5.5 m/s; tune by feel within the bound.
+ */
+export const KICKBACK_SPEED = 5.5;

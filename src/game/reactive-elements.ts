@@ -44,6 +44,16 @@
  * world is still written only in the `service()` calls). The default is a
  * frozen no-op, so a `ReactiveElements` built without it scores as before.
  *
+ * Center-post kickback (Phase 6, PLSH-07, D-06/D-07): the `"post"` circle
+ * sensor (element 610) is a kicker with no points. A post overlap queues a kick
+ * only when the rules are live, the ball's center is above the post center (so
+ * the bumper-law normal points up-table, never down into the drain) and
+ * `RuleHooks.trySave(ballId)` grants it, which spends the ball save. The kick
+ * is applied in `service()` like every other kick (the single ordered world
+ * write) with the bumper law at `ReactiveConfig.kickbackSpeed`
+ * (default `KICKBACK_SPEED`). It awards nothing and reports no switch and no
+ * feedback: the save flourish reads the session's save counter instead.
+ *
  * Engine-agnostic: the world is a type-only `PhysicsWorld` slice. Steady state
  * allocates nothing (fixed kicker array, Map lookup, index loops).
  */
@@ -56,6 +66,7 @@ import {
   BUMPER_KICK_SPEED,
   BUMPER_POINTS,
   INLANE_POINTS,
+  KICKBACK_SPEED,
   KICKER_REARM_STEPS,
   ROLLOVER_BANK_BONUS,
   ROLLOVER_POINTS,
@@ -105,12 +116,29 @@ export type SwitchKind = "bumper" | "slingshot" | "rollover" | "lane";
  */
 export interface RuleHooks {
   onSwitch(kind: SwitchKind, elementId: number, bank: boolean): void;
+  /**
+   * Ask to spend the ball save as a center-post kickback (PLSH-07). Consulted
+   * only for a live post overlap with the ball's center above the post center.
+   * Returning true consumes the save and queues the kick for `ballId`; false
+   * leaves the ball to drain (and to the session's backstop). Must not touch
+   * the world and must not allocate per call.
+   */
+  trySave(ballId: BallId): boolean;
 }
 
-/** Default rule hooks: do nothing. Module-level and frozen, shared by all. */
+/** Default rule hooks: no switch handling, never a save. Frozen, shared by all. */
 const NO_HOOKS: RuleHooks = Object.freeze({
   onSwitch(): void {},
+  trySave(): boolean {
+    return false;
+  },
 });
+
+/** Optional tuning overrides (tests and the energy RED control). */
+export interface ReactiveConfig {
+  /** Center-post kickback target speed (m/s); defaults to `KICKBACK_SPEED`. */
+  readonly kickbackSpeed?: number;
+}
 
 /** The world slice the reactive elements need. */
 export type ReactiveWorld = Pick<PhysicsWorld, "getElements" | "getBalls" | "applyImpulse">;
@@ -192,13 +220,13 @@ function distanceToSegment(
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-type KickerKind = "bumper" | "slingshot";
+type KickerKind = "bumper" | "slingshot" | "post";
 
-/** One kicking element's mutable record (bumper or slingshot), built once. */
+/** One kicking element's mutable record (bumper, slingshot or post), built once. */
 interface Kicker {
   readonly id: number;
   readonly kind: KickerKind;
-  /** Bumper center (unused for a slingshot). */
+  /** Bumper or post center (unused for a slingshot). */
   readonly cx: number;
   readonly cy: number;
   /** Slingshot face endpoints and fixed outward normal (unused for a bumper). */
@@ -251,6 +279,7 @@ export class ReactiveElements {
     gate: RulesGate,
     feedback: ReactiveFeedback = NO_FEEDBACK,
     hooks: RuleHooks = NO_HOOKS,
+    config: ReactiveConfig = {},
   ) {
     this.world = world;
     this.gate = gate;
@@ -274,6 +303,23 @@ export class ReactiveElements {
           ny: 0,
           targetSpeed: BUMPER_KICK_SPEED,
           points: BUMPER_POINTS,
+          armedAtStep: 0,
+          pendingBall: -1,
+        });
+      } else if (el.kind === "post" && el.circle !== null) {
+        this.addKicker({
+          id: el.id,
+          kind: "post",
+          cx: el.circle.center.x,
+          cy: el.circle.center.y,
+          ax: 0,
+          ay: 0,
+          bx: 0,
+          by: 0,
+          nx: 0,
+          ny: 0,
+          targetSpeed: config.kickbackSpeed ?? KICKBACK_SPEED,
+          points: 0,
           armedAtStep: 0,
           pendingBall: -1,
         });
@@ -349,7 +395,8 @@ export class ReactiveElements {
       if (!b || b.id !== k.pendingBall) continue;
       let nx = k.nx;
       let ny = k.ny;
-      if (k.kind === "bumper") {
+      if (k.kind !== "slingshot") {
+        // Bumper and post: the radial normal, center -> ball center.
         const dx = b.x - k.cx;
         const dy = b.y - k.cy;
         const len = Math.hypot(dx, dy);
@@ -398,11 +445,30 @@ export class ReactiveElements {
     this.feedback.onSensor("rollover", rule.id, bank);
   }
 
+  /**
+   * Center-post overlap (PLSH-07): queue a kickback only if live, the ball's
+   * center (a sensor event's point) is above the post center (Pitfall 6: never
+   * a downward kick into the drain) and the hooks spend the save. No award, no
+   * switch, no feedback; `service()` applies the kick.
+   */
+  private onPost(e: CollisionEvent): void {
+    const k = this.kickerById.get(e.elementId);
+    if (!k || k.kind !== "post") return;
+    if (!this.gate.isLive()) return;
+    if (!(e.point.y < k.cy)) return;
+    if (!this.hooks.trySave(e.ballId)) return;
+    k.pendingBall = e.ballId;
+  }
+
   /** Bus listener, bound once: record and award, never touch the world here. */
   private readonly onEvent = (e: CollisionEvent): void => {
     const kind = e.elementKind;
     if (kind === "rollover" || kind === "lane") {
       this.onSensor(e);
+      return;
+    }
+    if (kind === "post") {
+      this.onPost(e);
       return;
     }
     if (kind !== "bumper" && kind !== "slingshot") return;

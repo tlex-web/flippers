@@ -21,9 +21,14 @@ import type { Vec2 } from "../physics/types";
  * Semantic element taxonomy (D-12). Defined HERE and nowhere else: every element
  * identity (fixture tags, collision events, renderer styling, later rules and
  * audio) originates from this union.
+ *
+ * `"post"` (Phase 6, PLSH-07) is the virtual center post of the ball save: a
+ * circle SENSOR on the mirror axis above the drain. It deflects nothing by
+ * itself; while the save is armed the rules kick an overlapping ball back up
+ * the table with the bumper kick law (D-06, D-07).
  */
 export type ElementKind =
-  "wall" | "chute" | "drain" | "bumper" | "slingshot" | "lane" | "rollover" | "flipper";
+  "wall" | "chute" | "drain" | "bumper" | "slingshot" | "lane" | "rollover" | "flipper" | "post";
 
 /** Every descriptor carries a stable numeric id plus its semantic kind. */
 interface ElementBase {
@@ -314,7 +319,8 @@ const LEFT_TROUGH: readonly Vec2[] = [
  * in a classic inverted-V whose droop-limit tip gap (~0.46 m) is wider than the
  * 0.40 m ball. Right-hand elements are derived from their left twins with
  * `mirrorX` / `mirrorPath`. Ids: 0/1 flipper mounts, 1xx static walls, 2xx
- * bumpers, 3xx slingshots, 4xx rollover sensors, 5xx lane sensors, 600 drain.
+ * bumpers, 3xx slingshots, 4xx rollover sensors, 5xx lane sensors, 600 drain,
+ * 610 the virtual center post (a ball-save sensor).
  *
  * Wedge rule (the trap the flow proof hunts): under purely +y gravity a ball
  * rests stably on any two supports closer than 2·BALL_RADIUS_M. Every such pair
@@ -399,6 +405,12 @@ export const TABLE_SPEC: TableSpec = [
     ],
     sensor: true,
   },
+  // Virtual center post (D-06, D-07, PLSH-07): a sensor, not solid geometry,
+  // between the bat tips and DRAIN_Y on the mirror axis. While the ball save is
+  // armed the rules kick a center drain back up off it (bumper kick law). The
+  // live drawing (06-10) reads this same circle radius, so the bounce and the
+  // drawn post always agree. Inserted before the flipper mounts.
+  { id: 610, kind: "post", center: { x: PLAYFIELD_CENTER_X, y: 5.8 }, radius: 0.09, sensor: true },
   { id: 0, kind: "flipper", pivot: LEFT_PIVOT, mirror: false, restPose: true },
   { id: 1, kind: "flipper", pivot: mirrorX(LEFT_PIVOT), mirror: true, restPose: true },
 ];

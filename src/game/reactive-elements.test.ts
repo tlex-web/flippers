@@ -597,6 +597,9 @@ class SpyHooks implements RuleHooks {
   onSwitch(kind: SwitchKind, elementId: number, bank: boolean): void {
     this.log.push(["switch", kind, elementId, bank]);
   }
+  trySave(): boolean {
+    return false;
+  }
 }
 
 /** A rig whose gate, feedback and rule hooks share one log. */

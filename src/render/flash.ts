@@ -53,6 +53,8 @@ export const FLASH_TIMING: Readonly<Record<ElementKind, FlashTiming>> = Object.f
   wall: FLASH_CONTACT,
   chute: FLASH_CONTACT,
   flipper: FLASH_CONTACT,
+  // The center-post kickback (PLSH-07) flashes like a pop bumper (UI-SPEC).
+  post: FLASH_BUMPER,
 });
 
 /** A flash is cut to 0 this many decay constants after its hold (about e^-4). */
