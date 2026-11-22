@@ -10,7 +10,9 @@ import {
   ReactiveElements,
   type ReactiveFeedback,
   type ReactiveWorld,
+  type RuleHooks,
   type RulesGate,
+  type SwitchKind,
 } from "./reactive-elements";
 import {
   BUMPER_KICK_SPEED,
@@ -145,6 +147,7 @@ function makeRig(
   spec: TableSpec = SPEC,
   feedback?: ReactiveFeedback,
   log: LogEntry[] | null = null,
+  ruleHooks?: RuleHooks,
 ): Rig {
   const world = new SpyWorld(spec);
   const gate = new SpyGate(log);
@@ -158,9 +161,12 @@ function makeRig(
   });
   // Without a feedback the THREE-argument constructor is used, so every
   // Phase-4 case exercises the default (no-op) feedback path.
-  const reactive = feedback
-    ? new ReactiveElements(world, router, gate, feedback)
-    : new ReactiveElements(world, router, gate);
+  // With rule hooks the FIVE-argument constructor is used (06-01).
+  const reactive = ruleHooks
+    ? new ReactiveElements(world, router, gate, feedback, ruleHooks)
+    : feedback
+      ? new ReactiveElements(world, router, gate, feedback)
+      : new ReactiveElements(world, router, gate);
   const step = (batch: CollisionEvent[]): void => {
     pending = batch;
     world.dispatching = true;
@@ -579,5 +585,140 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
     rig.step([ev("bumper", 200, 0.0048), ev("bumper", 200, 0.0021), ev("bumper", 200, 0)]);
     expect(rig.gate.awards).toEqual([BUMPER_POINTS]);
     expect(rig.world.impulses).toHaveLength(1);
+  });
+});
+
+/**
+ * Spy rule hooks (plan 06-01, PLSH-05) appending to the same log as the gate
+ * and the feedback, so "award, then switch, then feedback" is one comparison.
+ */
+class SpyHooks implements RuleHooks {
+  constructor(private readonly log: LogEntry[]) {}
+  onSwitch(kind: SwitchKind, elementId: number, bank: boolean): void {
+    this.log.push(["switch", kind, elementId, bank]);
+  }
+}
+
+/** A rig whose gate, feedback and rule hooks share one log. */
+function hookedRig(spec: TableSpec = SPEC): Rig & { log: LogEntry[] } {
+  const log: LogEntry[] = [];
+  return { ...makeRig(spec, new SpyFeedback(log), log, new SpyHooks(log)), log };
+}
+
+/** Rule-hook entries only. */
+function switches(log: readonly LogEntry[]): LogEntry[] {
+  return log.filter((e) => e[0] === "switch");
+}
+
+describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", () => {
+  it("a registered bumper hit calls onSwitch(bumper, id, false) once, after the award and before the feedback", () => {
+    const rig = hookedRig();
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0.0048), ev("bumper", 200, 0)]);
+    expect(rig.log).toEqual([
+      ["award", BUMPER_POINTS],
+      ["switch", "bumper", 200, false],
+      ["kick", "bumper", 200, 0.0048],
+    ]);
+  });
+
+  it("a registered sling strike calls onSwitch(slingshot, id, false) after its award", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
+    expect(rig.log).toEqual([
+      ["award", SLING_POINTS],
+      ["switch", "slingshot", 300, false],
+      ["kick", "slingshot", 300, FACE_STRIKE.impulse],
+    ]);
+  });
+
+  it("a sub-threshold sling impulse and an off-face strike call nothing", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    rig.step([ev("slingshot", 300, SLING_MIN_IMPULSE * 0.99, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
+    const f = deriveKickFace(tableElement(300));
+    if (!f) throw new Error("no face");
+    const off = SLING_FACE_TOL * 1.2;
+    const px = (f.ax + f.bx) / 2 + f.nx * off;
+    const py = (f.ay + f.by) / 2 + f.ny * off;
+    rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, px, py)]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("a bumper contact inside its rearm window calls nothing", () => {
+    const rig = hookedRig();
+    rig.world.addBall(0, 1, 0.5);
+    rig.step([ev("bumper", 200, 0.0048)]);
+    for (let i = 1; i < KICKER_REARM_STEPS; i++) rig.step([ev("bumper", 200, 0.0048)]);
+    expect(switches(rig.log)).toEqual([["switch", "bumper", 200, false]]);
+  });
+
+  it("a sensor pass inside SENSOR_REARM_STEPS calls nothing", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.step([ev("lane", 500, 0)]);
+    for (let i = 1; i < SENSOR_REARM_STEPS; i++) rig.step([ev("lane", 500, 0)]);
+    expect(switches(rig.log)).toEqual([["switch", "lane", 500, false]]);
+  });
+
+  it("any contact while the gate is not live calls nothing", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.world.addBall(0, 1.15, 4.42);
+    rig.gate.live = false;
+    rig.step([
+      ev("bumper", 200, 0.0048),
+      ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y),
+      ev("rollover", 400, 0),
+      ev("lane", 500, 0),
+    ]);
+    expect(rig.log).toEqual([]);
+  });
+
+  it("inlane 500 calls onSwitch(lane, 500, false) after its award", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.step([ev("lane", 500, 0)]);
+    expect(rig.log).toEqual([
+      ["award", INLANE_POINTS],
+      ["switch", "lane", 500, false],
+      ["sensor", "lane", 500, false],
+    ]);
+  });
+
+  it("the first two rollovers pass bank false; the third lit one passes bank true after the bonus", () => {
+    const rig = hookedRig(TABLE_SPEC);
+    rig.step([ev("rollover", 400, 0)]);
+    rig.step([ev("rollover", 402, 0)]);
+    rig.step([ev("rollover", 401, 0)]);
+    expect(rig.log).toEqual([
+      ["award", ROLLOVER_POINTS],
+      ["switch", "rollover", 400, false],
+      ["sensor", "rollover", 400, false],
+      ["award", ROLLOVER_POINTS],
+      ["switch", "rollover", 402, false],
+      ["sensor", "rollover", 402, false],
+      ["award", ROLLOVER_POINTS],
+      ["award", ROLLOVER_BANK_BONUS],
+      ["switch", "rollover", 401, true],
+      ["sensor", "rollover", 401, true],
+    ]);
+  });
+
+  it("a ReactiveElements built without hooks scores exactly as one built with them", () => {
+    const batches = (): CollisionEvent[][] => [
+      [ev("bumper", 200, 0.0048)],
+      [ev("rollover", 400, 0), ev("lane", 500, 0)],
+      [ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y)],
+      [ev("rollover", 401, 0)],
+      [ev("rollover", 402, 0)],
+    ];
+    const plain = makeRig(TABLE_SPEC);
+    const hooked = hookedRig(TABLE_SPEC);
+    for (const rig of [plain, hooked]) {
+      rig.world.addBall(0, 1.15, 4.42);
+      for (const b of batches()) rig.step(b);
+    }
+    expect(hooked.gate.awards).toEqual(plain.gate.awards);
+    expect(hooked.world.impulses).toEqual(plain.world.impulses);
+    expect(plain.gate.awards.length).toBeGreaterThan(0);
   });
 });
