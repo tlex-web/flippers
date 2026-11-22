@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { CollisionRouter } from "../app/collision-router";
 import { FlipperController, type FlipperPhase } from "../control/flipper-controller";
 import { PlungerController } from "../control/plunger-controller";
+import { bonusDurationSteps } from "../game/bonus";
 import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
@@ -44,6 +45,14 @@ vi.setConfig({ testTimeout: 30_000 });
  * line (PLUNGER_REST.y 6.2 > DRAIN_Y 6.05), so only a bus drain may replace it;
  * a launch at real render cadences keeps the same ball; and the IN-02 plunger
  * fix is proven live through `applyEdges` with `isHeld()`.
+ *
+ * Plan 06-05 (PLSH-06, D-12): `makeGame` has main.ts parity for the session
+ * (the `{ plunger }` option, so the skill-shot lane freezes on a charge) and
+ * the rule hooks (the session as `ReactiveElements`' fifth argument, so the
+ * bonus counters and the skill shot are fed). Every drain now enters the
+ * counted "bonus" state before the next serve or game over; `finishTally` runs
+ * it out. No flipper press reaches `onFlipperPress()` here (the latch is 06-06),
+ * so every tally runs its full counted length.
  */
 
 /** Steps until a held charge reaches the cap (the clamp lands on this step). */
@@ -139,8 +148,9 @@ function makeGame(): Game {
     router,
     { x: PLUNGER_REST.x, y: PLUNGER_REST.y },
     flipperGate,
+    { plunger },
   );
-  const reactive = new ReactiveElements(world, router, session);
+  const reactive = new ReactiveElements(world, router, session, undefined, session);
 
   const loop = new FixedStepLoop(world);
 
@@ -216,6 +226,24 @@ function runSteps(g: Game, deltaMs: number, steps: number): void {
   while (done < steps) done += g.frame(deltaMs);
 }
 
+/** Cap on the steps `finishTally` runs (the longest tally is 264). */
+const TALLY_CAP_STEPS = 400;
+
+/**
+ * Run fixed steps until the session leaves the "bonus" state; returns the steps
+ * run. Throws if the tally does not end within `TALLY_CAP_STEPS`.
+ */
+function finishTally(g: Game): number {
+  let steps = 0;
+  while (g.session.getState() === "bonus") {
+    if (steps >= TALLY_CAP_STEPS) {
+      throw new Error(`bonus tally did not end within ${TALLY_CAP_STEPS} steps`);
+    }
+    steps += g.frame(FRAME_120_HZ);
+  }
+  return steps;
+}
+
 /** Press and release Enter, then run one render frame's worth of fixed steps. */
 function pressEnter(g: Game, deltaMs = FRAME_120_HZ): void {
   g.gameInput.handleKeyDown(ENTER);
@@ -287,6 +315,17 @@ describe("game e2e (GAME-02): Enter, three balls on the real table, game over, r
       // Lights persist across balls: rollover 401 stays lit from ball 1 on.
       expect(g.reactive.isLit(401)).toBe(true);
 
+      // The drain enters the bonus tally: no ball, flippers off, then the
+      // credit lands as the tally ends.
+      expect(g.session.getState()).toBe("bonus");
+      expect(g.world.getBalls()).toHaveLength(0);
+      expect(g.session.activeBallId).toBe(-1);
+      expect(g.controller.isEnabled()).toBe(false);
+      const total = g.session.getBonusTotal();
+      finishTally(g);
+      const scoreFinal = g.session.getScore();
+      expect(scoreFinal - scoreAfter).toBe(total);
+
       if (n < 3) {
         expect(g.session.getState()).toBe("playing");
         expect(g.session.getBall()).toBe(n + 1);
@@ -303,7 +342,7 @@ describe("game e2e (GAME-02): Enter, three balls on the real table, game over, r
         expect(g.session.isLive()).toBe(false);
         expect(scoreAfter).toBe(scoreBefore);
         runSteps(g, FRAME_120_HZ, 120);
-        expect(g.session.getScore()).toBe(scoreBefore);
+        expect(g.session.getScore()).toBe(scoreFinal);
         expect(g.world.getBalls()).toHaveLength(0);
       }
     }
@@ -576,7 +615,7 @@ const NUDGE_SPACING_STEPS = NUDGE_COOLDOWN_STEPS + 2;
 const IN_FIELD_STEPS = 120;
 
 describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot to game over", () => {
-  it("shows the start prompt, the ball number, WARNING, TILT, the next ball and GAME OVER", () => {
+  it("shows the start prompt, the ball number, WARNING, TILT, TILT · NO BONUS, BONUS, the next ball and GAME OVER", () => {
     const g = makeGame();
     const score = new CountingSink();
     const ball = new CountingSink();
@@ -620,20 +659,31 @@ describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot 
       }
     }
 
-    // The tilted ball drains: ball 2 is served clean.
+    // The tilted ball drains: its bonus is forfeit for a fixed hold, then
+    // ball 2 is served clean.
     let steps = 0;
     while (!g.drainedIds.includes(tiltedId)) {
       if (steps >= DRAIN_CAP_STEPS) throw new Error(`tilted ball ${tiltedId} did not drain`);
       steps += g.frame(FRAME_120_HZ);
     }
+    expect(g.session.getState()).toBe("bonus");
+    expect(ball.textContent).toBe("BALL 1 / 3");
+    expect(status.textContent).toBe("TILT · NO BONUS");
+    finishTally(g);
     expect(ball.textContent).toBe("BALL 2 / 3");
     expect(status.textContent).toBe("");
 
-    // Balls 2 and 3 play out as in the 3-ball scenario.
+    // Balls 2 and 3 play out as in the 3-ball scenario, each through its tally.
     launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(ball.textContent).toBe("BALL 2 / 3");
+    expect(status.textContent).toBe(`BONUS ${formatScore(g.session.getBonusTotal())}`);
+    finishTally(g);
     expect(ball.textContent).toBe("BALL 3 / 3");
     expect(status.textContent).toBe("");
     launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(ball.textContent).toBe("BALL 3 / 3");
+    expect(status.textContent).toBe(`BONUS ${formatScore(g.session.getBonusTotal())}`);
+    finishTally(g);
     expect(g.session.getState()).toBe("game-over");
     expect(ball.textContent).toBe("");
     expect(status.textContent).toBe("GAME OVER · PRESS ENTER");
@@ -641,10 +691,11 @@ describe("HUD walk-through (GAME-01..03): the HUD follows a real game from boot 
 
     // Write-on-change on the real table: each line was written once per change
     // of its own inputs. Ball (state or ball): "", BALL 1, BALL 1 again on the
-    // tilt (a state change), BALL 2, BALL 3, "". Status: attract, "", WARNING,
-    // TILT, "", GAME OVER.
-    expect(ball.writes).toBe(6);
-    expect(status.writes).toBe(6);
+    // tilt and on its forfeit hold (state changes), BALL 2, BALL 2 on its tally,
+    // BALL 3, BALL 3 on its tally, "". Status: attract, "", WARNING, TILT,
+    // TILT · NO BONUS, "", BONUS (once for the whole tally), "", BONUS, GAME OVER.
+    expect(ball.writes).toBe(9);
+    expect(status.writes).toBe(10);
   });
 });
 
@@ -778,6 +829,16 @@ describe("flipper relay (GAME-03, R11): dead outside a game, dropped by TILT, ba
     }
     expect(g.session.getScore()).toBe(tiltScore);
 
+    // The forfeit hold: the bats stay dead with KeyZ held, nothing is credited.
+    expect(g.session.getState()).toBe("bonus");
+    expect(g.session.isBonusForfeit()).toBe(true);
+    while (g.session.getState() === "bonus") {
+      expect(isRaised(g.controller.getPhase(g.leftFlipperId))).toBe(false);
+      expect(g.controller.isEnabled()).toBe(false);
+      steps += g.frame(FRAME_120_HZ);
+    }
+    expect(g.session.getScore()).toBe(tiltScore);
+
     // Ball 2 is served live, and the held key raises the left bat with no new
     // press; the right bat stays resting.
     expect(g.session.getState()).toBe("playing");
@@ -791,7 +852,10 @@ describe("flipper relay (GAME-03, R11): dead outside a game, dropped by TILT, ba
     g.input.handleKeyUp(KEY_Z);
     stepsUntilLeft(g, "resting", SETTLE_CAP_STEPS);
     launchAndDrain(g, FULL_HOLD_STEPS);
+    expect(g.controller.isEnabled()).toBe(false); // off through the tally
+    finishTally(g);
     launchAndDrain(g, FULL_HOLD_STEPS);
+    finishTally(g);
     expect(g.session.getState()).toBe("game-over");
     expect(g.controller.isEnabled()).toBe(false);
 
@@ -848,6 +912,7 @@ describe("G-04-11: a stale Shift is not re-raised on the next serve", () => {
       }
       steps += g.frame(FRAME_120_HZ);
     }
+    finishTally(g);
 
     // Ball 2: the flipper gate must not re-raise the dropped stale Shift.
     expect(g.session.getBall()).toBe(2);
@@ -857,5 +922,41 @@ describe("G-04-11: a stale Shift is not re-raised on the next serve", () => {
       runSteps(g, FRAME_120_HZ, 1);
       expect(isRaised(g.controller.getPhase(g.leftFlipperId))).toBe(false);
     }
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * PLSH-06 (plan 06-05 Task 1, D-11, D-12): the end-of-ball bonus on the real
+ * table, through the main.ts composition.
+ * ------------------------------------------------------------------------- */
+
+describe("end-of-ball bonus (PLSH-06): a drained ball's tally is counted, then credited before the next serve", () => {
+  it("a launch that lights a rollover drains into a bonusDurationSteps tally and the score rises by its total before ball 2", () => {
+    const g = makeGame();
+    pressEnter(g);
+    launchAndDrain(g, LIGHTING_HOLD_STEPS);
+    expect(g.reactive.isLit(401)).toBe(true);
+
+    expect(g.session.getState()).toBe("bonus");
+    const tally = g.session.getBonusTally();
+    expect(tally.rows).toBeGreaterThanOrEqual(1);
+    expect(tally.kinds[0]).toBe("rollovers");
+    const total = g.session.getBonusTotal();
+    expect(total).toBeGreaterThan(0);
+    const duration = bonusDurationSteps(tally.rows, false);
+    const scoreAtDrain = g.session.getScore();
+
+    let steps = 0;
+    while (g.session.getState() === "bonus") {
+      expect(g.session.getScore()).toBe(scoreAtDrain);
+      expect(g.world.getBalls()).toHaveLength(0);
+      if (steps > duration) throw new Error(`tally outlasted ${duration} steps`);
+      steps += g.frame(FRAME_120_HZ);
+    }
+    expect(steps).toBe(duration);
+    expect(g.session.getScore()).toBe(scoreAtDrain + total);
+    expect(g.session.getState()).toBe("playing");
+    expect(g.session.getBall()).toBe(2);
+    expect(g.world.getBalls()).toHaveLength(1);
   });
 });

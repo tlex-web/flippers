@@ -22,6 +22,10 @@ import { NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE, WARNING_FLASH_STEPS } from "./tuni
  *   ball, against the same spy world (which also records every impulse).
  * - flipper relay (plan 04-08 Task 2, GAME-03, R11): every `setEnabled` call
  *   the session makes on its `FlipperGate`, recorded by the rig.
+ * - end-of-ball bonus (plan 06-05, PLSH-06, D-11..D-13): every drain now enters
+ *   the counted "bonus" state before the serve or game over, so the legacy
+ *   drain cases pass through it with `finishBonus` (a flipper-press skip, or a
+ *   forfeit's full hold), and the gate logs record the bonus entry (false).
  */
 
 /** A flipper gate that ignores every call (the score and FSM cases do not read it). */
@@ -181,10 +185,35 @@ function makeRig(extraBallIds: readonly BallId[] = []): Rig {
   };
 }
 
-/** Start a game and drain the active ball `n` times. */
+/** Upper bound on the steps `finishBonus` runs (the longest tally is 264). */
+const FINISH_BONUS_CAP = 400;
+
+/**
+ * Run the bonus tally out the way main.ts would: each fixed step latches a
+ * flipper press (the skip), ticks the clock and services, until the state
+ * leaves "bonus". A normal tally ends on the first such step; a tilt forfeit
+ * ignores the press and runs its full hold. Bounded; throws if it never ends.
+ */
+function finishBonus(r: Rig): void {
+  for (let i = 0; i < FINISH_BONUS_CAP && r.session.getState() === "bonus"; i++) {
+    r.session.onFlipperPress();
+    r.tick(1);
+    r.step();
+  }
+  if (r.session.getState() === "bonus") throw new Error("bonus tally never ended");
+}
+
+/** One step whose batch drains the active ball, then the bonus tally run out. */
+function drainAndFinish(r: Rig): void {
+  r.step(drainOf(r.session.activeBallId));
+  expect(r.session.getState()).toBe("bonus");
+  finishBonus(r);
+}
+
+/** Start a game and drain the active ball `n` times, each through its tally. */
 function startAndDrain(r: Rig, n: number): void {
   r.session.onStart();
-  for (let i = 0; i < n; i++) r.step(drainOf(r.session.activeBallId));
+  for (let i = 0; i < n; i++) drainAndFinish(r);
 }
 
 describe("GameSession 3-ball FSM (GAME-02)", () => {
@@ -230,6 +259,13 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
     expect(r.calls).toEqual([
       { op: "add", spec: SPAWN },
       { op: "remove", id: FIRST_ID },
+    ]);
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.activeBallId).toBe(-1);
+    finishBonus(r);
+    expect(r.calls).toEqual([
+      { op: "add", spec: SPAWN },
+      { op: "remove", id: FIRST_ID },
       { op: "add", spec: SPAWN },
     ]);
     expect(r.session.getBall()).toBe(2);
@@ -244,6 +280,10 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
     expect(r.calls).toHaveLength(1);
     expect(r.session.activeBallId).toBe(FIRST_ID);
     r.session.service();
+    expect(r.calls).toHaveLength(2);
+    expect(r.session.activeBallId).toBe(-1);
+    expect(r.liveCount()).toBe(0);
+    finishBonus(r);
     expect(r.calls).toHaveLength(3);
     expect(r.session.activeBallId).toBe(FIRST_ID + 1);
     expect(r.liveCount()).toBe(1);
@@ -274,6 +314,8 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
     const last = r.session.activeBallId;
     const callsBefore = r.calls.length;
     r.step(drainOf(last));
+    expect(r.session.getState()).toBe("bonus");
+    finishBonus(r);
     expect(r.calls.slice(callsBefore)).toEqual([{ op: "remove", id: last }]);
     expect(r.session.getState()).toBe("game-over");
     expect(r.session.activeBallId).toBe(-1);
@@ -298,7 +340,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
     const r = makeRig();
     r.session.onStart();
     r.session.award(7000);
-    for (let i = 0; i < BALLS_PER_GAME; i++) r.step(drainOf(r.session.activeBallId));
+    for (let i = 0; i < BALLS_PER_GAME; i++) drainAndFinish(r);
     expect(r.session.getScore()).toBe(7000);
     expect(r.session.onStart()).toBe(true);
     expect(r.session.getScore()).toBe(0);
@@ -312,6 +354,7 @@ describe("GameSession 3-ball FSM (GAME-02)", () => {
     const r = makeRig();
     r.session.onStart();
     r.step(drainOf(FIRST_ID), drainOf(FIRST_ID));
+    finishBonus(r);
     expect(r.calls).toEqual([
       { op: "add", spec: SPAWN },
       { op: "remove", id: FIRST_ID },
@@ -408,6 +451,9 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     expect(r.session.getState()).toBe("tilted");
     const tilted = r.session.activeBallId;
     r.step(drainOf(tilted));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.isBonusForfeit()).toBe(true);
+    finishBonus(r);
     expect(r.calls.slice(-2)).toEqual([
       { op: "remove", id: tilted },
       { op: "add", spec: SPAWN },
@@ -429,7 +475,8 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     r.session.onStart();
     nudgeTimes(r, 3);
     expect(r.session.isWarning()).toBe(true);
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
+    expect(r.session.getState()).toBe("playing");
     expect(r.session.isWarning()).toBe(false);
     expect(r.session.getTiltLevel()).toBe(0);
   });
@@ -440,7 +487,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     r.session.award(9000);
     nudgeTimes(r, 4);
     expect(r.session.getState()).toBe("tilted");
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
     expect(r.session.getState()).toBe("game-over");
     expect(r.session.activeBallId).toBe(-1);
     expect(r.liveCount()).toBe(0);
@@ -451,7 +498,7 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     const r = makeRig();
     startAndDrain(r, BALLS_PER_GAME - 1);
     nudgeTimes(r, 4);
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
     expect(r.session.getState()).toBe("game-over");
     expect(r.session.onStart()).toBe(true);
     expect(r.session.getTiltLevel()).toBe(0);
@@ -468,7 +515,7 @@ function lastGate(r: Rig): boolean | undefined {
   return r.gate[r.gate.length - 1];
 }
 
-/** The relay invariant: on while playing, off when tilted or game over. */
+/** The relay invariant: on while playing, off when tilted, in the bonus tally or game over. */
 function expectRelayMatchesState(r: Rig): void {
   expect(lastGate(r)).toBe(r.session.getState() === "playing");
 }
@@ -507,16 +554,19 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
     expectRelayMatchesState(r);
   });
 
-  it("the serve after a drain switches them on, after a tilt or not", () => {
+  it("the drain switches them off for the bonus tally and the serve after it switches them on, after a tilt or not", () => {
     const r = makeRig();
     r.session.onStart();
-    r.step(drainOf(r.session.activeBallId)); // plain drain: ball 2
-    expect(r.gate).toEqual([false, true, true]);
+    r.step(drainOf(r.session.activeBallId)); // plain drain: the tally
+    expect(r.gate).toEqual([false, true, false]);
+    expectRelayMatchesState(r);
+    finishBonus(r); // ball 2
+    expect(r.gate).toEqual([false, true, false, true]);
     nudgeTimes(r, 4); // tilt ball 2
     expect(r.session.getState()).toBe("tilted");
-    r.step(drainOf(r.session.activeBallId)); // tilted drain: ball 3
+    drainAndFinish(r); // tilted drain: the forfeit hold, then ball 3
     expect(r.session.getBall()).toBe(3);
-    expect(r.gate).toEqual([false, true, true, false, true]);
+    expect(r.gate).toEqual([false, true, false, true, false, false, true]);
     expectRelayMatchesState(r);
   });
 
@@ -524,7 +574,9 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
     const r = makeRig();
     startAndDrain(r, BALLS_PER_GAME);
     expect(r.session.getState()).toBe("game-over");
-    expect(r.gate).toEqual([false, true, true, true, false]);
+    // Start on; each drain off (the tally) then on (the serve); the last drain
+    // off (the tally) then off again at game over.
+    expect(r.gate).toEqual([false, true, false, true, false, true, false, false]);
     expectRelayMatchesState(r);
   });
 
@@ -553,6 +605,9 @@ describe("GameSession flipper relay (GAME-03, R11, Open Question 1)", () => {
           check();
         }
         r.step(drainOf(r.session.activeBallId));
+        expect(r.session.getState()).toBe("bonus");
+        check();
+        finishBonus(r);
         check();
       }
       expect(r.session.getState()).toBe("game-over");
@@ -584,7 +639,7 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
     r.session.onStart();
     r.session.onSwitch("lane", 500);
     r.session.onSwitch("lane", 501);
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
     expect(r.session.getBall()).toBe(2);
     expect(r.session.isInlaneScored(500)).toBe(false);
     expect(r.session.isInlaneScored(501)).toBe(false);
@@ -593,11 +648,11 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
   it("onStart clears both (a new game after game over)", () => {
     const r = makeRig();
     r.session.onStart();
-    r.step(drainOf(r.session.activeBallId));
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
+    drainAndFinish(r);
     r.session.onSwitch("lane", 500);
     r.session.onSwitch("lane", 501);
-    r.step(drainOf(r.session.activeBallId));
+    drainAndFinish(r);
     expect(r.session.getState()).toBe("game-over");
     r.session.onStart();
     expect(r.session.isInlaneScored(500)).toBe(false);
@@ -623,5 +678,41 @@ describe("GameSession inlane flags (plan 06-03 Task 2, D-21)", () => {
     for (const id of [-1, 0, 400, 502, 600, Number.NaN]) {
       expect(r.session.isInlaneScored(id)).toBe(false);
     }
+  });
+});
+
+describe("GameSession end-of-ball bonus (plan 06-05 Task 1, PLSH-06, D-11, D-12)", () => {
+  it("tracer: 2 rollovers and 1 inlane are tallied over 216 counted steps, credited, then ball 2 is served", () => {
+    const r = makeRig();
+    r.session.onStart();
+    r.session.onSwitch("rollover", 400, false);
+    r.session.onSwitch("rollover", 401, false);
+    r.session.onSwitch("lane", 500, false);
+    const before = r.session.getScore();
+
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.activeBallId).toBe(-1);
+    expect(r.liveCount()).toBe(0);
+    expect(r.session.getBonusTally().rows).toBe(2);
+    expect(r.session.getBonusTotal()).toBe(4000);
+    expect(r.session.isBonusForfeit()).toBe(false);
+
+    r.session.award(1000); // not live during the tally: ignored
+    expect(r.session.getScore()).toBe(before);
+
+    for (let i = 0; i < 215; i++) {
+      r.tick(1);
+      r.step();
+    }
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getScore()).toBe(before);
+    r.tick(1);
+    r.step(); // step 216: the credit lands and ball 2 is served
+    expect(r.session.getScore()).toBe(before + 4000);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.activeBallId).toBe(FIRST_ID + 1);
+    expect(r.liveCount()).toBe(1);
   });
 });

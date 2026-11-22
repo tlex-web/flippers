@@ -9,11 +9,12 @@
  *
  * Lines:
  * - score: the running score with thousands separators (`formatScore`);
- * - ball: "BALL n / 3" while a ball is in play or tilted, empty in game-over
- *   (`ballText`);
+ * - ball: "BALL n / 3" while a ball is in play, tilted or in its bonus tally,
+ *   empty in game-over (`ballText`);
  * - status: one message at a time, resolved by the 06-UI-SPEC priority table
- *   (TILT, then SKILL SHOT <value> for `STATUS_TRANSIENT_STEPS` fixed steps after
- *   an award, then the attract and game-over prompts, then WARNING, else empty;
+ *   (TILT, then TILT · NO BONUS for a forfeit hold, then BONUS <total> for the
+ *   whole tally, then SKILL SHOT <value> for `STATUS_TRANSIENT_STEPS` fixed steps
+ *   after an award, then the attract and game-over prompts, then WARNING, else empty;
  *   `StatusCode`, `statusText`). It is the only HUD line announced to assistive tech;
  *   the score changes too often to announce. The mute announcer (`MuteView`'s
  *   second sink, a visually hidden live region) is the page's other one.
@@ -49,6 +50,10 @@ export interface HudSource {
   getLastSkillValue(): number;
   /** `getStep()` at the most recent skill shot (-1 before any). */
   getLastSkillStep(): number;
+  /** The bonus total of the tally in progress (read in the `"bonus"` state). */
+  getBonusTotal(): number;
+  /** Whether the tally in progress is a tilt forfeit (read in the `"bonus"` state). */
+  isBonusForfeit(): boolean;
 }
 
 /** Built once: en-US thousands grouping, integers only. */
@@ -59,11 +64,12 @@ export function formatScore(score: number): string {
   return SCORE_FORMAT.format(score);
 }
 
-/** The ball line: "BALL n / 3" while a ball is in play or tilted, "" in game-over. */
+/** The ball line: "BALL n / 3" while playing, tilted or in the bonus tally, "" in game-over. */
 export function ballText(state: GameState, ball: number): string {
   switch (state) {
     case "playing":
     case "tilted":
+    case "bonus":
       return `BALL ${ball} / ${BALLS_PER_GAME}`;
     case "game-over":
       return "";
@@ -72,11 +78,13 @@ export function ballText(state: GameState, ball: number): string {
 
 /**
  * What the status line shows, resolved from the 06-UI-SPEC priority table
- * (highest wins): 1 `tilt`, 5 `skillShot`, 6 `attract` / `gameOver` (the
- * prompts), 7 `warning`, 8 `none`. Later plans add their rows (TILT · NO BONUS,
- * BONUS, NEW HIGH SCORE, BALL SAVED) as new codes.
+ * (highest wins): 1 `tilt`, 2 `tiltNoBonus` (a forfeit hold), 3 `bonus` (the
+ * whole tally), 5 `skillShot`, 6 `attract` / `gameOver` (the prompts),
+ * 7 `warning`, 8 `none`. Later plans add their rows (NEW HIGH SCORE, BALL SAVED)
+ * as new codes.
  */
-export type StatusCode = "none" | "tilt" | "skillShot" | "attract" | "gameOver" | "warning";
+export type StatusCode =
+  "none" | "tilt" | "tiltNoBonus" | "bonus" | "skillShot" | "attract" | "gameOver" | "warning";
 
 /**
  * How long a transient status (SKILL SHOT) holds, in fixed physics steps:
@@ -87,7 +95,8 @@ export const STATUS_TRANSIENT_STEPS = 180;
 
 /**
  * The status line text for a resolved code. `value` is used only by codes that
- * carry a number (`skillShot`: the points just paid, 5,000 to 25,000); built from
+ * carry a number (`skillShot`: the points just paid, 5,000 to 25,000; `bonus`:
+ * the tally total, known at the drain); built from
  * fixed strings and `formatScore` only (T-6-06). The longest text is the
  * 23-character game-over prompt; SKILL SHOT 25,000 is 17.
  */
@@ -95,6 +104,10 @@ export function statusText(code: StatusCode, value: number): string {
   switch (code) {
     case "tilt":
       return "TILT";
+    case "tiltNoBonus":
+      return "TILT · NO BONUS";
+    case "bonus":
+      return `BONUS ${formatScore(value)}`;
     case "skillShot":
       return `SKILL SHOT ${formatScore(value)}`;
     case "attract":
@@ -148,11 +161,18 @@ export class HudView {
       this.ball.textContent = ballText(state, ball);
     }
 
-    // Status priority (06-UI-SPEC): 1 TILT, 5 SKILL SHOT, 6 prompts, 7 WARNING, 8 empty.
+    // Status priority (06-UI-SPEC): 1 TILT, 2 TILT · NO BONUS, 3 BONUS,
+    // 5 SKILL SHOT, 6 prompts, 7 WARNING, 8 empty. The bonus total is fixed for
+    // the whole tally, so BONUS is written (and announced) once.
     let code: StatusCode;
     let value = 0;
     if (state === "tilted") {
       code = "tilt";
+    } else if (state === "bonus" && src.isBonusForfeit()) {
+      code = "tiltNoBonus";
+    } else if (state === "bonus") {
+      code = "bonus";
+      value = src.getBonusTotal();
     } else if (
       src.getSkillShotCount() > 0 &&
       src.getStep() < src.getLastSkillStep() + STATUS_TRANSIENT_STEPS

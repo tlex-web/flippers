@@ -193,3 +193,43 @@ export const SKILL_SHOT_STEP_POINTS = 5000;
 
 /** Cap on one skill shot's value (D-04). */
 export const SKILL_SHOT_MAX_POINTS = 25000;
+
+// ---------------------------------------------------------------------------
+// Bonus (PLSH-06)
+// ---------------------------------------------------------------------------
+//
+// End-of-ball bonus (D-11, D-12, D-13). Per-ball counters advance only from
+// live registered rollover, inlane and bank switches; on the drain the session
+// holds the serve in a rule-level "bonus" state for a counted number of fixed
+// steps while the tally is shown, then credits it. Tally timing (UI-SPEC): each
+// included row is revealed BONUS_ROW_STEPS after the previous one and counts up
+// over the same span, then TOTAL holds for BONUS_TOTAL_HOLD_STEPS. A tilted
+// ball forfeits its bonus with a fixed TILT_FORFEIT_HOLD_STEPS hold. No
+// multiplier (BONUS-01 stays v2).
+
+/** Bonus value of one rollover pass this ball (D-11, research A5). */
+export const BONUS_ROLLOVER_UNIT = 1000;
+
+/** Bonus value of one inlane pass this ball (D-11, research A5). */
+export const BONUS_INLANE_UNIT = 2000;
+
+/** Bonus value of one completed bank of 3 rollovers this ball (D-11). */
+export const BONUS_BANK_UNIT = 5000;
+
+/**
+ * Fixed steps per tally row (48 steps = 0.4 s at 120 Hz): row i is revealed at
+ * elapsed 48 * i and counts up to its value over the next 48 steps (UI-SPEC).
+ */
+export const BONUS_ROW_STEPS = 48;
+
+/** Fixed steps the TOTAL holds after the last row (120 steps = 1 s, UI-SPEC). */
+export const BONUS_TOTAL_HOLD_STEPS = 120;
+
+/** Fixed steps the tally holds when every row is zero (60 steps = 0.5 s). */
+export const BONUS_EMPTY_HOLD_STEPS = 60;
+
+/**
+ * Fixed steps a tilted ball's forfeit holds TILT · NO BONUS (120 steps = 1 s,
+ * D-13). Not shortened by a flipper press, so the message can be read.
+ */
+export const TILT_FORFEIT_HOLD_STEPS = 120;

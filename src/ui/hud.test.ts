@@ -48,6 +48,8 @@ class FakeSource implements HudSource {
   skillCount = 0;
   skillValue = 0;
   skillStep = -1;
+  bonusTotal = 0;
+  bonusForfeit = false;
   getScore(): number {
     return this.score;
   }
@@ -74,6 +76,12 @@ class FakeSource implements HudSource {
   }
   getLastSkillStep(): number {
     return this.skillStep;
+  }
+  getBonusTotal(): number {
+    return this.bonusTotal;
+  }
+  isBonusForfeit(): boolean {
+    return this.bonusForfeit;
   }
 }
 

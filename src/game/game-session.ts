@@ -14,13 +14,29 @@
  *   ball: when it drains, the next ball is served `"playing"` with the meter
  *   and the warning cleared, the score is kept, and a tilt on the last ball ends
  *   the game.
+ * - `"bonus"`: the ball in play drained and the end-of-ball bonus is being
+ *   tallied (PLSH-06, D-12). No ball on the table, `activeBallId` is -1, the
+ *   flippers are off and nothing scores (`isLive()` is false). The tally holds
+ *   for `bonusDurationSteps(rows, forfeit)` counted fixed steps; a flipper press
+ *   latched on a fixed step (`onFlipperPress()`) ends it on the next
+ *   `service()`, except a tilt forfeit's fixed hold. When it ends the bonus is
+ *   credited (none for a forfeit) and the next ball is served, or the game
+ *   ends after the last ball.
  *
  * Flipper relay (R11, GAME-03, Open Question 1): the session switches the
  * flippers through a `FlipperGate`. They are off at boot (attract), off on a
- * tilt (both bats drop and presses are ignored), off after the final drain,
- * and on again with every serve (game start and each next ball, tilted or
- * not). The gate owner re-presses a bat whose key is still held when the
- * flippers come back on (Pitfall 5).
+ * tilt (both bats drop and presses are ignored), off at every drain (the bonus
+ * tally) and after the final ball, and on again with every serve (game start
+ * and each next ball, tilted or not). The gate owner re-presses a bat whose key
+ * is still held when the flippers come back on (Pitfall 5).
+ *
+ * End-of-ball bonus (PLSH-06, D-11..D-13): `onSwitch()` feeds per-ball
+ * `BonusCounters` (rollovers, inlanes, completed banks), reset on every serve.
+ * A drain snapshots them into one `BonusTally` (a tilted drain is a forfeit
+ * with zero rows) and enters `"bonus"`. The credit goes through a private
+ * `credit()` that keeps `award()`'s non-negative safe-integer, saturating guard
+ * but not its `isLive()` gate, so it is never dropped in `"bonus"` (research
+ * Pitfall 1); `award()` itself stays a no-op outside playing.
  *
  * Wiring (fixed-step seam, never the render frame), carried over from the
  * retired sandbox ball feed:
@@ -29,6 +45,8 @@
  * - `onStart()` from the top of a fixed step when the start key latched;
  * - `onNudge(dir)` from the top of a fixed step for each latched nudge key,
  *   then `tick()` once per fixed step (after the game edges);
+ * - `onFlipperPress()` from the top of a fixed step when a flipper press edge
+ *   latched (skips the bonus tally; ignored outside `"bonus"`);
  * - `service()` from `onPostStep`, right AFTER `router.dispatch()` (and after
  *   `ReactiveElements.service()`, so a queued kick lands before a drained ball
  *   is removed).
@@ -39,16 +57,17 @@
  * only while playing and at least `NUDGE_COOLDOWN_STEPS` fixed steps after the
  * last accepted one. Each accepted nudge also feeds the `TiltMeter`: a warning
  * opens a `WARNING_FLASH_STEPS` window read through `isWarning()`, and a tilt
- * enters `"tilted"`. `tick()` decays the meter. Time is the step count
+ * enters `"tilted"`. Accepted nudges are counted for presentation
+ * (`getNudgeCount()`, `getLastNudgeDir()`). `tick()` decays the meter. Time is the step count
  * advanced by `tick()`, never a wall clock or a random source.
  *
  * The drain is read from the collision bus only (the drain sensor, spec id 600),
  * never from a positional `y > DRAIN_Y` test: the plunger rest position lies
  * BELOW the drain line, so a positional check mistakes the parked ball for a
  * drained one and respawns it every frame (03-REVIEW CR-01). The bus listener
- * only records the drained id; `service()` removes it and serves the next ball
- * after the batch has been delivered (remove-then-add, so exactly one ball ever
- * exists).
+ * only records the drained id; `service()` removes it after the batch has been
+ * delivered and, once the bonus tally ends, serves the next ball
+ * (remove-then-add, so at most one ball ever exists).
  *
  * The score is always an exact, non-negative integer: anything that is not a
  * non-negative safe integer is ignored, and the sum saturates at
@@ -84,6 +103,7 @@ import {
 } from "../control/plunger-controller";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
 import { PLUNGER_ZONE } from "../table/spec";
+import { BonusCounters, BonusTally, bonusDurationSteps } from "./bonus";
 import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
 import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
@@ -99,7 +119,7 @@ import {
 export const BALLS_PER_GAME = 3;
 
 /** Game states. */
-export type GameState = "game-over" | "playing" | "tilted";
+export type GameState = "game-over" | "playing" | "tilted" | "bonus";
 
 /** The world slice the session needs. */
 export type GameSessionWorld = Pick<
@@ -181,6 +201,30 @@ export class GameSession implements RulesGate, RuleHooks {
    */
   private readonly scoredLanes: number[] = [];
 
+  /** This ball's bonus counters (D-11), reset on every serve. */
+  private readonly bonusCounters = new BonusCounters();
+
+  /** The tally of the most recent drain, overwritten in place. */
+  private readonly tally = new BonusTally();
+
+  /** `step` at the drain that entered `"bonus"`. */
+  private bonusStartStep = 0;
+
+  /** First step at which the bonus tally ends. */
+  private bonusEndsAt = 0;
+
+  /** A flipper press latched during `"bonus"`: end the tally on the next service. */
+  private skipRequested = false;
+
+  /** Drains of the active ball since construction (presentation counter). */
+  private drainCount = 0;
+
+  /** Accepted nudges since construction (presentation counter). */
+  private nudgeCount = 0;
+
+  /** Direction of the most recent accepted nudge ("left" before any). */
+  private lastNudgeDir: NudgeDir = "left";
+
   constructor(
     world: GameSessionWorld,
     router: CollisionRouter,
@@ -216,21 +260,53 @@ export class GameSession implements RulesGate, RuleHooks {
         return true;
       case "playing":
       case "tilted":
+      case "bonus":
         return false;
     }
   }
 
   /**
-   * Handle a drain recorded in this step's batch (while playing or tilted):
-   * remove the ball, then serve the next one (tilt cleared, flippers on, skill
-   * shot armed), or end the game after the last with the flippers off and the
-   * skill shot disarmed. Call once per fixed step, right after
-   * `router.dispatch()`. No-op when nothing drained.
+   * Call once per fixed step, right after `router.dispatch()`.
+   *
+   * A drain recorded in this step's batch (while playing or tilted) removes the
+   * ball and enters `"bonus"`: the counters are snapshotted into the tally (a
+   * tilted ball is a forfeit with zero rows), the tally is timed to end at
+   * `step + bonusDurationSteps(...)`, the skill shot is disarmed and the
+   * flippers go off.
+   *
+   * While in `"bonus"`, the tally ends at the first service where
+   * `step >= bonusEndsAt`, or where a flipper press was latched (not for a
+   * forfeit). Then the bonus is credited (none for a forfeit) and the next ball
+   * is served (tilt cleared, counters reset, flippers on, skill shot armed), or,
+   * after the last ball, the game ends with the flippers off.
+   *
+   * No-op otherwise.
    */
   service(): void {
+    if (this.state === "bonus") {
+      const forfeit = this.tally.forfeit;
+      if (this.step >= this.bonusEndsAt || (this.skipRequested && !forfeit)) this.endBonus();
+      return;
+    }
     if (this.drained === NO_BALL) return;
     this.world.removeBall(this.drained);
     this.drained = NO_BALL;
+    this.drainCount++;
+    if (this.state === "tilted") this.tally.markForfeit();
+    else this.tally.snapshot(this.bonusCounters);
+    this.active = NO_BALL;
+    this.bonusStartStep = this.step;
+    this.bonusEndsAt = this.step + bonusDurationSteps(this.tally.rows, this.tally.forfeit);
+    this.skipRequested = false;
+    this.skill.disarm();
+    this.state = "bonus";
+    this.flippers.setEnabled(false);
+  }
+
+  /** End the tally: credit it (unless forfeit), then serve or end the game. */
+  private endBonus(): void {
+    this.skipRequested = false;
+    if (!this.tally.forfeit) this.credit(this.tally.total);
     if (this.ball < BALLS_PER_GAME) {
       this.ball++;
       this.serveBall();
@@ -240,6 +316,16 @@ export class GameSession implements RulesGate, RuleHooks {
       this.flippers.setEnabled(false);
       this.skill.disarm();
     }
+  }
+
+  /**
+   * A flipper press latched at the top of a fixed step: during `"bonus"` it
+   * ends the tally on the next `service()` (a forfeit's hold ignores it). Does
+   * nothing in any other state, so a press while playing never shortens a later
+   * tally.
+   */
+  onFlipperPress(): void {
+    if (this.state === "bonus") this.skipRequested = true;
   }
 
   /**
@@ -255,6 +341,8 @@ export class GameSession implements RulesGate, RuleHooks {
     if (this.state !== "playing") return;
     if (this.step < this.nudgeReadyAtStep) return; // spam guard
     this.nudgeReadyAtStep = this.step + NUDGE_COOLDOWN_STEPS;
+    this.nudgeCount++;
+    this.lastNudgeDir = dir;
     const d = NUDGE_DIRS[dir];
     const ix = d.x * NUDGE_IMPULSE;
     const iy = d.y * NUDGE_IMPULSE;
@@ -309,12 +397,14 @@ export class GameSession implements RulesGate, RuleHooks {
    * Rule hook (`RuleHooks`): a registered scoring switch from
    * `ReactiveElements`, after its own award. The first switch after the arm
    * resolves the skill shot; the lit rollover awards its value through
-   * `award()`. Only awards and records; never touches the world.
+   * `award()`. It also feeds this ball's bonus counters (`bank`: the rollover
+   * completed the 3-lit bank). Only awards and records; never touches the world.
    */
-  onSwitch(kind: SwitchKind, elementId: number): void {
+  onSwitch(kind: SwitchKind, elementId: number, bank = false): void {
     if (kind === "lane" && this.state === "playing" && !this.scoredLanes.includes(elementId)) {
       this.scoredLanes.push(elementId);
     }
+    if (this.state === "playing") this.bonusCounters.count(kind, bank);
     const v = this.skill.resolve(kind, elementId);
     if (v > 0) {
       this.award(v);
@@ -358,6 +448,41 @@ export class GameSession implements RulesGate, RuleHooks {
   /** Lane of the most recent skill shot this game (-1 before any). */
   getLastSkillLane(): number {
     return this.skill.getLastLane();
+  }
+
+  /** Drains of the active ball since construction (a stray id never counts). */
+  getDrainCount(): number {
+    return this.drainCount;
+  }
+
+  /** Accepted nudges since construction. */
+  getNudgeCount(): number {
+    return this.nudgeCount;
+  }
+
+  /** Direction of the most recent accepted nudge ("left" before any). */
+  getLastNudgeDir(): NudgeDir {
+    return this.lastNudgeDir;
+  }
+
+  /** Fixed steps since the drain that entered `"bonus"`; 0 in any other state. */
+  getBonusElapsed(): number {
+    return this.state === "bonus" ? this.step - this.bonusStartStep : 0;
+  }
+
+  /** The most recent drain's tally (read-only; overwritten on the next drain). */
+  getBonusTally(): Readonly<BonusTally> {
+    return this.tally;
+  }
+
+  /** The most recent drain's bonus total (0 for a forfeit). */
+  getBonusTotal(): number {
+    return this.tally.total;
+  }
+
+  /** Whether the bonus tally in progress is a tilt forfeit (false outside `"bonus"`). */
+  isBonusForfeit(): boolean {
+    return this.state === "bonus" && this.tally.forfeit;
   }
 
   /** Whether the inlane `elementId` scored on this ball (cleared on every serve). */
@@ -410,6 +535,21 @@ export class GameSession implements RulesGate, RuleHooks {
   award(points: number): void {
     if (!Number.isSafeInteger(points) || points < 0) return;
     if (!this.isLive()) return;
+    this.addPoints(points);
+  }
+
+  /**
+   * Credit the bonus: `award()`'s guard without the `isLive()` gate, so it is
+   * never dropped in `"bonus"` (research Pitfall 1). Ignores invalid input,
+   * saturates.
+   */
+  private credit(points: number): void {
+    if (!Number.isSafeInteger(points) || points < 0) return;
+    this.addPoints(points);
+  }
+
+  /** Add a validated non-negative safe integer, saturating at MAX_SAFE_INTEGER. */
+  private addPoints(points: number): void {
     const headroom = Number.MAX_SAFE_INTEGER - this.score;
     this.score = points >= headroom ? Number.MAX_SAFE_INTEGER : this.score + points;
   }
@@ -428,6 +568,8 @@ export class GameSession implements RulesGate, RuleHooks {
   private serveBall(): void {
     this.clearTilt();
     this.scoredLanes.length = 0;
+    this.bonusCounters.reset();
+    this.skipRequested = false;
     this.state = "playing";
     this.active = this.world.addBall(this.spawn);
     this.flippers.setEnabled(true);
