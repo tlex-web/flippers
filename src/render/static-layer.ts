@@ -7,8 +7,9 @@
  * a seeded starfield (identical on every load); then, in world meters, a
  * "lighter" light pool over the lower-center play area and every non-mount
  * table element by kind, each bumper, slingshot and wall preceded by its own
- * down-right drop shadow (PLSH-03, D-20); last, back at identity, the vignette
- * over the whole backing. Flipper mounts are skipped: the bats are drawn live.
+ * down-right drop shadow (PLSH-03, D-20); then every unlit lamp lens from
+ * `buildLampShapes` with its faint specular rim (D-21); last, back at
+ * identity, the vignette over the whole backing. Flipper mounts are skipped: the bats are drawn live.
  * `shadowBlur` is used only here (bake time, D-24) and is reset to 0 before
  * returning. Pure geometry and gradients, no assets.
  */
@@ -16,6 +17,7 @@
 import { mulberry32 } from "../harness/prng";
 import { deriveKickFace } from "../game/reactive-elements";
 import type { ResolvedElement } from "../table/resolve";
+import { buildLampShapes, type LampShape } from "./lamps";
 import {
   BG_BOTTOM,
   BG_TOP,
@@ -25,6 +27,7 @@ import {
   CHUTE,
   DRAIN,
   DROP_SHADOW,
+  LAMP_RIM,
   LANE,
   LIGHT_POOL,
   LIGHT_POOL_FADE,
@@ -95,6 +98,12 @@ const SOLID_SHADOW_BLUR_M = 0.04;
 const WALL_SHADOW_DX_M = 0.02;
 const WALL_SHADOW_DY_M = 0.03;
 const WALL_SHADOW_LINE_M = 0.04;
+
+/** Specular rim stroke width on every unlit lens (meters, UI-SPEC lens look). */
+const LENS_RIM_LINE_M = 0.008;
+
+/** Up-table offset of a rollover's rim line from its sensor stroke (meters). */
+const STROKE_RIM_DY_M = 0.012;
 
 /** Vignette clear radius as a fraction of the backing half-diagonal. */
 const VIGNETTE_INNER = 0.5;
@@ -285,6 +294,109 @@ function drawSlingshot(ctx: CanvasRenderingContext2D, el: ResolvedElement): void
   ctx.stroke();
 }
 
+/** Trace a lens outline as the current path (closed for fill and ring lenses). */
+function traceLens(ctx: CanvasRenderingContext2D, s: LampShape, dy: number): void {
+  ctx.beginPath();
+  const xs = s.xs;
+  const ys = s.ys;
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i] ?? 0;
+    const y = (ys[i] ?? 0) + dy;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  if (s.closed) ctx.closePath();
+}
+
+/**
+ * Trace a filled lens's specular rim: each outline edge whose midpoint lies in
+ * the upper-left half (dx + dy < 0 from the lens center) and whose outward
+ * normal faces up-left, so the rim catches the light only where the plastic's
+ * top-left edge would.
+ */
+function traceFillRim(ctx: CanvasRenderingContext2D, s: LampShape): void {
+  const xs = s.xs;
+  const ys = s.ys;
+  const n = xs.length;
+  let area2 = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area2 += (xs[i] ?? 0) * (ys[j] ?? 0) - (xs[j] ?? 0) * (ys[i] ?? 0);
+  }
+  const orient = area2 >= 0 ? 1 : -1;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = xs[i] ?? 0;
+    const ay = ys[i] ?? 0;
+    const bx = xs[j] ?? 0;
+    const by = ys[j] ?? 0;
+    if ((ax + bx) / 2 - s.cx + ((ay + by) / 2 - s.cy) >= 0) continue;
+    // Outward normal of edge (ex, ey): (ey, -ex) for a positive orientation.
+    const nx = orient * (by - ay);
+    const ny = -orient * (bx - ax);
+    if (nx + ny >= 0) continue;
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+  }
+}
+
+/** Trace the upper-left quarter of a stroke lens: edges whose midpoint is above-left of center. */
+function traceStrokeRim(ctx: CanvasRenderingContext2D, s: LampShape): void {
+  const xs = s.xs;
+  const ys = s.ys;
+  const n = xs.length;
+  const edges = s.closed ? n : n - 1;
+  ctx.beginPath();
+  for (let i = 0; i < edges; i++) {
+    const j = (i + 1) % n;
+    const ax = xs[i] ?? 0;
+    const ay = ys[i] ?? 0;
+    const bx = xs[j] ?? 0;
+    const by = ys[j] ?? 0;
+    if ((ax + bx) / 2 >= s.cx || (ay + by) / 2 >= s.cy) continue;
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+  }
+}
+
+/**
+ * Bake every unlit lamp lens and its LAMP_RIM specular rim (D-21), generically
+ * over the lamp shape table, in the current transform (world meters):
+ * - fill lenses (chevrons, arrows): the polygon in its unlit color, then the
+ *   rim over its upper-left outer edges;
+ * - stroke lenses the element pass does not draw (the 06-10 save ring class):
+ *   the path in its unlit color at its lineWidth, then the rim over its
+ *   upper-left quarter;
+ * - element-drawn stroke lenses (the rollovers, already stroked ROLLOVER_UNLIT
+ *   by the element pass): only a rim line STROKE_RIM_DY_M up-table.
+ * A new row in the shape table is baked here with no edit. Leaves globalAlpha
+ * 1 and source-over.
+ */
+export function drawUnlitLenses(ctx: CanvasRenderingContext2D, shapes: readonly LampShape[]): void {
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  for (const s of shapes) {
+    if (s.style === "fill") {
+      traceLens(ctx, s, 0);
+      ctx.fillStyle = s.unlit;
+      ctx.fill();
+      traceFillRim(ctx, s);
+    } else if (!s.elementDrawn) {
+      traceLens(ctx, s, 0);
+      ctx.strokeStyle = s.unlit;
+      ctx.lineWidth = s.lineWidth;
+      ctx.stroke();
+      traceStrokeRim(ctx, s);
+    } else {
+      traceLens(ctx, s, -STROKE_RIM_DY_M);
+    }
+    ctx.strokeStyle = LAMP_RIM;
+    ctx.lineWidth = LENS_RIM_LINE_M;
+    ctx.stroke();
+  }
+}
+
 /**
  * Bake the static playfield into `ctx` (a layer of the view's backing size) and
  * return the ids of the elements drawn, in draw order. Mounts are never baked.
@@ -354,6 +466,7 @@ export function bakeStatic(
     drawn.push(el.id);
   }
   ctx.shadowBlur = 0;
+  drawUnlitLenses(ctx, buildLampShapes(elements));
   ctx.globalAlpha = 1;
   drawVignette(ctx, view);
   ctx.globalCompositeOperation = "source-over";

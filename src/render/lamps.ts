@@ -23,6 +23,12 @@
  *   unlit.
  * - Inlane arrows 500/501 (playing and tilted): `isInlaneScored(id)`, steady
  *   once that inlane scored on this ball; the session clears it on every serve.
+ * - Attract (game over): rule light state is ignored and a ping-pong chase runs
+ *   over 500 -> 400 -> 401 -> 402 -> 501 -> 402 -> 401 -> 400, one lamp lit per
+ *   LAMP_CHASE_DWELL_STEPS, counted from the step game over began. The
+ *   chevrons stay unlit.
+ * - Tilted: the session disarms the skill shot, so the chevrons go out; the
+ *   rollover and arrow lamps keep their rule state.
  *
  * `buildLampShapes(elements)` is the shape table the renderer's lamp pass (and
  * the unlit bake) iterate: vertex lists in preallocated Float64Arrays, built
@@ -81,6 +87,8 @@ export const LAMP_FADE_OUT_STEPS = 15;
 export const LAMP_BLINK_PERIOD_STEPS = 60;
 /** Steps a skill-shot award holds its chevron steady. */
 export const LAMP_AWARD_HOLD_STEPS = 60;
+/** Steps each attract-chase lamp stays the lit one (0.15 s at 120 Hz). */
+export const LAMP_CHASE_DWELL_STEPS = 18;
 
 /** Skill chevron: an upward chevron this wide and tall, with this arm thickness (m). */
 const CHEVRON_W_M = 0.2;
@@ -137,6 +145,18 @@ const ROLLOVER_LAMPS: readonly (readonly [number, number])[] = [
   [400, LAMP_ROLLOVER_400],
   [401, LAMP_ROLLOVER_401],
   [402, LAMP_ROLLOVER_402],
+];
+
+/** The attract ping-pong, as lamp indices: 500 400 401 402 501 402 401 400. */
+const CHASE_ORDER: readonly number[] = [
+  LAMP_INLANE_500,
+  LAMP_ROLLOVER_400,
+  LAMP_ROLLOVER_401,
+  LAMP_ROLLOVER_402,
+  LAMP_INLANE_501,
+  LAMP_ROLLOVER_402,
+  LAMP_ROLLOVER_401,
+  LAMP_ROLLOVER_400,
 ];
 
 /** The chevron lamp under a skill lane, or -1. */
@@ -277,6 +297,10 @@ export class LampTracker {
   private blinkStart = 0;
   /** Whether the previous update saw the skill shot frozen. */
   private wasFrozen = false;
+  /** `lampStep` when game over (attract) last began (the chase origin). */
+  private attractStart = 0;
+  /** Whether the previous update saw game over. */
+  private wasAttract = false;
   /** `getSkillShotCount()` as last seen (snapshot at construction). */
   private shots: number;
   /** Chevron held lit by an award, and the updates left on the hold. */
@@ -298,14 +322,25 @@ export class LampTracker {
     prev.set(cur);
     target.fill(0);
 
-    const lights = this.lights;
-    for (let i = 0; i < ROLLOVER_LAMPS.length; i++) {
-      const r = ROLLOVER_LAMPS[i];
-      if (r && lights.isLit(r[0])) target[r[1]] = 1;
+    if (this.rules.getState() === "game-over") {
+      if (!this.wasAttract) this.attractStart = this.lampStep;
+      this.wasAttract = true;
+      const k =
+        Math.floor((this.lampStep - this.attractStart) / LAMP_CHASE_DWELL_STEPS) %
+        CHASE_ORDER.length;
+      target[CHASE_ORDER[k] ?? 0] = 1;
+    } else {
+      this.wasAttract = false;
+      const lights = this.lights;
+      for (let i = 0; i < ROLLOVER_LAMPS.length; i++) {
+        const r = ROLLOVER_LAMPS[i];
+        if (r && lights.isLit(r[0])) target[r[1]] = 1;
+      }
+      this.updateInlanes(target);
     }
 
+    // Always run: it tracks the shot count and the freeze edge in every state.
     this.updateSkill(target);
-    this.updateInlanes(target);
 
     for (let i = 0; i < LAMP_COUNT; i++) {
       const c = cur[i] ?? 0;
@@ -320,10 +355,9 @@ export class LampTracker {
     }
   }
 
-  /** Inlane arrow targets: the session's per-ball flags, in playing and tilted. */
+  /** Inlane arrow targets: the session's per-ball flags (playing and tilted). */
   private updateInlanes(target: Uint8Array): void {
     const rules = this.rules;
-    if (rules.getState() === "game-over") return;
     if (rules.isInlaneScored(500)) target[LAMP_INLANE_500] = 1;
     if (rules.isInlaneScored(501)) target[LAMP_INLANE_501] = 1;
   }
