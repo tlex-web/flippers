@@ -10,6 +10,7 @@ import {
   MuteView,
   muteAnnouncement,
   muteText,
+  STATUS_TRANSIENT_STEPS,
   statusText,
   type DiagData,
   type HudSource,
@@ -43,6 +44,10 @@ class FakeSource implements HudSource {
   state: GameState = "game-over";
   played = false;
   warning = false;
+  step = 0;
+  skillCount = 0;
+  skillValue = 0;
+  skillStep = -1;
   getScore(): number {
     return this.score;
   }
@@ -57,6 +62,18 @@ class FakeSource implements HudSource {
   }
   isWarning(): boolean {
     return this.warning;
+  }
+  getStep(): number {
+    return this.step;
+  }
+  getSkillShotCount(): number {
+    return this.skillCount;
+  }
+  getLastSkillValue(): number {
+    return this.skillValue;
+  }
+  getLastSkillStep(): number {
+    return this.skillStep;
   }
 }
 
@@ -113,22 +130,132 @@ describe("HudView write-on-change", () => {
   });
 });
 
-describe("statusText (GAME-02/03)", () => {
-  it("game-over before any game prompts to start", () => {
-    expect(statusText("game-over", false, false)).toBe("PRESS ENTER TO START");
+describe("statusText (GAME-02/03, 06-UI-SPEC status line)", () => {
+  it.each([
+    ["tilt", 0, "TILT"],
+    ["skillShot", 5000, "SKILL SHOT 5,000"],
+    ["skillShot", 25000, "SKILL SHOT 25,000"],
+    ["attract", 0, "PRESS ENTER TO START"],
+    ["gameOver", 0, "GAME OVER · PRESS ENTER"],
+    ["warning", 0, "WARNING"],
+    ["none", 0, ""],
+  ] as const)("(%s, %d) reads %j", (code, value, text) => {
+    expect(statusText(code, value)).toBe(text);
   });
-  it("game-over after a game prompts to play again", () => {
-    expect(statusText("game-over", true, false)).toBe("GAME OVER · PRESS ENTER");
+
+  it("the longest new text, SKILL SHOT 25,000, is 17 characters, under the 23-character prompt (UI E3)", () => {
+    expect(statusText("skillShot", 25000)).toHaveLength(17);
+    expect(statusText("gameOver", 0)).toHaveLength(23);
   });
-  it("tilted reads TILT with the warning flag false and true (tilt wins)", () => {
-    expect(statusText("tilted", true, false)).toBe("TILT");
-    expect(statusText("tilted", true, true)).toBe("TILT");
+});
+
+describe("HudView status priority resolution (06-UI-SPEC rows 1, 5, 6, 7, 8)", () => {
+  /** A view mid-game on ball 1 with a 5,000 skill shot awarded at step 1000, now at step 1000. */
+  function awarded() {
+    const v = makeView();
+    const src = new FakeSource();
+    src.state = "playing";
+    src.ball = 1;
+    src.played = true;
+    src.step = 1000;
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = 1000;
+    v.view.update(src);
+    return { ...v, src };
+  }
+
+  it("shows SKILL SHOT <value> right after an award", () => {
+    const { status } = awarded();
+    expect(status.textContent).toBe("SKILL SHOT 5,000");
   });
-  it("playing with a warning reads WARNING", () => {
-    expect(statusText("playing", true, true)).toBe("WARNING");
+
+  it("still shows it on the last step of the window (step = award + 179)", () => {
+    const { view, src, status } = awarded();
+    src.step = 1000 + STATUS_TRANSIENT_STEPS - 1;
+    view.update(src);
+    expect(status.textContent).toBe("SKILL SHOT 5,000");
   });
-  it("plain playing is empty", () => {
-    expect(statusText("playing", true, false)).toBe("");
+
+  it("falls back to the next row at step = award + 180", () => {
+    const { view, src, status } = awarded();
+    src.step = 1000 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
+  it("the window is 180 fixed steps (1.5 s at 120 Hz)", () => {
+    expect(STATUS_TRANSIENT_STEPS).toBe(180);
+  });
+
+  it("no skill shot yet (count 0) shows nothing even with the step inside a stale window", () => {
+    const { view, src, status } = awarded();
+    src.skillCount = 0;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
+  it("tilted shows TILT even inside the skill window", () => {
+    const { view, src, status } = awarded();
+    src.state = "tilted";
+    view.update(src);
+    expect(status.textContent).toBe("TILT");
+  });
+
+  it("SKILL SHOT outranks WARNING, and WARNING shows once the window expires", () => {
+    const { view, src, status } = awarded();
+    src.warning = true;
+    view.update(src);
+    expect(status.textContent).toBe("SKILL SHOT 5,000");
+    src.step = 1000 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(status.textContent).toBe("WARNING");
+  });
+
+  it("game-over shows the attract prompt before any game and the game-over prompt after one", () => {
+    const { view, status } = makeView();
+    const src = new FakeSource();
+    view.update(src);
+    expect(status.textContent).toBe("PRESS ENTER TO START");
+    src.played = true;
+    view.update(src);
+    expect(status.textContent).toBe("GAME OVER · PRESS ENTER");
+  });
+
+  it("50 updates with an unchanged source write the status sink once", () => {
+    const { view, src, status } = awarded();
+    for (let i = 0; i < 50; i++) view.update(src);
+    expect(status.writes).toBe(1);
+  });
+
+  it("a step change inside the skill window writes nothing", () => {
+    const { view, src, status } = awarded();
+    for (let s = 1001; s < 1000 + STATUS_TRANSIENT_STEPS; s++) {
+      src.step = s;
+      view.update(src);
+    }
+    expect(status.writes).toBe(1);
+  });
+
+  it("the window expiring writes exactly once", () => {
+    const { view, src, status } = awarded();
+    src.step = 1000 + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    src.step++;
+    view.update(src);
+    expect(status.writes).toBe(2);
+  });
+
+  it("a second award with a new value inside the window rewrites once with the new value", () => {
+    const { view, src, status } = awarded();
+    src.step = 1100;
+    src.skillCount = 2;
+    src.skillValue = 25000;
+    src.skillStep = 1100;
+    view.update(src);
+    view.update(src);
+    expect(status.writes).toBe(2);
+    expect(status.textContent).toBe("SKILL SHOT 25,000");
   });
 });
 
