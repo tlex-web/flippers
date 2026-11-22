@@ -37,7 +37,10 @@
  * calls, in a fixed order, after dispatch. The score, the ball number and the
  * game status (start and game-over prompts, WARNING, TILT) show in a DOM HUD
  * overlay (`#hud-score`, `#hud-ball`, `#hud-status`, each written only when it
- * changes).
+ * changes). The score counts up on the step clock (dt = steps * FIXED_DT, D-14);
+ * `prefers-reduced-motion` is read once at boot into a boolean, kept current by
+ * one change listener registered outside the frame (D-18), and passed to the HUD
+ * and the bonus overlay, which then snap.
  *
  * Fixed-step order:
  * - `onFixedStep` (top of each step): flipper edges (a press edge also latches
@@ -80,7 +83,7 @@ import { ReactiveElements } from "../game/reactive-elements";
 import { FlipperInput, isWindowsPlatform } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
-import { ballMass } from "../physics/constants";
+import { ballMass, FIXED_DT } from "../physics/constants";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, TABLE_SPEC } from "../table/spec";
 import { BonusView, DiagView, HudView, MuteView, type DiagData, type TextSink } from "../ui/hud";
@@ -390,6 +393,14 @@ function main(): void {
     requireElement("hud-bonus-total-row"),
     requireElement("hud-bonus-total"),
   );
+  // Reduced motion (D-18): read once here, updated by one change listener; the
+  // frame reads only the boolean (T-6-12). The count-up and the bonus row
+  // counting snap under it; rule timing is unchanged.
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let reducedMotion = reducedMotionQuery.matches;
+  reducedMotionQuery.addEventListener("change", (e: MediaQueryListEvent) => {
+    reducedMotion = e.matches;
+  });
   // Diagnosis readout: DOM text in its own panel (G-04-6), written only when a
   // throttled number changes.
   const diagView = new DiagView(requireTextSink("hud-diag"));
@@ -507,9 +518,10 @@ function main(): void {
       debugRenderer.draw(world, interpolated, plunger.getCharge(), reactive);
     }
     // The score, ball and status land in the frame the session changes them
-    // (each line written only on change).
-    hudView.update(session);
-    bonusView.update(session);
+    // (each line written only on change); the score line counts up over the
+    // simulated time this frame advanced, so it freezes with the physics.
+    hudView.update(session, steps * FIXED_DT, reducedMotion);
+    bonusView.update(session, reducedMotion);
     muteView.update(audio.isMuted());
     diagView.update(diag);
   }

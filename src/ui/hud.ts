@@ -8,7 +8,12 @@
  * its own panel (`DiagView`); the canvas paints no text.
  *
  * Lines:
- * - score: the running score with thousands separators (`formatScore`);
+ * - score: the running score with thousands separators (`formatScore`),
+ *   counted up as a display-only exponential chase on the step clock (D-14):
+ *   `shown += (target - shown) * (1 - exp(-dt / COUNT_UP_TAU_S))`, snapping
+ *   when within `COUNT_UP_SNAP`, when the target drops (a new game never counts
+ *   down), under reduced motion and when no dt is given. `getScore()` stays
+ *   the true value; only the line lags;
  * - ball: "BALL n / 3" while a ball is in play, tilted or in its bonus tally,
  *   empty in game-over (`ballText`);
  * - status: one message at a time, resolved by the 06-UI-SPEC priority table
@@ -69,6 +74,19 @@ export interface HudSource {
 
 /** Built once: en-US thousands grouping, integers only. */
 const SCORE_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+/**
+ * The score count-up time constant (D-14, UI-SPEC): 0.20 s, so a jump closes
+ * 63 % of the gap in 0.2 s and is within the snap band in well under a second.
+ */
+export const COUNT_UP_TAU_S = 0.2;
+
+/**
+ * The count-up snap band (points): when the shown score is within this of the
+ * target it lands on the target exactly, so the chase never runs forever on a
+ * sub-point remainder and the shown value never overshoots.
+ */
+export const COUNT_UP_SNAP = 10;
 
 /** Format a score with thousands separators: 1234567 -> "1,234,567". */
 export function formatScore(score: number): string {
@@ -140,7 +158,10 @@ export class HudView {
   /** Whether any line has been written; false so the first update writes all three. */
   private written = false;
 
-  /** The inputs each line was last written from. */
+  /** The count-up chase value (a float; the line shows it rounded). */
+  private shown = 0;
+
+  /** The inputs each line was last written from (the score line: the shown integer). */
   private lastScore = 0;
   private lastBall = 0;
   private lastState: GameState = "game-over";
@@ -158,11 +179,27 @@ export class HudView {
    * Rewrite each line only when its own inputs changed since its last write.
    * The status line is resolved to a (code, value) pair first, without
    * allocating; its text is rebuilt and written only when that pair changes.
+   *
+   * `dtSeconds` is the simulated time this frame advanced (fixed steps times
+   * `FIXED_DT`), so the count-up runs on the step clock: it freezes on a hidden
+   * tab and replays identically. The default (+Infinity) snaps, as does
+   * `reducedMotion` (D-18). The score line is written only when the rounded
+   * shown value changes (T-6-11).
    */
-  update(src: HudSource): void {
-    const score = src.getScore();
+  update(src: HudSource, dtSeconds = Number.POSITIVE_INFINITY, reducedMotion = false): void {
+    const target = src.getScore();
     const ball = src.getBall();
     const state = src.getState();
+
+    // Snap: reduced motion, no (or a non-finite) dt, a drop in the target (a new
+    // game never counts down, gap < 0) or a gap within the snap band.
+    const gap = target - this.shown;
+    if (reducedMotion || !(dtSeconds < Number.POSITIVE_INFINITY) || gap <= COUNT_UP_SNAP) {
+      this.shown = target;
+    } else if (dtSeconds > 0) {
+      this.shown += gap * (1 - Math.exp(-dtSeconds / COUNT_UP_TAU_S));
+    }
+    const score = Math.round(this.shown);
 
     const first = !this.written;
     if (first || score !== this.lastScore) {
