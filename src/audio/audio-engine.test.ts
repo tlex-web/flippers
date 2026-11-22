@@ -46,6 +46,18 @@ function peakOf(nodes: FakeAudioContext["nodes"]): number {
   return peak;
 }
 
+/** Voice nodes (after the master chain) still connected. */
+function connected(fake: FakeAudioContext, chain: number): number {
+  return fake.nodes.slice(chain).filter((n) => !n.disconnected).length;
+}
+
+/** Most nodes one voice can create: per layer an envelope gain, a source and maybe a filter. */
+const MAX_NODES_PER_VOICE = Math.max(
+  ...CUE_KINDS.map((k) =>
+    RECIPES[k].layers.reduce((n, layer) => n + 2 + (layer.filter ? 1 : 0), 0),
+  ),
+);
+
 /** The first oscillator's start frequency. */
 function startFreq(nodes: FakeAudioContext["nodes"]): number {
   const osc = nodes.find((n): n is FakeOscillator => n instanceof FakeOscillator);
@@ -275,18 +287,6 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     return { fake, engine, clock, activation, chain: fake.nodes.length };
   }
 
-  /** Voice nodes (after the master chain) still connected. */
-  function connected(fake: FakeAudioContext, chain: number): number {
-    return fake.nodes.slice(chain).filter((n) => !n.disconnected).length;
-  }
-
-  /** Most nodes one voice can create: per layer an envelope gain, a source and maybe a filter. */
-  const MAX_NODES_PER_VOICE = Math.max(
-    ...CUE_KINDS.map((k) =>
-      RECIPES[k].layers.reduce((n, layer) => n + 2 + (layer.filter ? 1 : 0), 0),
-    ),
-  );
-
   it("cues stop being built after the window; stolen and leftover voices are torn down without onended", () => {
     const { fake, engine, clock, chain } = stuckRig();
     const graphBound = MAX_VOICES * MAX_NODES_PER_VOICE;
@@ -372,9 +372,11 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(connected(fake, chain)).toBe(0);
   });
 
-  it("a held activating key on a resume that never settles reopens the window once, so nodes stay bounded (WR-01)", () => {
+  it("a held activating key on a resume that never settles spends the episode's two windows, so nodes stay bounded (WR-01)", () => {
     // A held flipper key (Z, an arrow): every keydown, auto-repeat included,
-    // carries transient activation, but the resume stays stuck for 60 s.
+    // carries transient activation, but the resume stays stuck for 60 s. The
+    // first repeat re-arms the window at once, so the episode's second window
+    // is spent within the first frames.
     const { fake, engine, clock, activation, chain } = stuckRig();
     activation.active = true;
     const frameMs = 1000 / 60;
@@ -391,8 +393,8 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
       started += n;
       expect(engine.activeVoices()).toBeLessThanOrEqual(MAX_VOICES);
     }
-    // The first window plus exactly one activation reopen, nothing after.
-    expect(started).toBeGreaterThan(framesPerWindow);
+    // At least one full window, at most two, nothing after.
+    expect(started).toBeGreaterThanOrEqual(Math.floor(STARTING_WINDOW_MS / frameMs));
     expect(started).toBeLessThanOrEqual(2 * framesPerWindow);
     expect(lastBuiltFrame).toBeLessThan(3 * framesPerWindow);
     expect(fake.nodes.length - chain).toBeLessThanOrEqual(2 * framesPerWindow * MAX_NODES_PER_VOICE);
@@ -401,7 +403,7 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(fake.resumeCalls).toBe(1 + 60 * 30);
   });
 
-  it("once the stuck resume settles, the next stuck resume may be reopened once again (WR-01)", async () => {
+  it("a resume that settles on a still-suspended context opens no window; only a running context ends the episode (WR-02)", async () => {
     const { fake, engine, clock, activation } = stuckRig();
     const pending: { settle: (() => void) | null } = { settle: null };
     fake.resume = () => {
@@ -413,33 +415,61 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     const q = new CueQueue();
     activation.active = true;
     clock.ms += STARTING_WINDOW_MS;
-    engine.unlock(); // the one reopen for the first stuck resume
+    engine.unlock(); // the episode's second window
     clock.ms += STARTING_WINDOW_MS;
-    engine.unlock(); // spent: does not reopen
+    engine.unlock(); // spent: opens nothing
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(0);
     // Every pending resume settles together, but the context stays suspended.
     pending.settle?.();
     await Promise.resolve();
     await Promise.resolve();
-    engine.unlock(); // a fresh resume: a fresh window
+    engine.unlock(); // settling is not running: the same, spent episode
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(0);
+    // The context runs, then an OS interruption suspends it: a fresh episode.
+    fake.state = "running";
+    expect(engine.flush(q)).toBe(0); // an empty frame that observes "running"
+    fake.state = "suspended";
+    engine.unlock();
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(1);
     clock.ms += STARTING_WINDOW_MS;
-    engine.unlock(); // its own single reopen
+    engine.unlock(); // its own second window
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(1);
   });
 
-  it("a re-gesture with activation inside a live window does not extend it", () => {
-    const { engine, clock, activation } = stuckRig();
+  it("an activating re-gesture inside a live window re-arms it once and keeps its voices (WR-01)", () => {
+    // Shift, then Enter late in the first window: Enter's resume() is the one
+    // that starts the device, so its "start" figure gets a full window.
+    const { fake, engine, clock, activation, chain } = stuckRig();
     const q = new CueQueue();
-    clock.ms += STARTING_WINDOW_MS - 10;
+    q.push("bumper", 200, 1);
+    expect(engine.flush(q)).toBe(1); // a voice of the first window
+    const t0 = clock.ms;
+    clock.ms = t0 + STARTING_WINDOW_MS - 20;
     activation.active = true;
     engine.unlock();
-    clock.ms += 20;
+    expect(connected(fake, chain)).toBe(fake.nodes.length - chain); // nothing discarded
+    const rearmedAt = clock.ms;
+    clock.ms = rearmedAt + 10;
+    const before = fake.nodes.length;
+    q.push("start", 0, 1);
+    expect(engine.flush(q)).toBe(1);
+    const start = fake.nodes.slice(before);
+    // Past the first deadline, the audio clock still frozen (the device is
+    // still coming up): the window is live, nothing is cut.
+    clock.ms = t0 + STARTING_WINDOW_MS + 20;
+    q.push("bumper", 201, 1);
+    expect(engine.flush(q)).toBe(1);
+    expect(start.every((n) => !n.disconnected)).toBe(true);
+    // A further activating gesture does not re-arm it again.
+    engine.unlock();
+    clock.ms = rearmedAt + STARTING_WINDOW_MS;
     q.push("bumper", 200, 1);
     expect(engine.flush(q)).toBe(0);
+    expect(connected(fake, chain)).toBe(0);
   });
 
   it("a starting context whose clock already advances counts as rendering, before state flips (IN-05)", () => {
@@ -525,6 +555,343 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(connected(fake, chain)).toBe(fake.nodes.length - chain);
     fake.fireAllEnded();
     expect(connected(fake, chain)).toBe(0);
+  });
+});
+
+describe("starting episodes: invariants over gestures, resume outcomes and clocks (05-REVIEW WR-01..WR-03)", () => {
+  const T0 = 1000;
+  const FRAME_MS = 1000 / 60;
+  /** Most frames one starting window can play (its frames plus one for rounding). */
+  const FRAMES_PER_WINDOW = Math.ceil(STARTING_WINDOW_MS / FRAME_MS) + 1;
+  /** Outcome "runs": the device starts this long after the first activating gesture. */
+  const START_DELAY_MS = 60;
+  /**
+   * On an advancing clock, `state` flips to "running" (and the resumes
+   * resolve) this long after rendering starts: longer than a window, the
+   * worst case of the IN-05 lag.
+   */
+  const STATE_LAG_MS = 300;
+  const RUN_MS = 2000;
+
+  /** "runs": every resume stays pending until the device starts, then all resolve. */
+  type Outcome = "runs" | "pending" | "rejects";
+  /**
+   * "frozen": `currentTime` never moves, and `state` flipping to "running" at
+   * the device start is the only signal. "advancing": `currentTime` moves
+   * from the device start, and `state` lags it by STATE_LAG_MS.
+   */
+  type ClockMode = "frozen" | "advancing";
+  interface Gesture {
+    /** ms after the first gesture. */
+    readonly atMs: number;
+    readonly activating: boolean;
+  }
+  interface Row {
+    readonly first: boolean;
+    readonly second: Gesture | null;
+    readonly outcome: Outcome;
+    readonly clock: ClockMode;
+  }
+
+  /** Let pending `resume()` callbacks run (the checkpoint after an event handler). */
+  async function drain(): Promise<void> {
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+  }
+
+  /** A browser-like context that starts suspended, with the given resume outcome. */
+  function scenarioRig(outcome: Outcome): {
+    fake: FakeAudioContext;
+    engine: AudioEngine;
+    clock: { ms: number };
+    activation: { active: boolean };
+    resolveAll: () => void;
+  } {
+    const fake = new FakeAudioContext();
+    fake.state = "suspended";
+    const resolvers: (() => void)[] = [];
+    fake.resume = () => {
+      fake.resumeCalls++;
+      if (outcome === "rejects") return Promise.reject(new Error("device failed to start"));
+      return new Promise<void>((resolve) => {
+        if (outcome === "runs") resolvers.push(resolve);
+      });
+    };
+    const clock = { ms: T0 };
+    const activation = { active: false };
+    const engine = new AudioEngine(
+      () => fake,
+      () => 0.5,
+      () => clock.ms,
+      () => activation.active,
+    );
+    const resolveAll = (): void => {
+      for (const r of resolvers.splice(0)) r();
+    };
+    return { fake, engine, clock, activation, resolveAll };
+  }
+
+  interface Trace {
+    /** The "start" flush's result, or null when no activating gesture occurred. */
+    readonly startFlushed: number | null;
+    /** Nodes of the "start" voice disconnected by the end of the run. */
+    readonly startCut: number;
+    /** Gestures that landed while the audio clock was advancing. */
+    readonly gesturesWhileRendering: number;
+    /** Nodes disconnected by those gestures' `unlock()` calls. */
+    readonly cutByGestureWhileRendering: number;
+    /** `console.error` calls over the run (one episode). */
+    readonly errors: number;
+  }
+
+  /**
+   * Run one row for RUN_MS at 60 fps: a bumper cue every third frame, and a
+   * "start" cue flushed on its own on the frame after the first activating
+   * gesture (Enter starting the game). Microtasks drain after each gesture,
+   * as after a real event handler.
+   */
+  async function simulate(row: Row): Promise<Trace> {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { fake, engine, clock, activation, resolveAll } = scenarioRig(row.outcome);
+      const gestures: Gesture[] = [{ atMs: 0, activating: row.first }];
+      if (row.second) gestures.push(row.second);
+      const starter = gestures.find((g) => g.activating) ?? null;
+      const deviceAt =
+        row.outcome === "runs" && starter
+          ? starter.atMs + START_DELAY_MS
+          : Number.POSITIVE_INFINITY;
+      const runningAt = deviceAt + (row.clock === "advancing" ? STATE_LAG_MS : 0);
+      let running = false;
+      const advanceTo = async (t: number): Promise<void> => {
+        clock.ms = T0 + t;
+        if (row.clock === "advancing" && t >= deviceAt) fake.currentTime = (t - deviceAt) / 1000;
+        if (!running && t >= runningAt) {
+          running = true;
+          fake.state = "running";
+          resolveAll();
+          await drain();
+        }
+      };
+      const disconnected = (): number => fake.nodes.filter((n) => n.disconnected).length;
+
+      const startQ = new CueQueue();
+      const q = new CueQueue();
+      let startDue = false;
+      let startFlushed: number | null = null;
+      let startNodes: FakeAudioContext["nodes"] = [];
+      let gesturesWhileRendering = 0;
+      let cutByGestureWhileRendering = 0;
+      let next = 0;
+      for (let f = 0; f * FRAME_MS <= RUN_MS; f++) {
+        const frameAt = f * FRAME_MS;
+        for (let g = gestures[next]; g !== undefined && g.atMs <= frameAt; g = gestures[next]) {
+          next++;
+          await advanceTo(g.atMs);
+          const rendering = fake.currentTime > 0;
+          activation.active = g.activating;
+          const before = disconnected();
+          engine.unlock();
+          if (rendering) {
+            gesturesWhileRendering++;
+            cutByGestureWhileRendering += disconnected() - before;
+          }
+          await drain();
+          if (g === starter) startDue = true;
+        }
+        await advanceTo(frameAt);
+        if (startDue) {
+          startDue = false;
+          startQ.push("start", 0, 1);
+          const before = fake.nodes.length;
+          startFlushed = engine.flush(startQ);
+          startNodes = fake.nodes.slice(before);
+        }
+        if (f % 3 === 0) q.push("bumper", 200, 0.8);
+        engine.flush(q);
+      }
+      return {
+        startFlushed,
+        startCut: startNodes.filter((n) => n.disconnected).length,
+        gesturesWhileRendering,
+        cutByGestureWhileRendering,
+        errors: errors.mock.calls.length,
+      };
+    } finally {
+      errors.mockRestore();
+    }
+  }
+
+  const seconds: (Gesture | null)[] = [null];
+  for (const atMs of [20, 230, 1000]) {
+    for (const activating of [true, false]) seconds.push({ atMs, activating });
+  }
+  const rows: Row[] = [];
+  for (const first of [true, false]) {
+    for (const second of seconds) {
+      for (const outcome of ["runs", "pending", "rejects"] as const) {
+        for (const clock of ["frozen", "advancing"] as const) {
+          rows.push({ first, second, outcome, clock });
+        }
+      }
+    }
+  }
+  const act = (a: boolean): string => (a ? "activating" : "non-activating");
+  const label = (r: Row): string =>
+    `first ${act(r.first)}, second ${r.second ? `+${r.second.atMs} ms ${act(r.second.activating)}` : "none"}, ` +
+    `resume ${r.outcome}, clock ${r.clock}`;
+
+  it.each(rows.map((r) => [label(r), r] as const))("%s", async (_name, row) => {
+    const t = await simulate(row);
+    const starts = row.outcome === "runs" && (row.first || row.second?.activating === true);
+    if (starts) {
+      // 2. The device starts START_DELAY_MS (inside a window) after the
+      // activating gesture: its "start" figure is scheduled and never cut.
+      expect(t.startFlushed).toBeGreaterThanOrEqual(1);
+      expect(t.startCut).toBe(0);
+    }
+    // 3. No gesture hard-cuts sounding voices while the clock advances.
+    expect(t.cutByGestureWhileRendering).toBe(0);
+    // 4. One episode: a failed resume is reported once.
+    expect(t.errors).toBe(row.outcome === "rejects" ? 1 : 0);
+  });
+
+  it("the table reaches the late re-arm and a gesture while rendering", async () => {
+    // The WR-01 sequence: Shift, then Enter at +230 ms, the device up 60 ms later.
+    const late = await simulate({
+      first: false,
+      second: { atMs: 230, activating: true },
+      outcome: "runs",
+      clock: "frozen",
+    });
+    expect(late.startFlushed).toBe(1);
+    expect(late.startCut).toBe(0);
+    // An activating gesture in the IN-05 interval (rendering, `state` lagging).
+    const lagging = await simulate({
+      first: true,
+      second: { atMs: 230, activating: true },
+      outcome: "runs",
+      clock: "advancing",
+    });
+    expect(lagging.gesturesWhileRendering).toBe(1);
+    expect(lagging.cutByGestureWhileRendering).toBe(0);
+  });
+
+  const heldRows: [boolean, "pending" | "rejects", "before" | "after"][] = [];
+  for (const activating of [true, false]) {
+    for (const outcome of ["pending", "rejects"] as const) {
+      for (const drainAt of ["before", "after"] as const) {
+        heldRows.push([activating, outcome, drainAt]);
+      }
+    }
+  }
+
+  it.each(heldRows)(
+    "1. bounded: a key held 60 s (activation %s), resume %s, microtasks drained %s the flush",
+    async (activating, outcome, drainAt) => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { fake, engine, clock, activation } = scenarioRig(outcome);
+        activation.active = activating;
+        const q = new CueQueue();
+        let chain = -1;
+        let started = 0;
+        for (let f = 0; f < 60 * 60; f++) {
+          clock.ms = T0 + f * FRAME_MS;
+          if (f % 2 === 0) {
+            engine.unlock(); // key auto-repeat at 30 Hz
+            if (chain < 0) chain = fake.nodes.length;
+            if (drainAt === "before") await drain();
+          }
+          q.push("bumper", 200 + (f % 3), 1);
+          started += engine.flush(q);
+          expect(engine.activeVoices()).toBeLessThanOrEqual(MAX_VOICES);
+          if (drainAt === "after") await drain();
+        }
+        expect(started).toBeLessThanOrEqual(2 * FRAMES_PER_WINDOW);
+        expect(fake.nodes.length - chain).toBeLessThanOrEqual(
+          2 * FRAMES_PER_WINDOW * MAX_NODES_PER_VOICE,
+        );
+        expect(engine.activeVoices()).toBe(0);
+        expect(connected(fake, chain)).toBe(0);
+        expect(fake.resumeCalls).toBe(60 * 30);
+        // 4. A rejection is reported once, not on every keydown.
+        expect(errors).toHaveBeenCalledTimes(outcome === "rejects" ? 1 : 0);
+      } finally {
+        errors.mockRestore();
+      }
+    },
+  );
+
+  it("4. a failed resume is reported once per episode, and again after running → suspended", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { fake, engine } = scenarioRig("rejects");
+      const reject = fake.resume;
+      for (let i = 0; i < 10; i++) {
+        engine.unlock();
+        await drain();
+      }
+      expect(errors).toHaveBeenCalledTimes(1);
+      // A resume() that throws in the same episode is not reported again.
+      fake.resume = () => {
+        throw new Error("resume threw");
+      };
+      engine.unlock();
+      expect(errors).toHaveBeenCalledTimes(1);
+      // The context runs (the engine sees it), then is suspended again.
+      fake.state = "running";
+      engine.unlock();
+      fake.state = "suspended";
+      fake.resume = reject;
+      for (let i = 0; i < 10; i++) {
+        engine.unlock();
+        await drain();
+      }
+      expect(errors).toHaveBeenCalledTimes(2);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("5. after running → suspended, the next gesture opens a fresh window with its own second window", async () => {
+    const { fake, engine, clock, activation, resolveAll } = scenarioRig("runs");
+    const q = new CueQueue();
+    const frame = (): number => {
+      q.push("bumper", 200, 1);
+      return engine.flush(q);
+    };
+    // Episode 1: both windows spent on a resume that has not settled yet.
+    engine.unlock();
+    expect(frame()).toBe(1);
+    clock.ms += STARTING_WINDOW_MS + 50;
+    activation.active = true;
+    engine.unlock();
+    expect(frame()).toBe(1);
+    clock.ms += STARTING_WINDOW_MS + 50;
+    engine.unlock();
+    expect(frame()).toBe(0);
+    // The device starts: every pending resume resolves and the clock moves.
+    fake.state = "running";
+    resolveAll();
+    await drain();
+    fake.currentTime = 1;
+    expect(frame()).toBe(1);
+    // An OS interruption: suspended again, the clock frozen, no resume in flight.
+    fake.state = "suspended";
+    activation.active = false;
+    expect(frame()).toBe(0);
+    // Episode 2: a fresh first window from a non-activating gesture...
+    engine.unlock();
+    expect(frame()).toBe(1);
+    clock.ms += STARTING_WINDOW_MS + 50;
+    expect(frame()).toBe(0);
+    // ...and its own second window from the first activating one.
+    activation.active = true;
+    engine.unlock();
+    expect(frame()).toBe(1);
+    clock.ms += STARTING_WINDOW_MS + 50;
+    engine.unlock();
+    expect(frame()).toBe(0);
   });
 });
 

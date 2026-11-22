@@ -7,31 +7,44 @@
  * - no context exists until `unlock()` runs inside the player's first trusted
  *   gesture (`AudioUnlock`); a context created there is allowed to start, but
  *   it reports "suspended" until the audio device is up (tens of ms on some
- *   engines), so `unlock()` calls `resume()` and the context counts as starting
- *   until that settles or STARTING_WINDOW_MS has passed, whichever is first;
- * - a later gesture while the context is not running calls `resume()`; the
- *   first one with transient user activation after the starting window
- *   expired also reopens it, once per stuck resume, since its `resume()` can
- *   start a context an earlier non-activating gesture (a modifier-only
- *   keydown) left stuck; a context already rendering is never reopened;
- * - a creation failure is reported once and never retried; a rejected
- *   `resume()` is reported and the game keeps running (T-05-04).
+ *   engines), so `unlock()` calls `resume()`, and so does every later gesture
+ *   while the context is not running;
+ * - a creation failure is reported once and never retried; a rejected or
+ *   throwing `resume()` is reported once per starting episode (below), and the
+ *   game keeps running (T-05-04).
+ *
+ * Starting episodes (the one description of the starting window; 05-REVIEW
+ * WR-01..WR-03). An episode runs from the moment the context exists and is
+ * not running until the engine next observes `state === "running"` (in
+ * `unlock()` or `flush()`). A context that later drops back to suspended (an
+ * OS interruption) starts a fresh episode on the next gesture. An episode
+ * opens at most two starting windows, each STARTING_WINDOW_MS of wall clock
+ * (the injected `clock`) from the gesture that opens it:
+ * - the episode's first gesture opens the first window;
+ * - the first later gesture with transient user activation re-arms it,
+ *   expired or not, unless the context is already rendering. Its `resume()`
+ *   is the one that can start the device after a modifier-only first keydown,
+ *   so the "start" figure it triggers gets a full window. The voices of an
+ *   expired window are discarded first; a live window's are kept;
+ * - nothing else opens a window: not a further gesture, and not a `resume()`
+ *   settling or rejecting, which only clears the in-flight flag.
+ * While a window is open and a resume is in flight, the suspended context is
+ * playable: nodes scheduled at its frozen `currentTime` sound as soon as it
+ * runs. A `resume()` can stay pending forever or reject on every call (no
+ * output device, a gesture that is not activation, a device that fails to
+ * start), and the two windows per episode are what bound node creation then.
+ * A suspended context whose audio clock is already advancing, with a resume in
+ * flight, counts as running with no time limit: it is rendering and `state`
+ * only lags (IN-05). It is never re-armed, since that would discard audible
+ * voices.
  *
  * Pull-then-play, the collision-router split: the step path only records cues
  * into the `CueQueue`; `flush()` runs once per render frame and is the only
- * place audio nodes are created. A starting context (suspended with a resume in
- * flight) is playable for at most STARTING_WINDOW_MS from the window's
- * (re)opening (wall clock, from the injected `clock`); an activating re-gesture
- * can reopen an expired window once. Nodes scheduled on it at the frozen
- * `currentTime` sound as soon as it runs, so the first "start" figure is not
- * lost. A `resume()` can stay pending forever (no output device, or a gesture
- * the browser does not count as activation), so the window is bounded. A
- * suspended context whose audio clock is already advancing counts as running,
- * with no time limit: it is rendering and `state` only lags (IN-05).
- * Otherwise, without a running context, `flush()` drops the queued cues and
+ * place audio nodes are created. Without a playable context (running,
+ * rendering, or starting as above), `flush()` drops the queued cues and
  * discards every voice still held (stopped and disconnected at once), so the
- * voices of an expired window never burst out on a late start: a stale cue is
- * at most STARTING_WINDOW_MS old when it sounds, never replayed after that.
+ * voices of an expired window never burst out on a late start. A stale cue
+ * sounds less than two windows after it was recorded, or never.
  *
  * Every voice goes through the master chain (master gain, then a dynamics
  * compressor, then the destination), so no sound can bypass the limiter.
@@ -90,9 +103,9 @@ export const MUTE_RAMP_S = 0.05;
 export const SOURCE_TAIL_S = 0.01;
 
 /**
- * Longest a suspended context with a resume in flight counts as starting and
- * playable (wall-clock ms, from the window's (re)opening). Normal start-up
- * takes tens of ms; past this, cues are dropped until the context runs.
+ * Length of one starting window (wall-clock ms from the gesture that opens or
+ * re-arms it; see the starting-episode model in the file header). Normal
+ * start-up takes tens of ms.
  */
 export const STARTING_WINDOW_MS = 250;
 
@@ -107,8 +120,10 @@ function wallClockMs(): number {
  * context. A modifier-only keydown (Shift) is not activation in Chromium, but
  * the non-modifier flipper keys (Z, /, the arrows) are, auto-repeat included,
  * and activation stays live for seconds after any such input. Engines without
- * `navigator.userActivation` count every gesture. So this probe alone cannot
- * bound reopening; `unlock()` allows one reopen per stuck resume (WR-01).
+ * `navigator.userActivation` count every gesture, so there a non-activating
+ * key can spend the episode's second window early. That stays within the
+ * two-window bound, so it is acceptable. The probe alone bounds nothing; the
+ * episode model in the file header does.
  */
 function hasTransientActivation(): boolean {
   if (typeof navigator === "undefined") return true;
@@ -153,22 +168,25 @@ export class AudioEngine {
   private noise: AudioBufferLike | null = null;
   /** Set when creation threw; later gestures do not retry. */
   private failed = false;
-  /** A `resume()` is in flight: a suspended context may be about to run. */
+  /**
+   * A `resume()` is in flight: a suspended context may be about to run.
+   * Settling or rejecting clears it and never touches `windowsOpened`.
+   */
   private resumePending = false;
   /**
-   * Wall-clock deadline (ms, `clock`) of the starting window, set when a
-   * `resume()` is issued with none already in flight. A later gesture while
-   * the first resume is still pending does not extend it, except that the
-   * first gesture with transient activation after it expired reopens it
-   * once: its `resume()` can really start the context (05-REVIEW WR-01).
+   * Starting windows opened in the current starting episode (the model in the
+   * file header): 0 before its first gesture, 1 after it, 2 once an
+   * activating gesture has re-armed the window, which spends the episode.
+   * Reset to 0 only when `state === "running"` is observed.
    */
-  private startingUntilMs = 0;
+  private windowsOpened: 0 | 1 | 2 = 0;
   /**
-   * Set when an activating re-gesture has reopened an expired window for the
-   * resume now in flight; cleared when that resume settles or rejects. At
-   * most one activation reopen per stuck resume (05-REVIEW WR-01).
+   * Set once a rejected or throwing `resume()` has been reported in the
+   * current episode; reset together with `windowsOpened`.
    */
-  private activationReopened = false;
+  private rejectReported = false;
+  /** Wall-clock deadline (ms, `clock`) of the current starting window. */
+  private startingUntilMs = 0;
   /**
    * The audio clock (`currentTime`) when the starting window opened. Once it
    * has moved, the context is rendering even if `state` still reads
@@ -195,7 +213,8 @@ export class AudioEngine {
    *   (`performance.now` by default; tests inject a fake one).
    * @param isActivation whether the current gesture carries transient user
    *   activation (`navigator.userActivation.isActive` by default; tests
-   *   inject one). Only such a gesture reopens an expired starting window.
+   *   inject one). Only such a gesture re-arms the starting window (the
+   *   episode model in the file header).
    */
   constructor(
     createContext: () => AudioContextLike,
@@ -286,7 +305,11 @@ export class AudioEngine {
       }
     }
     const ctx = this.ctx;
-    if (ctx === null || ctx.state === "running") return;
+    if (ctx === null) return;
+    if (ctx.state === "running") {
+      this.endEpisode();
+      return;
+    }
     if (ctx.state === "closed") {
       // resume() always rejects on a closed context: report it once instead
       // of logging on every later gesture (each flipper keydown).
@@ -297,50 +320,50 @@ export class AudioEngine {
       return;
     }
     try {
-      // Open the starting window for a fresh resume. While a resume stays
-      // pending, re-gestures do not keep re-opening it (key auto-repeat would
-      // bring back unbounded node growth). The one exception: the first
-      // gesture with transient activation after the window expired reopens it
-      // once. A first modifier-only keydown can leave the resume stuck, and
-      // the later Enter really starts the context, so its "start" cue must
-      // still be playable (WR-01). If that activating resume() does not start
-      // the context either, no later gesture can (all pending resumes settle
-      // together), so the reopen is spent until the resume settles (05-REVIEW
-      // WR-01, second pass). A context that is already rendering (its clock
-      // moves while `state` lags) is never reopened: that would discard
-      // audibly playing voices and re-anchor `startAudioT` (05-REVIEW WR-02).
+      // The starting-episode model (file header): the episode's first gesture
+      // opens a window, its first activating gesture re-arms it once unless
+      // the context is already rendering, and nothing else opens one.
       const nowMs = this.clock();
-      if (!this.resumePending) {
-        this.activationReopened = false;
+      if (this.windowsOpened === 0) {
+        this.windowsOpened = 1;
         this.openStartingWindow(ctx, nowMs);
-      } else if (
-        !this.activationReopened &&
-        nowMs >= this.startingUntilMs &&
-        !this.isRendering(ctx) &&
-        this.isActivation()
-      ) {
-        this.activationReopened = true;
-        // Voices from an expired window must not ride into the new one.
-        this.pool.discardAll(ctx.currentTime);
+      } else if (this.windowsOpened === 1 && !this.isRendering(ctx) && this.isActivation()) {
+        this.windowsOpened = 2;
+        // An expired window's voices must not ride into the new one; a live
+        // window's may stay.
+        if (nowMs >= this.startingUntilMs) this.pool.discardAll(ctx.currentTime);
         this.openStartingWindow(ctx, nowMs);
       }
       this.resumePending = true;
       ctx.resume().then(
         () => {
           this.resumePending = false;
-          this.activationReopened = false;
         },
         (error: unknown) => {
           this.resumePending = false;
-          this.activationReopened = false;
-          report("resume() was rejected", error);
+          this.reportResumeFailure("resume() was rejected", error);
         },
       );
     } catch (error) {
       this.resumePending = false;
-      this.activationReopened = false;
-      report("resume() threw", error);
+      this.reportResumeFailure("resume() threw", error);
     }
+  }
+
+  /**
+   * The engine observed `state === "running"`: the starting episode is over,
+   * and a later drop back to suspended starts a fresh one.
+   */
+  private endEpisode(): void {
+    this.windowsOpened = 0;
+    this.rejectReported = false;
+  }
+
+  /** Report a failed `resume()` once per starting episode, not on every keydown. */
+  private reportResumeFailure(message: string, error: unknown): void {
+    if (this.rejectReported) return;
+    this.rejectReported = true;
+    report(message, error);
   }
 
   /** (Re)open the bounded starting window at wall-clock `nowMs`. */
@@ -380,13 +403,12 @@ export class AudioEngine {
   /**
    * Play every queued cue in FIFO order, all at the same t0, then empty the
    * queue. Returns the number of voices started. Muted or without a playable
-   * context (running, or suspended with a resume in flight and either its
-   * audio clock already advancing, which counts as running, or within
-   * STARTING_WINDOW_MS of the window's (re)opening) it creates nothing,
-   * empties the queue and returns 0 (a cue is never replayed later). A
-   * context that is not playable also has every voice it still holds
-   * discarded: it cannot fire their `onended`, and they must not burst out if
-   * it starts late.
+   * context (running, rendering, or inside a starting window; see the file
+   * header) it creates nothing, empties the queue and returns 0 (a cue is
+   * never replayed later). A context that is not playable also has every
+   * voice it still holds discarded: it cannot fire their `onended`, and they
+   * must not burst out if it starts late. Observing a running context ends
+   * the starting episode.
    * Call once per render frame.
    */
   flush(cues: CueQueue): number {
@@ -396,6 +418,7 @@ export class AudioEngine {
       cues.clear();
       return 0;
     }
+    if (ctx.state === "running") this.endEpisode();
     const rendering = this.isRendering(ctx);
     if (!rendering && !this.isStarting(ctx)) {
       this.pool.discardAll(ctx.currentTime);
@@ -431,7 +454,7 @@ export class AudioEngine {
     return this.resumePending && ctx.state === "suspended" && ctx.currentTime > this.startAudioT;
   }
 
-  /** Suspended with a resume in flight, inside the bounded starting window. */
+  /** Suspended with a resume in flight, inside the current starting window. */
   private isStarting(ctx: AudioContextLike): boolean {
     return this.resumePending && ctx.state === "suspended" && this.clock() < this.startingUntilMs;
   }
