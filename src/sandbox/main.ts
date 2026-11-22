@@ -51,8 +51,13 @@
  * - `onPostStep` (after `world.step()`): `router.dispatch()`, then
  *   `reactive.service()` (kicks), then `session.service()` (drain and serve),
  *   then `observer.observe()` (game-event cues), then `lamps.update()` (the
- *   insert lamp levels, PLSH-04), then `flash.tick()` (the flash clock,
- *   RND-03).
+ *   insert lamp levels, PLSH-04), then `effects.tick()` (the screen shake,
+ *   PLSH-01), then `flash.tick()` (the flash clock, RND-03).
+ *
+ * Screen shake (PLSH-01, D-17): one `EffectsTracker` receives bumper and sling
+ * kicks through `CueFeedback` and nudges, tilts and drains through the observer;
+ * the renderer samples it once per frame and shakes the canvas only (the DOM HUD
+ * never moves). Under `prefers-reduced-motion` the offset is exactly 0 (D-18).
  *
  * Presentation (Phase 5, AUD-01): the rules report every registered kick and
  * sensor pass through `ReactiveFeedback`; `CueFeedback` records each one as a
@@ -90,6 +95,7 @@ import { BonusView, DiagView, HudView, MuteView, type DiagData, type TextSink } 
 import { initKeyLabels } from "../ui/key-labels";
 import { interpolateAngles, interpolateBalls, type MutableBall } from "../render/interpolate";
 import { ContactFlash } from "../render/contact-flash";
+import { EffectsTracker, type EffectsReader } from "../render/effects";
 import { FlashTracker, maxElementId } from "../render/flash";
 import { LampTracker, type LampReader } from "../render/lamps";
 import type { LayerFactory } from "../render/static-layer";
@@ -206,7 +212,11 @@ function main(): void {
   // sensor passes record through CueFeedback; the clock ticks once per step at
   // the end of onPostStep and the renderer reads it at loop.alpha.
   const flash = new FlashTracker(maxElementId(world.getElements()));
-  const cueFeedback = new CueFeedback(cues, flash);
+  // Presentation effects (PLSH-01): the screen shake on the step clock, fed by
+  // registered kicks (through CueFeedback) and by the observer's nudges, tilts
+  // and drains; ticked once per step and read by the renderer. Built once.
+  const effects = new EffectsTracker(world.getElements());
+  const cueFeedback = new CueFeedback(cues, flash, effects);
   const reactive = new ReactiveElements(world, router, session, cueFeedback, session);
   // Walls, the chute and the bats flash on a real hit straight off the bus,
   // silently (D-03): ContactFlash holds only the flash sink, never the cues.
@@ -226,6 +236,7 @@ function main(): void {
     drainId,
     controller,
     flipperIds,
+    effects,
   );
   // Insert lamps (PLSH-04, D-21): the tracker reads the rollover lights and the
   // session's skill-shot getters once per fixed step and fades each lamp level
@@ -310,6 +321,8 @@ function main(): void {
     observer.observe();
     // The lamp levels follow this step's rule state (after the serve landed).
     lamps.update();
+    // The effect clocks (shake trauma decay) advance after this step's inputs.
+    effects.tick();
     // Last: advance the flash clock one fixed step (it pauses with the sim).
     flash.tick();
   }
@@ -428,6 +441,8 @@ function main(): void {
     lamps: LampReader | null;
     flash: FlashReader | null;
     alpha: number;
+    effects: EffectsReader | null;
+    reducedMotion: boolean;
   } = {
     balls: interpolated,
     flipperAngles,
@@ -435,6 +450,8 @@ function main(): void {
     lamps,
     flash,
     alpha: 0,
+    effects,
+    reducedMotion: false,
   };
   const diag: DiagData = { fps: 0, physicsHz: 120, kineticEnergy: 0 };
 
@@ -513,6 +530,8 @@ function main(): void {
       renderFrame.lamps = lamps;
       renderFrame.flash = flash;
       renderFrame.alpha = loop.alpha;
+      renderFrame.effects = effects;
+      renderFrame.reducedMotion = reducedMotion;
       tableRenderer.draw(renderFrame);
     } else if (debugRenderer) {
       debugRenderer.draw(world, interpolated, plunger.getCharge(), reactive);

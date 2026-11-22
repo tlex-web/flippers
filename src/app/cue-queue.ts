@@ -106,6 +106,16 @@ export interface FlashSink {
   record(elementId: number, strength: number): void;
 }
 
+/**
+ * Where registered hits reach the presentation effects (06-09: the screen
+ * shake; the particle plans extend it). Step-path writes of scalars only; the
+ * render side implements it and never holds a world or rules handle.
+ */
+export interface FxSink {
+  onKick(kind: "bumper" | "slingshot", elementId: number, strength: number): void;
+  onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void;
+}
+
 /** A pooled, mutable cue record. */
 interface CueRecord {
   kind: CueKind;
@@ -173,26 +183,31 @@ export class CueQueue {
 const BALL_MASS = ballMass(BALL_RADIUS_M);
 
 /**
- * Turns the rules' registered hits into cues and flashes. Total: scalar writes
+ * Turns the rules' registered hits into cues, flashes and effects (the optional
+ * `FxSink`, forwarded after the cue and flash writes). Total: scalar writes
  * only, no allocation, no world or rules handle (T-05-03).
  */
 export class CueFeedback implements ReactiveFeedback {
   private readonly cues: CueQueue;
   private readonly flash: FlashSink | null;
+  private readonly fx: FxSink | null;
 
-  constructor(cues: CueQueue, flash: FlashSink | null = null) {
+  constructor(cues: CueQueue, flash: FlashSink | null = null, fx: FxSink | null = null) {
     this.cues = cues;
     this.flash = flash;
+    this.fx = fx;
   }
 
   onKick(kind: "bumper" | "slingshot", elementId: number, normalImpulse: number): void {
     const s = impulseStrength(normalImpulse, BALL_MASS);
     this.cues.push(kind, elementId, s);
     if (this.flash) this.flash.record(elementId, Math.max(KICK_FLASH_FLOOR, s));
+    if (this.fx) this.fx.onKick(kind, elementId, s);
   }
 
   onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void {
     this.cues.push(bank ? "bank" : kind, elementId, 1);
     if (this.flash) this.flash.record(elementId, 1);
+    if (this.fx) this.fx.onSensor(kind, elementId, bank);
   }
 }

@@ -3,9 +3,10 @@
  *
  * `resize(view)` sizes the visible canvas from the display (the backing follows
  * the CSS fit, Finding 1), bakes the static playfield once into an offscreen
- * layer and rebuilds the cached gradients. `draw(frame)` blits that layer with
- * one `drawImage` at identity, sets the world transform once and draws only what
- * moves, in this order: insert lamps, element flashes, both bats at their
+ * layer and rebuilds the cached gradients. `draw(frame)` fills the backing with
+ * BG_BOTTOM at identity, blits that layer with one `drawImage` at the shake
+ * offset, sets the shaken world transform and draws only what moves, in this
+ * order: insert lamps, element flashes, both bats at their
  * interpolated angles, the plunger and its charge meter, one baked soft shadow
  * per ball (PLSH-03, D-20) and every ball at its interpolated position.
  *
@@ -33,8 +34,19 @@
  * ball at ball center + (SHADOW_OFFSET_X_M, SHADOW_OFFSET_Y_M), a fixed size
  * that never scales with speed.
  *
+ * Screen shake (PLSH-01, D-17, D-18, research Pitfall 8): `frame.effects.shake`
+ * is sampled once per `draw()` at `frame.alpha` into a renderer-owned
+ * preallocated pair (whole device pixels, exactly 0 under
+ * `frame.reducedMotion` or with no effects). The BG_BOTTOM fill comes first so a
+ * shaken blit never uncovers an edge strip, the static blit lands at
+ * (shakeX, shakeY), and every world transform in the frame (the frame start, the
+ * flipper flash, the bats and the balls) goes through one `resetWorld()` with
+ * offX + shakeX and offY + shakeY, so no layer swims against the table. The
+ * renderer never writes the tracker's state. The DOM HUD never shakes.
+ *
  * Frame rules (Pitfalls 3-4): no string building, no gradient creation, no
- * closures and no shadowBlur in `draw()`; index loops only; every frame ends with
+ * closures, no shadowBlur or filter and no save()/restore() in `draw()`; index
+ * loops only; every frame ends with
  * `globalAlpha` 1 and `globalCompositeOperation` "source-over". The canvas paints
  * no text (D-01: the HUD is DOM). No DOM globals: the canvas, its context and the
  * layer factory are injected, and the world is read only through `PhysicsWorld`.
@@ -45,12 +57,14 @@ import type { BallState, FlipperState, PhysicsWorld } from "../physics/types";
 import { deriveKickFace } from "../game/reactive-elements";
 import type { ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
+import type { EffectsReader } from "./effects";
 import { FLASH_EPS, FLASH_TIMING, type FlashTracker } from "./flash";
 import { buildLampShapes, type LampReader, type LampShape } from "./lamps";
 import {
   BALL_CORE,
   BALL_EDGE,
   BALL_GLINT,
+  BG_BOTTOM,
   FLASH_BUMPER,
   FLASH_DRAIN,
   FLASH_FLIPPER,
@@ -76,6 +90,7 @@ import {
   SHADOW_OFFSET_Y_M,
   SHADOW_RADIUS_M,
 } from "./sprites";
+import type { ShakeOut } from "./shake";
 import { bakeStatic, traceElement, type Layer, type LayerFactory } from "./static-layer";
 import {
   METER_GAP_M,
@@ -123,6 +138,10 @@ export interface RenderFrame {
   readonly flash: FlashReader | null;
   /** Render point between the last two fixed steps, in [0, 1] (`loop.alpha`). */
   readonly alpha: number;
+  /** Presentation effects (the screen shake), or absent / null for no shake (06-09). */
+  readonly effects?: EffectsReader | null;
+  /** `prefers-reduced-motion: reduce`: the shake offset is exactly 0 (D-18). */
+  readonly reducedMotion?: boolean;
 }
 
 /** A flashable circle element (bumper): drawn as a halo. */
@@ -241,6 +260,11 @@ export class TableRenderer {
   private ballGradient: CanvasGradient | null = null;
   private flipperGradients: CanvasGradient[] = [];
   private bakes = 0;
+  /** This frame's shake offset in whole device px (renderer-owned, preallocated). */
+  private readonly shakeOut: ShakeOut = { x: 0, y: 0 };
+  /** This frame's world translation: view offset plus shake offset (device px). */
+  private tx = 0;
+  private ty = 0;
 
   constructor(
     canvas: CanvasTarget,
@@ -391,9 +415,23 @@ export class TableRenderer {
     if (!view || !layer) return;
     const ctx = this.ctx;
 
+    // Identity first: fill the whole backing so a shaken blit never uncovers an
+    // edge strip, then sample the shake once and blit the static layer there.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(layer.canvas, 0, 0);
-    ctx.setTransform(view.scale, 0, 0, view.scale, view.offX, view.offY);
+    ctx.fillStyle = BG_BOTTOM;
+    ctx.fillRect(0, 0, view.backingW, view.backingH);
+    const shake = this.shakeOut;
+    const effects = frame.effects;
+    if (effects) {
+      effects.shake.sample(frame.alpha, view.dpr, frame.reducedMotion === true, shake);
+    } else {
+      shake.x = 0;
+      shake.y = 0;
+    }
+    ctx.drawImage(layer.canvas, shake.x, shake.y);
+    this.tx = view.offX + shake.x;
+    this.ty = view.offY + shake.y;
+    this.resetWorld();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -402,10 +440,20 @@ export class TableRenderer {
     this.drawFlippers(frame.flipperAngles);
     this.drawPlunger(frame.plungerCharge);
     this.drawBallShadows(frame.balls);
-    this.drawBalls(frame.balls, view);
+    this.drawBalls(frame.balls);
 
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
+  }
+
+  /**
+   * The world transform with this frame's shake offset: the one place a world
+   * `setTransform` is issued, so every layer stays registered (Pitfall 8).
+   */
+  private resetWorld(): void {
+    const view = this.view;
+    if (!view) return;
+    this.ctx.setTransform(view.scale, 0, 0, view.scale, this.tx, this.ty);
   }
 
   /**
@@ -578,7 +626,7 @@ export class TableRenderer {
       ctx.closePath();
       ctx.fillStyle = FLASH_FLIPPER;
       ctx.fill();
-      ctx.setTransform(view.scale, 0, 0, view.scale, view.offX, view.offY);
+      this.resetWorld();
     }
 
     if (this.flashLit) {
@@ -631,7 +679,7 @@ export class TableRenderer {
       ctx.beginPath();
       ctx.arc(tr, 0, tr, 0, TAU);
       ctx.fill();
-      ctx.setTransform(view.scale, 0, 0, view.scale, view.offX, view.offY);
+      this.resetWorld();
     }
   }
 
@@ -698,7 +746,7 @@ export class TableRenderer {
   }
 
   /** Each ball with the cached gradient plus a fixed glint, at its drawn position. */
-  private drawBalls(balls: readonly BallState[], view: ViewTransform): void {
+  private drawBalls(balls: readonly BallState[]): void {
     const ctx = this.ctx;
     const grad = this.ballGradient;
     if (!grad) return;
@@ -717,7 +765,7 @@ export class TableRenderer {
       ctx.beginPath();
       ctx.arc(-r * GLINT_OFFSET, -r * GLINT_OFFSET, r * GLINT_RADIUS, 0, TAU);
       ctx.fill();
-      ctx.setTransform(view.scale, 0, 0, view.scale, view.offX, view.offY);
+      this.resetWorld();
     }
   }
 }

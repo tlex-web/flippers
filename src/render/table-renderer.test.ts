@@ -154,7 +154,7 @@ describe("TableRenderer frame contract (RND-02)", () => {
     expect(rig.layers.createCount).toBe(atResize);
   });
 
-  it("starts every frame with an identity setTransform then exactly one drawImage of the static layer at (0, 0)", () => {
+  it("starts every frame with an identity setTransform, a BG_BOTTOM fill over the backing, then exactly one drawImage of the static layer at (0, 0)", () => {
     const rig = makeRig();
     const layer = rig.layers.layers[0];
     expect(layer).toBeDefined();
@@ -164,9 +164,16 @@ describe("TableRenderer frame contract (RND-02)", () => {
       const first = rig.rec.log[0];
       expect(first).toEqual({ kind: "call", name: "setTransform", args: [1, 0, 0, 1, 0, 0] });
       const calls = callsOf(rig.rec);
-      expect(calls[1]?.name).toBe("drawImage");
-      expect(calls[1]?.args[0]).toBe(layer?.canvas);
-      expect(calls[1]?.args.slice(1)).toEqual([0, 0]);
+      // Re-pinned by 06-09 (D-17): the backing is filled before the blit, so a
+      // shaken blit never uncovers an edge strip; unshaken, the blit stays at (0, 0).
+      expect(calls[1]).toEqual({
+        kind: "call",
+        name: "fillRect",
+        args: [0, 0, rig.view.backingW, rig.view.backingH],
+      });
+      expect(calls[2]?.name).toBe("drawImage");
+      expect(calls[2]?.args[0]).toBe(layer?.canvas);
+      expect(calls[2]?.args.slice(1)).toEqual([0, 0]);
       // The static blit is the only drawImage of the static layer; the frame's
       // one ball adds exactly one shadow stamp.
       const draws = calls.filter((c) => c.name === "drawImage");

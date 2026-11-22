@@ -33,9 +33,14 @@
  *   was already pushed on the drain step).
  * A step with no change pushes nothing, so a held state never spams (T-05-17).
  *
+ * Effects (06-09, D-17): with an `ObserverFx` attached, the tilt edge calls
+ * `fx.onTilt()` after its cue and every drain-count increment calls
+ * `fx.onDrain()` after its cue and flash, so tilts and drains shake the view.
+ * A backstop-saved drain (06-07) also raises the drain count, so it shakes too.
+ *
  * Read-only by construction (T-05-16): it holds only `Pick<>` getter slices of
  * the session, the plunger and the flipper controller, never a world handle, and writes only scalars
- * into the cue ring and the flash sink. No allocation, no closures, no DOM, no
+ * into the cue ring, the flash sink and the effects sink. No allocation, no closures, no DOM, no
  * engine import (type-only imports, plus the plain `SKILL_SHOT_MAX_POINTS`
  * tuning constant and the pure `revealedRowCount` schedule).
  */
@@ -45,7 +50,7 @@ import type { FlipperController } from "../control/flipper-controller";
 import type { PlungerController } from "../control/plunger-controller";
 import { revealedRowCount } from "../game/bonus";
 import type { GameSession, GameState } from "../game/game-session";
-import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
+import { SKILL_SHOT_MAX_POINTS, type NudgeDir } from "../game/tuning";
 
 /** The session getters the observer diffs. */
 export type ObserverSession = Pick<
@@ -66,6 +71,16 @@ export type ObserverPlunger = Pick<PlungerController, "getReleaseCount" | "getLa
 /** The flipper controller's read-only coil counters. */
 export type ObserverFlippers = Pick<FlipperController, "getCoilOnCount" | "getCoilOffCount">;
 
+/**
+ * Where the observer's game events reach the presentation effects (06-09). The
+ * render side implements it; scalar step-path writes only.
+ */
+export interface ObserverFx {
+  onNudge(dir: NudgeDir): void;
+  onTilt(): void;
+  onDrain(): void;
+}
+
 /** Element id for a cue that belongs to no table element. */
 const NO_ELEMENT = -1;
 
@@ -77,6 +92,7 @@ export class PresentationObserver {
   private readonly drainElementId: number;
   private readonly flippers: ObserverFlippers;
   private readonly flipperIds: readonly number[];
+  private readonly fx: ObserverFx | null;
 
   private prevState: GameState;
   private prevWarning: boolean;
@@ -97,8 +113,10 @@ export class PresentationObserver {
     drainElementId: number,
     flippers: ObserverFlippers,
     flipperIds: readonly number[],
+    fx: ObserverFx | null = null,
   ) {
     this.cues = cues;
+    this.fx = fx;
     this.flash = flash;
     this.session = session;
     this.plunger = plunger;
@@ -152,7 +170,10 @@ export class PresentationObserver {
         this.cues.push("launch", NO_ELEMENT, charge);
     }
 
-    if (state === "tilted" && prev !== "tilted") this.cues.push("tilt", NO_ELEMENT, 1);
+    if (state === "tilted" && prev !== "tilted") {
+      this.cues.push("tilt", NO_ELEMENT, 1);
+      if (this.fx) this.fx.onTilt();
+    }
 
     if (warning && !this.prevWarning) this.cues.push("warning", NO_ELEMENT, 1);
 
@@ -166,6 +187,7 @@ export class PresentationObserver {
     for (let n = this.prevDrains; n < drains; n++) {
       this.cues.push("drain", this.drainElementId, 1);
       this.flash.record(this.drainElementId, 1);
+      if (this.fx) this.fx.onDrain();
     }
 
     for (let n = this.prevRevealed; n < revealed; n++) this.cues.push("bonusTick", NO_ELEMENT, 1);
