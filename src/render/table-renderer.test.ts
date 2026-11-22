@@ -12,14 +12,30 @@ import {
   FlashTracker,
   maxElementId,
 } from "./flash";
-import { FLASH_FLIPPER, FLASH_WALL, ROLLOVER_LIT } from "./palette";
-import { HALO_SCALE, SHADOW_OFFSET_X_M, SHADOW_OFFSET_Y_M, SHADOW_RADIUS_M } from "./sprites";
 import {
-  TableRenderer,
-  type CanvasTarget,
-  type LightState,
-  type RenderFrame,
-} from "./table-renderer";
+  buildLampShapes,
+  LAMP_COUNT,
+  LAMP_ROLLOVER_401,
+  LAMP_SKILL_402,
+  type LampReader,
+  type LampShape,
+} from "./lamps";
+import {
+  FLASH_FLIPPER,
+  FLASH_WALL,
+  LAMP_HOTSPOT,
+  ROLLOVER_LIT,
+  RUBBER_LINE_M,
+  SKILL_LIT,
+} from "./palette";
+import {
+  HALO_SCALE,
+  SENSOR_HALO_M,
+  SHADOW_OFFSET_X_M,
+  SHADOW_OFFSET_Y_M,
+  SHADOW_RADIUS_M,
+} from "./sprites";
+import { TableRenderer, type CanvasTarget, type RenderFrame } from "./table-renderer";
 import {
   createRecordingContext,
   RecordingLayerFactory,
@@ -37,6 +53,10 @@ import { computeView, tableBounds, type ViewTransform } from "./view-transform";
  *
  * Re-pinned by plan 06-02 (PLSH-03): resize also bakes one ball-shadow sprite,
  * and each frame stamps it once per ball between the bats and the balls.
+ *
+ * Re-pinned by plan 06-03 (PLSH-04): resize also bakes one lamp halo per
+ * distinct lit color in the lamp shape table (after the shadow), and the lamp
+ * pass replaces the Phase-5 lit-rollover stroke as the first live pass.
  */
 
 /** Halo sprites baked per resize: one bumper halo and one sensor halo (05-04). */
@@ -45,8 +65,17 @@ const HALO_LAYERS = 2;
 /** Ball-shadow sprites baked per resize (06-02, D-20). */
 const SHADOW_LAYERS = 1;
 
-/** Every layer one resize creates: the static layer, the halos and the shadow. */
-const LAYERS_PER_RESIZE = 1 + HALO_LAYERS + SHADOW_LAYERS;
+/** The lamp shape table for TABLE_SPEC, and its distinct lit colors in table order (06-03). */
+const LAMP_SHAPES: readonly LampShape[] = buildLampShapes(
+  new PlanckWorld({ table: TABLE_SPEC }).getElements(),
+);
+const LAMP_COLORS: readonly string[] = [...new Set(LAMP_SHAPES.map((s) => s.lit))];
+
+/** Lamp halo sprites baked per resize: one per distinct lit color (06-03, D-21). */
+const LAMP_HALO_LAYERS = LAMP_COLORS.length;
+
+/** Every layer one resize creates: the static layer, the halos, the shadow and the lamp halos. */
+const LAYERS_PER_RESIZE = 1 + HALO_LAYERS + SHADOW_LAYERS + LAMP_HALO_LAYERS;
 
 /** Index of the ball-shadow sprite among one resize's layers (baked after the halos). */
 const SHADOW_LAYER_INDEX = 1 + HALO_LAYERS;
@@ -81,7 +110,6 @@ function frameOf(world: PlanckWorld, extra?: Partial<RenderFrame>): RenderFrame 
     balls: [ball(1.2, 3.4)],
     flipperAngles: world.getFlippers().map((f) => f.angle),
     plungerCharge: 0.5,
-    lights: null,
     flash: null,
     alpha: 0,
     ...extra,
@@ -212,33 +240,6 @@ describe("TableRenderer frame contract (RND-02)", () => {
     }
     expect(lastTransform).toBeDefined();
     expect(lastTransform && isWorldTransform(lastTransform, rig.view)).toBe(true);
-  });
-
-  it("adds one ROLLOVER_LIT stroke for a lit rollover that an unlit frame lacks", () => {
-    const rig = makeRig();
-    const rollover = rig.world.getElements().find((el) => el.kind === "rollover" && !el.mount);
-    expect(rollover).toBeDefined();
-    const litId = rollover?.id ?? -1;
-
-    const unlit: LightState = { isLit: () => false };
-    rig.renderer.draw(frameOf(rig.world, { lights: unlit }));
-    expect(rig.rec.sets("strokeStyle").filter((s) => s.value === ROLLOVER_LIT)).toHaveLength(0);
-
-    rig.rec.clear();
-    rig.renderer.draw(frameOf(rig.world, { lights: null }));
-    expect(rig.rec.sets("strokeStyle").filter((s) => s.value === ROLLOVER_LIT)).toHaveLength(0);
-
-    rig.rec.clear();
-    const lit: LightState = { isLit: (id) => id === litId };
-    rig.renderer.draw(frameOf(rig.world, { lights: lit }));
-    const log = rig.rec.log;
-    const litSets = log
-      .map((e, i) => ({ e, i }))
-      .filter(({ e }) => e.kind === "set" && e.name === "strokeStyle" && e.value === ROLLOVER_LIT);
-    expect(litSets).toHaveLength(1);
-    const after = log.slice((litSets[0]?.i ?? 0) + 1);
-    const nextStroke = after.find((e) => e.kind === "call" && e.name === "stroke");
-    expect(nextStroke).toBeDefined();
   });
 
   it("a second resize sets the canvas to the new backing size and bakes again", () => {
@@ -556,5 +557,244 @@ describe("TableRenderer flash pass (RND-03, T-05-15)", () => {
     flash.record(0, CONTACT_FLASH_PEAK);
     rig.renderer.draw(frameOf(rig.world, { flash }));
     expect(styledCalls(rig.rec, "fillStyle", FLASH_FLIPPER, "fill")).toBe(before + 1);
+  });
+});
+
+/** A lamp reader with fixed levels (absent lamps read 0). */
+function lampsAt(levels: Readonly<Record<number, number>>): LampReader {
+  return { level: (lamp: number) => levels[lamp] ?? 0 };
+}
+
+/** Every lamp at `level`. */
+function allLampsAt(level: number): LampReader {
+  return { level: (lamp: number) => (lamp >= 0 && lamp < LAMP_COUNT ? level : 0) };
+}
+
+function shapeOf(lamp: number): LampShape {
+  const s = LAMP_SHAPES.find((x) => x.lamp === lamp);
+  if (!s) throw new Error(`no lamp shape ${lamp}`);
+  return s;
+}
+
+/** The lamp halo sprite canvases from the rig's first resize (baked after the shadow). */
+function lampHaloCanvases(rig: Rig): unknown[] {
+  return rig.layers.layers.slice(SHADOW_LAYER_INDEX + 1, LAYERS_PER_RESIZE).map((l) => l.canvas);
+}
+
+/** The lamp halo canvas baked for `color`. */
+function lampHaloCanvas(rig: Rig, color: string): unknown {
+  return rig.layers.layers[SHADOW_LAYER_INDEX + 1 + LAMP_COLORS.indexOf(color)]?.canvas;
+}
+
+function lampHaloDraws(rig: Rig): CallEntry[] {
+  const canvases = new Set(lampHaloCanvases(rig));
+  return rig.rec.calls("drawImage").filter((c) => canvases.has(c.args[0]));
+}
+
+/** The value of property `name` in force at log index `at` (`dflt` when never set before it). */
+function stateAt(rec: Recorder, at: number, name: string, dflt: unknown): unknown {
+  let v = dflt;
+  for (let i = 0; i < at; i++) {
+    const e = rec.log[i];
+    if (e?.kind === "set" && e.name === name) v = e.value;
+  }
+  return v;
+}
+
+/** Log index of the first `call` after the first `name` = `value` set, or -1. */
+function callAfterSet(rec: Recorder, name: string, value: unknown, call: string): number {
+  const log = rec.log;
+  const at = log.findIndex((e) => e.kind === "set" && e.name === name && e.value === value);
+  if (at < 0) return -1;
+  return log.findIndex((e, i) => i > at && e.kind === "call" && e.name === call);
+}
+
+/** Log index of the last call named `name` before log index `at`, or -1. */
+function lastCallIndexBefore(rec: Recorder, at: number, name: string): number {
+  for (let i = at - 1; i >= 0; i--) {
+    const e = rec.log[i];
+    if (e?.kind === "call" && e.name === name) return i;
+  }
+  return -1;
+}
+
+/** The last call named `name` before log index `at`. */
+function lastCallBefore(rec: Recorder, at: number, name: string): CallEntry | undefined {
+  const e = rec.log[lastCallIndexBefore(rec, at, name)];
+  return e?.kind === "call" ? e : undefined;
+}
+
+describe("TableRenderer lamp pass (PLSH-04, D-21, D-24)", () => {
+  it("bakes one lamp halo per distinct lit color at resize, sized from that color's largest halo radius", () => {
+    const rig = makeRig();
+    expect(LAMP_COLORS).toContain(ROLLOVER_LIT);
+    expect(LAMP_COLORS).toContain(SKILL_LIT);
+    for (const color of LAMP_COLORS) {
+      let maxR = 0;
+      for (const s of LAMP_SHAPES) if (s.lit === color && s.haloRadius > maxR) maxR = s.haloRadius;
+      const layer = rig.layers.layers[SHADOW_LAYER_INDEX + 1 + LAMP_COLORS.indexOf(color)];
+      const n = Math.max(2, Math.round(2 * maxR * rig.view.scale));
+      expect(layer?.width).toBe(n);
+      expect(layer?.height).toBe(n);
+    }
+  });
+
+  it("a rollover lamp at level 1: ROLLOVER_LIT lens stroke at alpha 1, one halo under lighter, a LAMP_HOTSPOT stroke at 0.8 over the middle half", () => {
+    const rig = makeRig();
+    const s = shapeOf(LAMP_ROLLOVER_401);
+    rig.renderer.draw(frameOf(rig.world, { lamps: lampsAt({ [LAMP_ROLLOVER_401]: 1 }) }));
+
+    // 1. The lens: the sensor path stroked in its lit color at the shape's width, round-capped.
+    expect(styledCalls(rig.rec, "strokeStyle", ROLLOVER_LIT, "stroke")).toBe(1);
+    const lens = callAfterSet(rig.rec, "strokeStyle", ROLLOVER_LIT, "stroke");
+    expect(stateAt(rig.rec, lens, "globalAlpha", 1)).toBe(1);
+    expect(stateAt(rig.rec, lens, "globalCompositeOperation", "source-over")).toBe("source-over");
+    expect(stateAt(rig.rec, lens, "lineWidth", 0)).toBe(RUBBER_LINE_M);
+    expect(stateAt(rig.rec, lens, "lineCap", "butt")).toBe("round");
+
+    // 2. The halo: one drawImage of the ROLLOVER_LIT sprite, centered on the lens, under lighter.
+    const halos = lampHaloDraws(rig);
+    expect(halos).toHaveLength(1);
+    const halo = halos[0];
+    expect(halo?.args[0]).toBe(lampHaloCanvas(rig, ROLLOVER_LIT));
+    const [x, y, w, h] = (halo?.args.slice(1) ?? []) as number[];
+    expect(w).toBeCloseTo(2 * SENSOR_HALO_M, 12);
+    expect(h).toBeCloseTo(2 * SENSOR_HALO_M, 12);
+    expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo(s.cx, 12);
+    expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo(s.cy, 12);
+    const haloAt = halo ? rig.rec.log.indexOf(halo) : -1;
+    expect(stateAt(rig.rec, haloAt, "globalCompositeOperation", "source-over")).toBe("lighter");
+    expect(stateAt(rig.rec, haloAt, "globalAlpha", 1)).toBe(1);
+
+    // 3. The hot-spot: a 0.01 m white stroke from 25 to 75 percent of the segment, at 0.8.
+    expect(styledCalls(rig.rec, "strokeStyle", LAMP_HOTSPOT, "stroke")).toBe(1);
+    const hot = callAfterSet(rig.rec, "strokeStyle", LAMP_HOTSPOT, "stroke");
+    expect(stateAt(rig.rec, hot, "globalAlpha", 1)).toBeCloseTo(0.8, 12);
+    expect(stateAt(rig.rec, hot, "lineWidth", 0)).toBe(0.01);
+    const ax = s.xs[0] ?? 0;
+    const ay = s.ys[0] ?? 0;
+    const bx = s.xs[s.xs.length - 1] ?? 0;
+    const by = s.ys[s.ys.length - 1] ?? 0;
+    const move = lastCallBefore(rig.rec, hot, "moveTo");
+    const line = lastCallBefore(rig.rec, hot, "lineTo");
+    expect(move?.args[0]).toBeCloseTo(ax + 0.25 * (bx - ax), 12);
+    expect(move?.args[1]).toBeCloseTo(ay + 0.25 * (by - ay), 12);
+    expect(line?.args[0]).toBeCloseTo(ax + 0.75 * (bx - ax), 12);
+    expect(line?.args[1]).toBeCloseTo(ay + 0.75 * (by - ay), 12);
+
+    // Order: lens, then halo, then hot-spot; the frame ends clean.
+    expect(lens).toBeLessThan(haloAt);
+    expect(haloAt).toBeLessThan(hot);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("a chevron lamp at level 1: SKILL_LIT lens fill at alpha 1, one halo of radius 0.16 under lighter, a LAMP_HOTSPOT disc at 0.8", () => {
+    const rig = makeRig();
+    const s = shapeOf(LAMP_SKILL_402);
+    rig.renderer.draw(frameOf(rig.world, { lamps: lampsAt({ [LAMP_SKILL_402]: 1 }) }));
+
+    expect(styledCalls(rig.rec, "fillStyle", SKILL_LIT, "fill")).toBe(1);
+    const lens = callAfterSet(rig.rec, "fillStyle", SKILL_LIT, "fill");
+    expect(stateAt(rig.rec, lens, "globalAlpha", 1)).toBe(1);
+    expect(stateAt(rig.rec, lens, "globalCompositeOperation", "source-over")).toBe("source-over");
+    // The polygon: one moveTo and one lineTo per further vertex, closed.
+    const begin = lastCallIndexBefore(rig.rec, lens, "beginPath");
+    const path = rig.rec.log.slice(begin, lens).filter((e): e is CallEntry => e.kind === "call");
+    expect(path.filter((c) => c.name === "moveTo")).toHaveLength(1);
+    expect(path.filter((c) => c.name === "lineTo")).toHaveLength(s.xs.length - 1);
+    expect(path.filter((c) => c.name === "closePath")).toHaveLength(1);
+    expect(path.find((c) => c.name === "moveTo")?.args).toEqual([s.xs[0], s.ys[0]]);
+
+    const halos = lampHaloDraws(rig);
+    expect(halos).toHaveLength(1);
+    expect(halos[0]?.args[0]).toBe(lampHaloCanvas(rig, SKILL_LIT));
+    const [x, y, w, h] = (halos[0]?.args.slice(1) ?? []) as number[];
+    expect(w).toBeCloseTo(0.32, 12);
+    expect(h).toBeCloseTo(0.32, 12);
+    expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo(s.cx, 12);
+    expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo(s.cy, 12);
+    const haloAt = halos[0] ? rig.rec.log.indexOf(halos[0]) : -1;
+    expect(stateAt(rig.rec, haloAt, "globalCompositeOperation", "source-over")).toBe("lighter");
+
+    expect(styledCalls(rig.rec, "fillStyle", LAMP_HOTSPOT, "fill")).toBe(1);
+    const hot = callAfterSet(rig.rec, "fillStyle", LAMP_HOTSPOT, "fill");
+    expect(stateAt(rig.rec, hot, "globalAlpha", 1)).toBeCloseTo(0.8, 12);
+    const arc = lastCallBefore(rig.rec, hot, "arc");
+    const r = s.lensRadius;
+    expect(arc?.args[0]).toBeCloseTo(s.cx - 0.2 * r, 12);
+    expect(arc?.args[1]).toBeCloseTo(s.cy - 0.2 * r, 12);
+    expect(arc?.args[2]).toBeCloseTo(0.35 * r, 12);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("a lamp at level 0.5 draws its lens and halo at alpha 0.5 and its hot-spot at 0.4", () => {
+    const rig = makeRig();
+    rig.renderer.draw(frameOf(rig.world, { lamps: lampsAt({ [LAMP_SKILL_402]: 0.5 }) }));
+    const lens = callAfterSet(rig.rec, "fillStyle", SKILL_LIT, "fill");
+    expect(stateAt(rig.rec, lens, "globalAlpha", 1)).toBeCloseTo(0.5, 12);
+    const halo = lampHaloDraws(rig)[0];
+    const haloAt = halo ? rig.rec.log.indexOf(halo) : -1;
+    expect(stateAt(rig.rec, haloAt, "globalAlpha", 1)).toBeCloseTo(0.5, 12);
+    const hot = callAfterSet(rig.rec, "fillStyle", LAMP_HOTSPOT, "fill");
+    expect(stateAt(rig.rec, hot, "globalAlpha", 1)).toBeCloseTo(0.4, 12);
+  });
+
+  it("a lamp at level 0 or at FLASH_EPS draws nothing: no lit color, no lamp halo, no lighter", () => {
+    const rig = makeRig();
+    for (const level of [0, FLASH_EPS]) {
+      rig.rec.clear();
+      rig.renderer.draw(frameOf(rig.world, { lamps: allLampsAt(level) }));
+      for (const color of LAMP_COLORS) {
+        expect(rig.rec.sets("strokeStyle").filter((e) => e.value === color)).toHaveLength(0);
+        expect(rig.rec.sets("fillStyle").filter((e) => e.value === color)).toHaveLength(0);
+      }
+      expect(rig.rec.sets("strokeStyle").filter((e) => e.value === LAMP_HOTSPOT)).toHaveLength(0);
+      expect(rig.rec.sets("fillStyle").filter((e) => e.value === LAMP_HOTSPOT)).toHaveLength(0);
+      expect(lampHaloDraws(rig)).toHaveLength(0);
+      expect(setsLighter(rig.rec)).toBe(false);
+      expect(rig.rec.calls("drawImage")).toHaveLength(1 + 1);
+    }
+  });
+
+  it("a frame with no lamps (absent or null) draws no lamp marks", () => {
+    const rig = makeRig();
+    for (const frame of [frameOf(rig.world), frameOf(rig.world, { lamps: null })]) {
+      rig.rec.clear();
+      rig.renderer.draw(frame);
+      expect(lampHaloDraws(rig)).toHaveLength(0);
+      expect(setsLighter(rig.rec)).toBe(false);
+      expect(rig.rec.sets("strokeStyle").filter((e) => e.value === ROLLOVER_LIT)).toHaveLength(0);
+      expect(rig.rec.sets("fillStyle").filter((e) => e.value === SKILL_LIT)).toHaveLength(0);
+    }
+  });
+
+  it("every lamp at 1: one halo per shape, all before the bats; no gradient, blur, text or new layer; ends clean", () => {
+    const rig = makeRig();
+    const atResize = rig.layers.createCount;
+    const allowed = new Set<unknown>(rig.layers.layers.map((l) => l.canvas));
+    for (let f = 0; f < 10; f++) {
+      rig.rec.clear();
+      rig.rec.ctx.globalAlpha = 0.3;
+      rig.rec.ctx.globalCompositeOperation = "lighter";
+      rig.renderer.draw(frameOf(rig.world, { lamps: allLampsAt(1), alpha: 0.5 }));
+      const halos = lampHaloDraws(rig);
+      expect(halos).toHaveLength(LAMP_SHAPES.length);
+      const firstRotate = rig.rec.log.findIndex((e) => e.kind === "call" && e.name === "rotate");
+      expect(firstRotate).toBeGreaterThan(0);
+      for (const d of halos) expect(rig.rec.log.indexOf(d)).toBeLessThan(firstRotate);
+      expect(rig.rec.calls("createLinearGradient")).toHaveLength(0);
+      expect(rig.rec.calls("createRadialGradient")).toHaveLength(0);
+      expect(
+        rig.rec.sets("shadowBlur").filter((s) => typeof s.value !== "number" || s.value > 0),
+      ).toHaveLength(0);
+      expect(rig.rec.calls("fillText")).toHaveLength(0);
+      expect(rig.rec.calls("strokeText")).toHaveLength(0);
+      for (const d of rig.rec.calls("drawImage")) expect(allowed.has(d.args[0])).toBe(true);
+      expect(rig.rec.ctx.globalAlpha).toBe(1);
+      expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+    }
+    expect(rig.layers.createCount).toBe(atResize);
   });
 });
