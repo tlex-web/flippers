@@ -29,7 +29,7 @@ findings:
     title: "`keyLabel` accepts whitespace and control characters as a cap label"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "04-09 hid a bat-to-wall pinch ejection by changing the test rig; the same pinch exists on TABLE_SPEC and got worse"
   - id: WR-04
     severity: warning
@@ -55,7 +55,7 @@ findings:
     severity: info
     disposition: open
     title: "The controls hint uses \"/\" both as a separator and as the Slash key"
-open: 13
+open: 12
 total: 13
 recorded: 2026-11-21T03:03:14.663Z
 ---
@@ -70,7 +70,7 @@ recorded: 2026-11-21T03:03:14.663Z
 | IN-03 | info | open | - |
 | WR-02 | warning | open | - (not in the current review) |
 | IN-04 | info | open | - (not in the current review) |
-| WR-03 | warning | open | - (not in the current review) |
+| WR-03 | warning | fixed | 06.1-02 3653a41, fb4e81d: slings and inlane sensors moved 0.35 m up-table (D-01); seeded every-step inlane sweep ratio 1.00 vs no-sling control (was 2.43/2.64) with an old-geometry RED control; rule (1) case (e); user-approved |
 | WR-04 | warning | open | - (not in the current review) |
 | IN-06 | info | open | - (not in the current review) |
 | IN-07 | info | open | - (not in the current review) |
