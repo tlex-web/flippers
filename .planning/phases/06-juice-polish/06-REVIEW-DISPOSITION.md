@@ -5,12 +5,36 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: fixed
-    title: "A kickback spends the ball save, and the ball still drains inside the save window, costing a ball"
+    disposition: open
+    title: "The kickback grace is a fixed 2 s, so a kicked ball that drains later but still inside the save window costs a ball (CR-01 only partly fixed)"
   - id: WR-01
     severity: warning
-    disposition: fixed
-    title: "\"BALL SAVED\" (and the live-region announcement) can outlive a lost ball and override the game-over prompt"
+    disposition: open
+    title: "A grace backstop shows BALL SAVED but sounds like a lost ball: drain cue and shake, no ballSave cue"
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "SKILL SHOT can still outlive the ball, the same defect WR-01 fixed for BALL SAVED"
+  - id: IN-02
+    severity: info
+    disposition: open
+    title: "The save lamp is off while the kickback grace still saves the ball"
+  - id: IN-03
+    severity: info
+    disposition: open
+    title: "The same-step path rewrites the session's save kind but not `BallSave`'s"
+  - id: IN-04
+    severity: info
+    disposition: open
+    title: "The test title still claims the skill phase carries over a backstop"
+  - id: IN-05
+    severity: info
+    disposition: open
+    title: "The chevron loop silently drops skill lanes beyond three, and the WR-03 test computes lamp indices by arithmetic"
+  - id: IN-06
+    severity: info
+    disposition: open
+    title: "The lamp shape table now pulls in the effects runtime for one geometry helper"
   - id: WR-02
     severity: warning
     disposition: fixed
@@ -23,45 +47,26 @@ findings:
     severity: warning
     disposition: fixed
     title: "Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`"
-  - id: IN-01
-    severity: info
-    disposition: fixed
-    title: "`parseBest` accepts hex, exponent and padded strings, contrary to its \"decimal integer string\" contract"
-  - id: IN-02
-    severity: info
-    disposition: fixed
-    title: "Dead code left by Phase 6"
-  - id: IN-03
-    severity: info
-    disposition: fixed
-    title: "The render layer imports a type from the sandbox composition root"
-  - id: IN-04
-    severity: info
-    disposition: fixed
-    title: "A backstop re-serve can reopen an unresolved skill shot, giving the same ball a second attempt"
-  - id: IN-05
-    severity: info
-    disposition: fixed
-    title: "The lamp shape table is built twice"
-open: 0
-total: 10
-recorded: 2026-11-23T10:05:28.358Z
+open: 8
+total: 11
+recorded: 2026-11-23T10:43:15.302Z
 ---
 
 # Phase 06: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | fixed | 06-REVIEW-FIX.md |
-| WR-01 | warning | fixed | 06-REVIEW-FIX.md |
-| WR-02 | warning | fixed | 06-REVIEW-FIX.md |
-| WR-03 | warning | fixed | 06-REVIEW-FIX.md |
-| WR-04 | warning | fixed | 06-REVIEW-FIX.md |
-| IN-01 | info | fixed | 06-REVIEW-FIX.md |
-| IN-02 | info | fixed | 06-REVIEW-FIX.md |
-| IN-03 | info | fixed | 06-REVIEW-FIX.md |
-| IN-04 | info | fixed | 06-REVIEW-FIX.md |
-| IN-05 | info | fixed | 06-REVIEW-FIX.md |
+| CR-01 | critical | open | - |
+| WR-01 | warning | open | - |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| IN-03 | info | open | - |
+| IN-04 | info | open | - |
+| IN-05 | info | open | - |
+| IN-06 | info | open | - |
+| WR-02 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| WR-03 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| WR-04 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
