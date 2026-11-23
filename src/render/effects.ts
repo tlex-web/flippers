@@ -13,7 +13,11 @@
  *   at the sensor's path midpoint, in the rollover kinds for "rollover" (a
  *   bank pass is a rollover pass) and the inlane kinds for "lane";
  * - `ObserverFx` (from `PresentationObserver`): an accepted nudge kicks the view,
- *   a tilt adds TRAUMA_TILT, a drain adds TRAUMA_DRAIN.
+ *   a tilt adds TRAUMA_TILT, a drain adds TRAUMA_DRAIN; a skill-shot award
+ *   plays the reward glint and motes in the skill kinds at the awarded lane, and
+ *   a kickback save throws SAVE_SPARK_COUNT save sparks from the top of the post
+ *   within SAVE_SPARK_SPREAD_RAD of straight up (06-13); a backstop save throws
+ *   none (it already shakes as a drain).
  * `tick()` runs once per fixed step in `onPostStep` (after `lamps.update()`,
  * before `flash.tick()`) and advances every effect clock.
  *
@@ -25,6 +29,7 @@
 
 import type { FxSink } from "../app/cue-queue";
 import { deriveKickFace } from "../game/reactive-elements";
+import type { SaveKind } from "../game/ball-save";
 import type { NudgeDir } from "../game/tuning";
 import { FIXED_DT } from "../physics/constants";
 import type { ObserverFx } from "../sandbox/presentation-observer";
@@ -33,10 +38,13 @@ import { maxElementId } from "./flash";
 import {
   GLINT_INLANE,
   GLINT_ROLLOVER,
+  GLINT_SKILL,
   MOTE_INLANE,
   MOTE_ROLLOVER,
+  MOTE_SKILL,
   ParticlePool,
   SPARK_BUMPER,
+  SPARK_SAVE,
   SPARK_SLING,
 } from "./particles";
 import { ShakeTracker, TRAUMA_BUMPER, TRAUMA_DRAIN, TRAUMA_SLING, TRAUMA_TILT } from "./shake";
@@ -64,6 +72,13 @@ export const SLING_SPARK_LIFE_MAX = 0.32;
 
 /** Motes per reward: REWARD_MOTES_MIN or one more, drawn from the pool's stream (UI-SPEC: 3-4). */
 export const REWARD_MOTES_MIN = 3;
+/**
+ * Kickback save sparks (UI-SPEC post flourish): this many, within +/- the
+ * spread of straight up (0, -1) from the post's top rim, on the bumper
+ * (impact) speed and life ranges.
+ */
+export const SAVE_SPARK_COUNT = 10;
+export const SAVE_SPARK_SPREAD_RAD = 80 * DEG;
 
 /** Point at half the arc length of an element's polyline (its first vertex if degenerate). */
 export function pathMidpoint(el: ResolvedElement): { x: number; y: number } {
@@ -115,6 +130,10 @@ export class EffectsTracker implements FxSink, ObserverFx {
   private readonly sensorX: Float64Array;
   private readonly sensorY: Float64Array;
   private readonly sensorOk: Uint8Array;
+  /** The ball-save post's center and radius (radius 0 when the table has none). */
+  private postX = 0;
+  private postY = 0;
+  private postR = 0;
   private readonly maxId: number;
 
   constructor(elements: readonly ResolvedElement[]) {
@@ -147,6 +166,10 @@ export class EffectsTracker implements FxSink, ObserverFx {
         this.sensorX[el.id] = mid.x;
         this.sensorY[el.id] = mid.y;
         this.sensorOk[el.id] = 1;
+      } else if (el.kind === "post" && el.circle) {
+        this.postX = el.circle.center.x;
+        this.postY = el.circle.center.y;
+        this.postR = el.circle.radius;
       }
     }
   }
@@ -249,6 +272,43 @@ export class EffectsTracker implements FxSink, ObserverFx {
     pool.emitGlint(glintKind, x, y);
     const n = REWARD_MOTES_MIN + (pool.draw() < 0.5 ? 0 : 1);
     for (let k = 0; k < n; k++) pool.emitMote(moteKind, x, y);
+  }
+
+  /**
+   * A skill-shot award through lane `laneId`: the reward glint and motes in the
+   * skill kinds at that rollover's midpoint (an unknown or non-sensor id, such
+   * as -1 before any award, emits nothing).
+   */
+  onSkillShot(laneId: number): void {
+    this.reward(GLINT_SKILL, MOTE_SKILL, laneId);
+  }
+
+  /**
+   * A ball save: a kickback throws SAVE_SPARK_COUNT save sparks from the post's
+   * top rim point, spread around straight up; a backstop (or "none") emits
+   * nothing.
+   */
+  onSave(kind: SaveKind | "none"): void {
+    if (kind !== "kickback") return;
+    const r = this.postR;
+    if (!(r > 0)) return;
+    const pool = this.particles;
+    const sx = this.postX;
+    const sy = this.postY - r;
+    for (let k = 0; k < SAVE_SPARK_COUNT; k++) {
+      pool.emitSpark(
+        SPARK_SAVE,
+        sx,
+        sy,
+        0,
+        -1,
+        SAVE_SPARK_SPREAD_RAD,
+        BUMPER_SPARK_SPEED_MIN,
+        BUMPER_SPARK_SPEED_MAX,
+        BUMPER_SPARK_LIFE_MIN,
+        BUMPER_SPARK_LIFE_MAX,
+      );
+    }
   }
 
   /** An accepted nudge: the view kicks opposite the ball's impulse. */

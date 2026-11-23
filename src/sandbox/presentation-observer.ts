@@ -48,6 +48,9 @@
  * edge calls `fx.onTilt()` after its cue and every drain-count increment calls
  * `fx.onDrain()` after its cue and flash, so tilts and drains shake the view.
  * A backstop-saved drain (06-07) also raises the drain count, so it shakes too.
+ * Every skill-shot count increment calls `fx.onSkillShot(getLastSkillLane())`
+ * and every save-count increment `fx.onSave(getLastSaveKind())`, each after its
+ * cue (06-13, D-19: the reward glint and the kickback sparks).
  *
  * Read-only by construction (T-05-16): it holds only `Pick<>` getter slices of
  * the session, the plunger and the flipper controller, never a world handle, and writes only scalars
@@ -57,6 +60,7 @@
  */
 
 import type { CueQueue, FlashSink } from "../app/cue-queue";
+import type { SaveKind } from "../game/ball-save";
 import type { FlipperController } from "../control/flipper-controller";
 import type { PlungerController } from "../control/plunger-controller";
 import { revealedRowCount } from "../game/bonus";
@@ -75,6 +79,7 @@ export type ObserverSession = Pick<
   | "getNudgeCount"
   | "getLastNudgeDir"
   | "getSaveCount"
+  | "getLastSaveKind"
   | "getNewBestCount"
   | "getBonusTally"
   | "getBonusElapsed"
@@ -94,6 +99,10 @@ export interface ObserverFx {
   onNudge(dir: NudgeDir): void;
   onTilt(): void;
   onDrain(): void;
+  /** A skill-shot award through rollover `laneId` (06-13). */
+  onSkillShot(laneId: number): void;
+  /** A ball save of `kind` (06-13). */
+  onSave(kind: SaveKind | "none"): void;
 }
 
 /** Element id for a cue that belongs to no table element. */
@@ -218,8 +227,10 @@ export class PresentationObserver {
     if (skillShots > this.prevSkillShots) {
       const lane = this.session.getLastSkillLane();
       const strength = this.session.getLastSkillValue() / SKILL_SHOT_MAX_POINTS;
-      for (let n = this.prevSkillShots; n < skillShots; n++)
+      for (let n = this.prevSkillShots; n < skillShots; n++) {
         this.cues.push("skillShot", lane, strength);
+        if (this.fx) this.fx.onSkillShot(lane);
+      }
     }
 
     for (let n = this.prevDrains; n < drains; n++) {
@@ -228,7 +239,13 @@ export class PresentationObserver {
       if (this.fx) this.fx.onDrain();
     }
 
-    for (let n = this.prevSaves; n < saves; n++) this.cues.push("ballSave", NO_ELEMENT, 1);
+    if (saves > this.prevSaves) {
+      const kind = this.session.getLastSaveKind();
+      for (let n = this.prevSaves; n < saves; n++) {
+        this.cues.push("ballSave", NO_ELEMENT, 1);
+        if (this.fx) this.fx.onSave(kind);
+      }
+    }
 
     for (let n = this.prevRevealed; n < revealed; n++) this.cues.push("bonusTick", NO_ELEMENT, 1);
 
