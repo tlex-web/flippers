@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-12-PLAN.md
-last_updated: "2026-11-23T00:25:30.700Z"
+stopped_at: Completed 06-13-PLAN.md
+last_updated: "2026-11-23T00:51:14.370Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: 449fc3713b93d6a52cfe744cdec23ab2fd071357
+state_head: d8ec1842c729eb1e87e6deeefb874d2e96c4ba6d
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 54
+  completed_plans: 55
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -116,6 +116,7 @@ Progress: [████████░░] 83%
 | Phase 06 P10 | 28min | 2 tasks | 8 files |
 | Phase 06 P11 | 13 min | 2 tasks | 10 files |
 | Phase 06 P12 | 16min | 2 tasks | 10 files |
+| Phase 06 P13 | 20min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-11: GameSession submits once at the last tally end (after credit, before game-over); NEW HIGH SCORE is status row 4 for 360 steps; the highScore cue follows gameOver once per getNewBestCount() increment
 - [Phase 06]: 06-12: spark travel stays under the 0.63 m photosensitive footprint by capping a spark's life at emit (PARTICLE_MAX_TRAVEL_M = 0.6 against the exact discrete launch + gravity bound), not by lowering speeds; stream draws unchanged, bumper lives stay in 0.30-0.45 s
 - [Phase 06]: 06-12: impact particles live in one 160-slot SoA pool on the EffectsTracker with its own seeded stream; ring alpha is 0.9 x (1 - age/life)^2 and bumper sparks spawn at center + R * n facing the contact; 06-13 adds its kinds to the same pool
+- [Phase 06]: 06-13: Kickback save sparks spread +/-80 deg around straight up from the post top rim on the bumper speed/life ranges (post kick normal not reported; probes within ~12 deg of up)
+- [Phase 06]: 06-13: Reward motes move at constant velocity (no drag/gravity) with +/-15 deg heading jitter; the 3-or-4 count is one draw from the pool's seeded stream
+- [Phase 06]: 06-13: A bank-completing rollover pass still glints as a rollover pass; the skill glint sits at the awarded rollover's midpoint
 
 ### Pending Todos
 
@@ -288,6 +292,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T00:25:28.874Z
-Stopped at: Completed 06-12-PLAN.md
+Last session: 2026-11-23T00:51:12.256Z
+Stopped at: Completed 06-13-PLAN.md
 Resume file: None
