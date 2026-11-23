@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 06
-current_phase_name: Juice & Polish
-status: verifying
-stopped_at: Completed 06-14-PLAN.md
-last_updated: "2026-11-23T01:04:02.126Z"
-last_activity: 2026-11-22
-last_activity_desc: Phase 06 execution started
-state_head: 725abe6dea5aa5a83431571fc9af8c2fe8d3fb95
+status: completed
+stopped_at: Phase 06 complete — all phases complete
+last_updated: "2026-11-23T11:25:10.391Z"
+last_activity: 2026-11-23
+last_activity_desc: Phase 06 complete
+state_head: 6f7caa5da2c5dc1580463c0d4bd8c34948204195
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 56
   completed_plans: 56
+  percent: 100
 milestone_name: milestone
 ---
 
@@ -21,25 +21,25 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-22)
+See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06 — Juice & Polish
+**Current focus:** Milestone v1.0 complete — ready to close (`/gsd-complete-milestone`)
 
 ## Current Position
 
-Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 14 of 14
-Status: Phase complete — ready for verification
-Last activity: 2026-11-22 — Phase 06 execution started
+Phase: 06
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-11-23 — Phase 06 complete
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 43
+- Total plans completed: 57
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 83%
 | 3 | 6 | - | - |
 | 04 | 15 | - | - |
 | 05 | 8 | - | - |
+| 06 | 14 | - | - |
 
 **Recent Trend:**
 
@@ -265,6 +266,10 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-13: A bank-completing rollover pass still glints as a rollover pass; the skill glint sits at the awarded rollover's midpoint
 - [Phase 06]: 06-14: Phase-6 replay script = Enter on step 0 + D-05 anchor hold (121..183) + state-keyed reactions (full plunge on any rest, skip first non-forfeit tally at +10, tilt ball 2 at +240 after launch); full 3-ball game fits in 3600 steps
 - [Phase 06]: 06-14: ReactiveSoakWorld arms the ball save by default (always-armed trySave counts postKicks); saveArmed:false restores the Phase-4 wrapper
+- [Phase 06]: Review CR-01 (two rounds): a kickback spends the save but the kicked ball stays protected through step + max(KICKBACK_GRACE_STEPS 240, remaining - 1), i.e. to the last step the unspent save covered; endGrace() on tilt, bonus entry, start and every backstop (edd8db7)
+- [Phase 06]: Review IN-04: one skill shot per ball; reServe() disarms it (40295c0)
+- [Phase 06]: Review WR-01 (round 2): every re-serve that spends no save still plays the save sting (getReserveCount), so a grace re-serve sounds drain then chime; BALL SAVED and SKILL SHOT show only while playing and clear at bonus entry
+- [Phase 06]: UAT 11/11 passed on 2026-11-23 (incl. CR-01 re-tests); verification passed 5/5 after regeneration; review open: 2 info (HUD test guard pinning, SaveKind location)
 
 ### Pending Todos
 
@@ -276,8 +281,10 @@ None. (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planni
   - ~~The HUD ignores the display fit and renders at about 3.4 px.~~ Resolved in 04-10: the readout is DOM text (#hud-diag); the canvas paints no text.
   - `#ef476f` is used for the drain, the velocity arrow and the full meter.
   - ~~There is no on-screen controls hint and no `aria-label` on the canvas.~~ Resolved in Phase 4: a five-row controls list (04-10) and `aria-label` on `#stage`.
-- [Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display. The headless ball-feed tests cover those rates.
+- ~~[Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display.~~ Resolved in Phase 6 UAT test 6 (played on 144 Hz and 60 Hz displays).
 - [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
+- [Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.
+- [Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).
 
 ### Quick Tasks Completed
 
@@ -295,6 +302,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T01:04:00.783Z
-Stopped at: Completed 06-14-PLAN.md
+Last session: 2026-11-23T11:30:00Z
+Stopped at: Phase 06 complete — milestone v1.0 ready to close
 Resume file: None

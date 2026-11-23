@@ -38,12 +38,17 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 - [x] Bumpers, slings and rollovers flash and sound on hit: **Validated in Phase 5 (Rendering & Audio).** Every element flashes and decays cleanly from the contact bus; walls and the chute flash silently (RND-03, UAT 5).
 - [x] All graphics rendered procedurally at a stable 60fps: **Validated in Phase 5.** Canvas 2D table with a baked static layer and interpolated moving parts holds 60 fps and steps every frame at 144 Hz; zero image, font or audio assets, enforced by the asset-free test (RND-01, RND-02, UAT 1–3). The HUD stays DOM text (D-01, accepted override).
 - [x] Sound effects synthesized at runtime (Web Audio), no audio files: **Validated in Phase 5.** Distinct voice per element with velocity and pitch variation, a 16-voice pool with click-free stealing, a click-free mute fade, and nothing before the first gesture (AUD-01, UAT 6–9).
+- [x] Portfolio-grade "juice": visual/audio feedback that makes play feel responsive and polished: **Validated in Phase 6 (Juice & Polish).**
+  - Feel: subtle decaying screen shake (HUD never shakes; reduced motion removes it) and seeded impact particles kept under the photosensitive footprint.
+  - Depth and light: ball drop shadow, light pool, vignette, lit/unlit inserts and rollover lenses, attract-mode chase.
+  - Rewards: a rotating skill shot (5k–25k, one attempt per ball), count-up score and end-of-ball bonus tally, a 7 s ball save with a center-post kickback, and a localStorage high score with a NEW HIGH SCORE fanfare.
+  - PLSH-01..08 verified 5/5; UAT 11/11 passed; two code-review fix rounds closed (CR-01 kickback grace) with 0 critical and 0 warning findings left.
 
 ### Active
 
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
-- [ ] Portfolio-grade "juice": visual/audio feedback that makes play feel responsive and polished
+- (none — every v1.0 requirement is validated; the milestone is ready to close)
 
 ### Out of Scope
 
@@ -89,6 +94,9 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | HUD and diagnosis readout are DOM text, not canvas text | Canvas text shrank to ~3.4 px under the fit-to-viewport scale; DOM text stays legible and is screen-reader reachable | ✓ Phase 4 |
 | Audio unlock is a "starting episode": at most two bounded start windows until the context is seen running; a failed resume() opens nothing and is logged once | Three review rounds of per-finding flags each opened a new corner; one model with an invariant test table bounds the audio graph however resume() behaves and keeps the start figure on Shift-first unlocks (b04d725, UAT 9) | ✓ Phase 5 |
 | Left/Right Shift stay default flipper bindings, with a Windows reliability note naming the arrow keys | Keeps Phase 2 D-09; Windows-only Shift heals cover the VK_SHIFT merge, and the OS Sticky Keys case is an accepted residual (UAT 18 decision A) | ✓ Phase 4 |
+| One ball save per ball; a center-post kickback spends it but keeps the kicked ball protected until the save window would have ended (at least 2 s) | A kick can only improve on the guaranteed save, never cost a ball the plain backstop would have saved; the first fix (a fixed 2 s grace) still lost balls 2–7 s after a kick and was caught on re-review (edd8db7) | ✓ Phase 6 |
+| One skill shot per ball; a backstop re-serve disarms it | The re-served ball is the same ball, so it gets no second attempt (40295c0, UAT 8) | ✓ Phase 6 |
+| High score lives only in localStorage (`flippers.hiscore.v1`, canonical decimal string), every access silently guarded | No accounts or server in v1; blocked storage must never break play | ✓ Phase 6 |
 
 ## Evolution
 
@@ -108,4 +116,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-22 after Phase 5*
+*Last updated: 2026-11-23 after Phase 6*

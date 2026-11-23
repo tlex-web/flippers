@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Table, Plunger & Event Bus** - An original space-themed table layout, a hold-to-charge plunger, and a typed collision-event bus (completed 2026-11-20)
 - [x] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works (completed 2026-11-21)
 - [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
-- [ ] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score
+- [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
 
 ## Phase Details
 
@@ -228,7 +228,7 @@ Plans:
   4. Scores count up with animation and an end-of-ball bonus tally, and a near-drain can trigger a simple center-post ball-save flourish.
   5. The local high score persists across browser sessions via `localStorage`.
 
-**Plans**: 14/14 plans executed (9 waves)
+**Plans**: 14/14 plans complete (9 waves)
 Plans:
 **Wave 1** *(both plans run in parallel)*
 - [x] 06-01-PLAN.md — Tracer: skill shot rule live. SkillShot rotate/freeze/resolve, RuleHooks.onSwitch seam, GameSession composition, D-05 anchor on the real table, isRestingInZone, main.ts wiring [wave 1]
@@ -276,4 +276,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Table, Plunger & Event Bus | 6/6 | Complete    | 2026-11-20 |
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
-| 6. Juice & Polish | 14/14 | In Progress | - |
+| 6. Juice & Polish | 14/14 | Complete    | 2026-11-23 |
