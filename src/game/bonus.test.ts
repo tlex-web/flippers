@@ -161,9 +161,6 @@ describe("BonusCounters and BonusTally (D-11 itemized rows)", () => {
     t.snapshot(c);
     expect(t.forfeit).toBe(false);
     expect(t.total).toBe(1000);
-    t.markForfeit();
-    t.clearForfeit();
-    expect(t.forfeit).toBe(false);
     expect(t.kinds).toBe(kinds);
     expect(t.counts).toBe(counts);
     expect(t.values).toBe(values);

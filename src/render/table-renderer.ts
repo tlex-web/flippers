@@ -152,15 +152,6 @@ import {
 /** The read-only world surface the renderer needs. */
 export type RenderWorld = Pick<PhysicsWorld, "getElements" | "getFlippers">;
 
-/**
- * Read-only light state (the rules' `ReactiveElements`). The renderer no
- * longer reads it: the `LampTracker` (lamps.ts) reads this state and the
- * renderer reads only its lamp levels (06-03).
- */
-export interface LightState {
-  isLit(elementId: number): boolean;
-}
-
 /** The visible canvas surface the renderer sizes. */
 export interface CanvasTarget {
   width: number;

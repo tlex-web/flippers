@@ -119,11 +119,6 @@ export class BonusTally {
     this.forfeit = true;
   }
 
-  /** Clear the forfeit flag (rows and total unchanged). */
-  clearForfeit(): void {
-    this.forfeit = false;
-  }
-
   private addRow(kind: BonusRowKind, n: number, unit: number): void {
     if (!(n >= 1)) return;
     const i = this.rows;
