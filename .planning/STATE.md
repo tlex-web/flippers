@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: "06.1"
 current_phase_name: "Address tech debt: bat/sling pinch (WR-03) + review hygiene"
 status: executing
-stopped_at: Completed 06.1-03-PLAN.md
-last_updated: "2026-11-23T13:19:41.562Z"
+stopped_at: Completed 06.1-02-PLAN.md
+last_updated: "2026-11-23T13:33:34.633Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 06.1 execution started
-state_head: b680402423c51c3b2dd713c524af864986fc534f
+state_head: e30b5f3ef6025db01094ea03e520a9ee56560024
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 61
-  completed_plans: 58
+  completed_plans: 59
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-23)
 ## Current Position
 
 Phase: 06.1 (Address tech debt: bat/sling pinch (WR-03) + review hygiene) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 06.1 execution started
 
@@ -121,6 +121,7 @@ Progress: [██████████] 100%
 | Phase 06 P14 | 10min | 3 tasks | 5 files |
 | Phase 06.1 P01 | 4min | 2 tasks | 29 files |
 | Phase 06.1 P03 | 8min | 3 tasks | 5 files |
+| Phase 06.1 P02 | 15min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -275,6 +276,8 @@ Recent decisions affecting current work:
 - [Phase 06.1]: 06.1-01: Prettier scoped to source via .prettierignore (.planning/, .gsd/, .claude/, CLAUDE.md); use --end-of-line auto on this Windows checkout. Style commit e2b8514 touched 27 paths (reactive-elements.test.ts was EOL-only in the working tree, already clean in git).
 - [Phase 06.1]: keyLabel guard is /^[^\s\p{C}\p{M}]$/u after the one-code-point check; \p{M} closes the combining-mark gap the reviewer's /^\P{C}$/u left (IN-04)
 - [Phase 06.1]: IN-06 untouched per D-03: REST_ANGLE_TOL stays 0.1; only IN-07 dead moved stores and IN-08 wording changed in FlipperController
+- [Phase 06.1]: 06.1-02: D-01 approved by the user - both slings and inlane sensors moved exactly 0.35 m up-table (INLANE_Y = 4.6); WR-03 pinch ratio 2.43/2.64 -> 1.00/1.00, bat-sling gap 0.115 -> 0.453 m
+- [Phase 06.1]: 06.1-02: kickback e2e kept alive by a searched right-bat cradle (Slash, +1 step after kick, released 30 steps past the save window); every original guard verbatim
 
 ### Pending Todos
 
@@ -311,6 +314,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T13:19:36.567Z
-Stopped at: Completed 06.1-03-PLAN.md
+Last session: 2026-11-23T13:33:32.644Z
+Stopped at: Completed 06.1-02-PLAN.md
 Resume file: None
