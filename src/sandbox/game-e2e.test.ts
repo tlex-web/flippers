@@ -9,12 +9,7 @@ import { ReactiveElements, type RuleHooks } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
-import {
-  BALL_SAVE_STEPS,
-  KICKBACK_GRACE_STEPS,
-  NUDGE_COOLDOWN_STEPS,
-  NUDGE_IMPULSE,
-} from "../game/tuning";
+import { BALL_SAVE_STEPS, NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE } from "../game/tuning";
 import {
   BALL_LINEAR_DAMPING,
   BALL_RADIUS_M,
@@ -1011,28 +1006,6 @@ function noKickback(session: GameSession): RuleHooks {
   };
 }
 
-/**
- * The player input that keeps the live-composition kickback's ball alive past
- * the original save window (phase 06.1-02, PLSH-07). With the slings moved
- * 0.35 m up-table (WR-03) the kicked ball, left alone, drains at session step
- * 783: inside the original window (exit 235 + BALL_SAVE_STEPS = 1075), where
- * the CR-01 grace backstops it, so the case's real-drain guards cannot hold
- * without play. These values were found by a deterministic search that
- * replayed this exact plunge and kick, then tried, in order, side (KeyZ, then
- * Slash) x hold (12 steps, 48 steps, then a cradle held until
- * KICKBACK_CRADLE_PAST_WINDOW_STEPS past the window) x press offset 0..300
- * steps after the kick, against every guard in the case. The first candidate
- * whose offsets o - 1, o and o + 1 all pass (same side and hold) is Slash,
- * cradle, o = 1 (o = 0, 1, 2 each drain at session step 1294). Measured: kick
- * at 534, drain at 1294 (> 1075, and 760 steps after the kick > the
- * KICKBACK_GRACE_STEPS floor of 240).
- */
-const KICKBACK_CRADLE_KEY = SLASH;
-/** Steps after the kick step at which the cradle key goes down. */
-const KICKBACK_CRADLE_OFFSET_STEPS = 1;
-/** The cradle is released this many steps past the original save window's end. */
-const KICKBACK_CRADLE_PAST_WINDOW_STEPS = 30;
-
 describe("ball save (PLSH-07): a launched ball that drains inside the window is re-served without costing the ball", () => {
   it("a full plunge drains inside BALL_SAVE_STEPS of the chute exit, is re-served on the plunger as ball 1, and the next drain enters the bonus state", () => {
     // Production options with the save on; the kickback is denied so this
@@ -1088,7 +1061,7 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(g.session.getSaveLampPhase()).toBe("steady"); // re-armed on the next serve
   });
 
-  it("in the live composition the same plunge is kicked back up off the center post and kept alive by a right-bat cradle: one kickback save, same ball, and its next drain enters the bonus state", () => {
+  it("in the live composition the same plunge is kicked back up off the center post; left alone it drains inside the original window and the CR-01 grace re-serves the same ball (one kickback save), and the re-served ball's drain enters the bonus state", () => {
     const g = makeGame(); // main.ts composition: the session is the rule hooks
     pressEnter(g);
     runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
@@ -1126,36 +1099,40 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(ballById(g, first).vy).toBeLessThan(0);
     expect(g.session.getBall()).toBe(1);
 
-    // Keep the kicked ball alive past the original save window: the player
-    // cradles it on the right bat (pressed KICKBACK_CRADLE_OFFSET_STEPS after
-    // the kick, held until KICKBACK_CRADLE_PAST_WINDOW_STEPS past the window),
-    // then lets go. No key is held from then on, so the drain is the ball's own.
-    while (g.session.getStep() < kickStep + KICKBACK_CRADLE_OFFSET_STEPS) {
-      step += g.frame(FRAME_120_HZ);
-    }
-    expect(g.session.getStep()).toBe(kickStep + KICKBACK_CRADLE_OFFSET_STEPS);
-    g.input.handleKeyDown(KICKBACK_CRADLE_KEY);
-    const cradleReleaseStep = exitSessionStep + BALL_SAVE_STEPS + KICKBACK_CRADLE_PAST_WINDOW_STEPS;
-    while (g.session.getStep() < cradleReleaseStep) {
-      if (g.drainedIds.includes(first)) throw new Error(`ball ${first} drained off the cradle`);
-      step += g.frame(FRAME_120_HZ);
-    }
-    g.input.handleKeyUp(KICKBACK_CRADLE_KEY);
-    expect(g.drainedIds).not.toContain(first);
-
-    // One save per ball: the kicked ball's next drain, past both the kickback
-    // grace floor and the original save window, is real. Preconditions
-    // asserted so a tuning change that moves the drain inside the grace (a
-    // backstop re-serve, 06-REVIEW CR-01) fails loudly instead of silently
-    // testing nothing.
+    // Left alone (no player input after the launch), the kicked ball drains
+    // inside the original save window, and the CR-01 grace backstops it: the
+    // same ball comes back on the plunger, still one kickback save. This is
+    // the gameplay since the 06.1 sling move. The rule "a kickback, then a
+    // real drain past the original window, enters bonus" is pinned at rule
+    // level in game-session.test.ts, case "a kickback never makes a drain
+    // inside the original save window cost the ball ..." (lastWindowStep + 1
+    // goes to "bonus").
     while (!g.drainedIds.includes(first)) {
       if (step >= 2 * DRAIN_CAP_STEPS) throw new Error(`ball ${first} did not drain`);
       step += g.frame(FRAME_120_HZ);
     }
     const drainStep = g.session.getStep();
-    expect(drainStep - kickStep).toBeGreaterThan(KICKBACK_GRACE_STEPS);
+    // Premise, asserted so a geometry or tuning change that moves the drain
+    // past the window fails loudly instead of silently testing something else.
     expect(exitSessionStep).toBeGreaterThan(0);
-    expect(drainStep).toBeGreaterThan(exitSessionStep + BALL_SAVE_STEPS);
+    expect(
+      drainStep,
+      `kick ${kickStep}, drain ${drainStep}, window end ${exitSessionStep + BALL_SAVE_STEPS} (measured 534 / 783 / 1075)`,
+    ).toBeLessThanOrEqual(exitSessionStep + BALL_SAVE_STEPS);
+
+    // The CR-01 grace re-serve: still ball 1, still one save (the kickback),
+    // one re-serve, and a new ball on the plunger.
+    expect(g.session.getState()).toBe("playing");
+    expect(g.session.getBall()).toBe(1);
+    expect(g.session.getSaveCount()).toBe(1);
+    expect(g.session.getReserveCount()).toBe(1);
+    expect(g.session.getLastSaveKind()).toBe("kickback");
+    expect(g.session.activeBallId).not.toBe(first);
+
+    // The grace is used up: the re-served ball's drain is real.
+    runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
+    expect(inZone(g.ball())).toBe(true);
+    launchAndDrain(g, FULL_HOLD_STEPS);
     expect(g.session.getState()).toBe("bonus");
     expect(g.session.getSaveCount()).toBe(1);
     expect(g.session.getBall()).toBe(1);
