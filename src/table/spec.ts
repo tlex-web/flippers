@@ -289,12 +289,6 @@ const LEFT_SLING: readonly Vec2[] = [
   { x: 1.16, y: 4.75 },
 ];
 
-/** Left inlane sensor: across the inlane from the funnel wall to the sling. */
-const LEFT_INLANE: readonly Vec2[] = [
-  { x: 0.33, y: INLANE_Y },
-  { x: 0.84, y: INLANE_Y },
-];
-
 /**
  * Open mid-field below the orbit guides and lane guides, around the bumper
  * cluster: the region the 03-03 table soak and the seeded flow proof draw ball
@@ -315,6 +309,23 @@ const LEFT_PIVOT: Vec2 = { x: 0.69, y: 5.45 };
 const LEFT_FUNNEL: readonly Vec2[] = [
   { x: 0.0, y: 4.5 },
   { x: 0.6, y: 5.37 },
+];
+
+/** x of the left funnel wall at height y (linear on its one segment). */
+function leftFunnelXAt(y: number): number {
+  const a = LEFT_FUNNEL[0] as Vec2;
+  const b = LEFT_FUNNEL[1] as Vec2;
+  return a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y);
+}
+
+/**
+ * Left inlane sensor: across the inlane from the funnel wall to the sling.
+ * Its wall-side end is derived from the funnel line, so it follows INLANE_Y
+ * (06.1-REVIEW WR-01).
+ */
+const LEFT_INLANE: readonly Vec2[] = [
+  { x: leftFunnelXAt(INLANE_Y) + 0.02, y: INLANE_Y }, // ≈ 0.0890; 0.0165 m off the wall, perpendicular
+  { x: 0.84, y: INLANE_Y },
 ];
 
 /** Left trough wall: below the left bat, closing the outlane toward the drain. */

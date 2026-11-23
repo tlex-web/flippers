@@ -549,10 +549,10 @@ describe("buildLampShapes (D-21 lamp table)", () => {
     }
   });
 
-  it("builds the two inlane arrows: a 0.16 x 0.12 head plus a 0.05 x 0.08 stem at (0.585, 4.37) and its mirror", () => {
+  it("builds the two inlane arrows: a 0.16 x 0.12 head plus a 0.05 x 0.08 stem at (0.4645, 4.37) and its mirror", () => {
     for (const [lamp, cx] of [
-      [LAMP_INLANE_500, 0.585],
-      [LAMP_INLANE_501, 2.315],
+      [LAMP_INLANE_500, 0.4644827586206895],
+      [LAMP_INLANE_501, 2.4355172413793102],
     ] as const) {
       const s = shapes.find((x) => x.lamp === lamp);
       expect(s).toBeDefined();
