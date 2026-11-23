@@ -410,7 +410,7 @@ export class TableRenderer {
     this.canvas.style.height = `${view.cssH}px`;
 
     const layer = this.layers.create(view.backingW, view.backingH);
-    bakeStatic(layer.ctx, this.elements, view);
+    bakeStatic(layer.ctx, this.elements, view, this.lampShapes);
     this.layer = layer;
     this.view = view;
 

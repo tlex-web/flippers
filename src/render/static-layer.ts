@@ -400,11 +400,15 @@ export function drawUnlitLenses(ctx: CanvasRenderingContext2D, shapes: readonly 
 /**
  * Bake the static playfield into `ctx` (a layer of the view's backing size) and
  * return the ids of the elements drawn, in draw order. Mounts are never baked.
+ * `lampShapes` is the lamp table whose unlit lenses are baked; pass the one the
+ * renderer already holds so there is one source for it (06-REVIEW IN-05). It
+ * defaults to `buildLampShapes(elements)`.
  */
 export function bakeStatic(
   ctx: CanvasRenderingContext2D,
   elements: readonly ResolvedElement[],
   view: ViewTransform,
+  lampShapes: readonly LampShape[] = buildLampShapes(elements),
 ): readonly number[] {
   const drawn: number[] = [];
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -471,7 +475,7 @@ export function bakeStatic(
     drawn.push(el.id);
   }
   ctx.shadowBlur = 0;
-  drawUnlitLenses(ctx, buildLampShapes(elements));
+  drawUnlitLenses(ctx, lampShapes);
   ctx.globalAlpha = 1;
   drawVignette(ctx, view);
   ctx.globalCompositeOperation = "source-over";
