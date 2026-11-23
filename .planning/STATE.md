@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
 status: executing
-stopped_at: Completed 06-10-PLAN.md
-last_updated: "2026-11-22T23:49:51.795Z"
+stopped_at: Completed 06-11-PLAN.md
+last_updated: "2026-11-23T00:05:45.964Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: bf389ce919caf57f60e7fc88c22e868616497b4f
+state_head: 8052498315760a8353530b27a1337cd277074f4a
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 52
+  completed_plans: 53
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 ## Current Position
 
 Phase: 06 (Juice & Polish) — EXECUTING
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 execution started
 
@@ -114,6 +114,7 @@ Progress: [████████░░] 83%
 | Phase 06 P08 | 17min | 2 tasks | 11 files |
 | Phase 06 P09 | 47min | 2 tasks | 9 files |
 | Phase 06 P10 | 28min | 2 tasks | 8 files |
+| Phase 06 P11 | 13 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,8 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-10: BALL SAVED and SKILL SHOT share status row 5; the later event step wins inside its 180-step window (same-step tie keeps SKILL SHOT)
 - [Phase 06]: 06-10: the post flourish starts only on a kickback save-count increment; a backstop save shows no post
 - [Phase 06]: 06-10: the ring lamp hot-spot is a LAMP_HOTSPOT arc over the ring's upper-left quarter, not a centered disc
+- [Phase 06]: 06-11: high score stored only as a decimal integer under flippers.hiscore.v1, read once at boot, written only on a strictly greater game-over score; every storage access silently guarded
+- [Phase 06]: 06-11: GameSession submits once at the last tally end (after credit, before game-over); NEW HIGH SCORE is status row 4 for 360 steps; the highScore cue follows gameOver once per getNewBestCount() increment
 
 ### Pending Todos
 
@@ -282,6 +285,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T23:49:50.381Z
-Stopped at: Completed 06-10-PLAN.md
+Last session: 2026-11-23T00:05:44.516Z
+Stopped at: Completed 06-11-PLAN.md
 Resume file: None
