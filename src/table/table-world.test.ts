@@ -279,12 +279,22 @@ function distToSegment(p: Vec2, s: Segment): number {
   return Math.hypot(p.x - (s.a.x + t * dx), p.y - (s.a.y + t * dy));
 }
 
+/** 2D cross product (q - p) x (r - p): its sign says which side of line pq r is on. */
+function cross(p: Vec2, q: Vec2, r: Vec2): number {
+  return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+}
+
 /**
- * Distance between segments a and b: the min of the four endpoint-to-segment
- * distances. Valid only for segments that do not cross (crossing segments are
- * at distance 0, which this does not report).
+ * Distance between segments a and b, exact for every pair (06.1-REVIEW IN-01):
+ * 0 when they properly cross (each segment's endpoints lie strictly on opposite
+ * sides of the other's line), else the min of the four endpoint-to-segment
+ * distances. Touching and collinear-overlap pairs get 0 from the endpoints.
  */
 function segToSegDist(a: Segment, b: Segment): number {
+  const crosses =
+    cross(a.a, a.b, b.a) * cross(a.a, a.b, b.b) < 0 &&
+    cross(b.a, b.b, a.a) * cross(b.a, b.b, a.b) < 0;
+  if (crosses) return 0;
   return Math.min(
     distToSegment(a.a, b),
     distToSegment(a.b, b),
