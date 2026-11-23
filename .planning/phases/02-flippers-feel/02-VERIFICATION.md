@@ -158,3 +158,18 @@ The only remaining step is the phase's designed, always-required human by-feel a
 
 *Verified: 2026-07-15T19:30:00Z*
 *Verifier: Claude (gsd-verifier)*
+
+---
+
+## Addendum (Phase 06.1): release jam-lag re-measured
+
+Human Verification item 2 ("Release jam-lag after a sustained cradle hold") is closed with no code change. Plan 04-09 fixed the cause (G-04-10: `PlanckWorld.setFlipperMotor` toggles the revolute joint's limit off and on at each commanded sign change, which clears the warm-started limit impulse). Since then, a release after a 10, 60 or 200-step hold starts the bat moving within 2 fixed steps. That is 16.7 ms, against the ~125 ms probed in 02-03.
+
+The closure is pinned by two automated test families, both part of `npx vitest run`:
+
+- `src/physics/flipper-response.test.ts`: `${w.name} flipper ${id}: -1 after a ${hold}-step +1 hold moves within 2 steps`, for holds 10, 60 and 200, on every flipper of both the TABLE_SPEC and the PROOF_BOX_SPEC worlds.
+- `src/sandbox/flipper-e2e.test.ts`: `${b.code}: a release after a ${hold}-step hold starts the ${b.side} bat falling within 2 steps`, for holds 10, 60 and 200, through the keyboard on the latency bindings KeyZ, Slash, ArrowLeft and ArrowRight (both bats).
+
+Re-run in 06.1-05: `npx vitest run src/physics/flipper-response.test.ts src/sandbox/flipper-e2e.test.ts -t "within 2 steps"` passes 38 tests (the release cases above plus the press and TILT latency cases), and the full suite is 1300/1300.
+
+*Addendum: 2026-11-23, Phase 06.1 plan 05 (D-04: documentation only)*

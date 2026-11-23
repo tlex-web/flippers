@@ -283,7 +283,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None. (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planning/todos/completed/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md).)
+- [Dead-flipper hinge pocket soft-lock (backlog, D-02)](.planning/todos/pending/2026-11-23-dead-flipper-hinge-pocket-soft-lock.md)
+
+(The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planning/todos/completed/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md).)
 
 ### Blockers/Concerns
 
@@ -293,8 +295,8 @@ None. (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planni
   - ~~There is no on-screen controls hint and no `aria-label` on the canvas.~~ Resolved in Phase 4: a five-row controls list (04-10) and `aria-label` on `#stage`.
 - ~~[Phase 3]: The plunger re-feed has not been watched on a real 120/144 Hz display.~~ Resolved in Phase 6 UAT test 6 (played on 144 Hz and 60 Hz displays).
 - [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
-- [Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.
-- [Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).
+- ~~[Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.~~ Resolved in 06.1: soak re-run green (06.1-01, 06.1-02, 06.1-05)
+- ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
 
 ### Quick Tasks Completed
 
