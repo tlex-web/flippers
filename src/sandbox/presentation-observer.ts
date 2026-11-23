@@ -37,7 +37,10 @@
  *   counted step and none for TOTAL (D-25); the count resets outside the bonus
  *   state, so the next ball's tally ticks from row 0 again;
  * - `"gameOver"`: the state became game-over from another state (its drain
- *   was already pushed on the drain step).
+ *   was already pushed on the drain step);
+ * - `"highScore"`: once per `getNewBestCount()` increment, at strength 1 on no
+ *   element (06-11, D-15, D-25); the session submits the final score as it
+ *   enters game-over, so the fanfare follows the game-over cue on that step.
  * A step with no change pushes nothing, so a held state never spams (T-05-17).
  *
  * Effects (06-09, D-17): with an `ObserverFx` attached, every nudge-count
@@ -72,6 +75,7 @@ export type ObserverSession = Pick<
   | "getNudgeCount"
   | "getLastNudgeDir"
   | "getSaveCount"
+  | "getNewBestCount"
   | "getBonusTally"
   | "getBonusElapsed"
 >;
@@ -117,6 +121,7 @@ export class PresentationObserver {
   private prevDrains: number;
   private prevNudges: number;
   private prevSaves: number;
+  private prevNewBests: number;
   /** Bonus tally rows revealed at the previous observe (0 outside a tickable tally). */
   private prevRevealed: number;
   /** Per watched flipper (same index as flipperIds), preallocated once. */
@@ -146,6 +151,7 @@ export class PresentationObserver {
     this.prevDrains = session.getDrainCount();
     this.prevNudges = session.getNudgeCount();
     this.prevSaves = session.getSaveCount();
+    this.prevNewBests = session.getNewBestCount();
     this.prevRevealed = this.revealedRows(this.prevState);
     this.flippers = flippers;
     this.flipperIds = flipperIds;
@@ -167,6 +173,7 @@ export class PresentationObserver {
     const drains = this.session.getDrainCount();
     const nudges = this.session.getNudgeCount();
     const saves = this.session.getSaveCount();
+    const newBests = this.session.getNewBestCount();
     const revealed = this.revealedRows(state);
     const prev = this.prevState;
 
@@ -227,6 +234,8 @@ export class PresentationObserver {
 
     if (state === "game-over" && prev !== "game-over") this.cues.push("gameOver", NO_ELEMENT, 1);
 
+    for (let n = this.prevNewBests; n < newBests; n++) this.cues.push("highScore", NO_ELEMENT, 1);
+
     this.prevState = state;
     this.prevWarning = warning;
     this.prevReleases = releases;
@@ -234,6 +243,7 @@ export class PresentationObserver {
     this.prevDrains = drains;
     this.prevNudges = nudges;
     this.prevSaves = saves;
+    this.prevNewBests = newBests;
     this.prevRevealed = revealed;
   }
 
