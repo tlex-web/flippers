@@ -93,18 +93,18 @@ describe("keyLabel", () => {
   it("rejects a whitespace value (04-REVIEW IN-04)", () => {
     expect(keyLabel(" ")).toBeNull();
     expect(keyLabel("\t")).toBeNull();
-    expect(keyLabel(" ")).toBeNull();
+    expect(keyLabel("\u00A0")).toBeNull();
   });
 
   it("rejects a control, format, lone-surrogate or private-use value (04-REVIEW IN-04)", () => {
     expect(keyLabel("\u0007")).toBeNull();
-    expect(keyLabel("​")).toBeNull();
+    expect(keyLabel("\u200B")).toBeNull();
     expect(keyLabel("\uD800")).toBeNull();
-    expect(keyLabel("")).toBeNull();
+    expect(keyLabel("\uE000")).toBeNull();
   });
 
   it("rejects a lone combining mark (04-REVIEW IN-04)", () => {
-    expect(keyLabel("́")).toBeNull();
+    expect(keyLabel("\u0301")).toBeNull();
   });
 
   it("keeps a printable astral letter, counted as one code point", () => {

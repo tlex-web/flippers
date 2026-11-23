@@ -65,11 +65,13 @@ const PRINTABLE = /^[^\s\p{C}\p{M}]$/u;
  * ("y" -> "Y"), else `raw` ("ß", whose uppercase is "SS"). Whitespace, category
  * C and category M values are rejected because they would draw a blank or
  * garbled cap yet still count as resolved and reveal the layout-only note
- * (04-REVIEW IN-04).
+ * (04-REVIEW IN-04). `PRINTABLE` is anchored, holds one class and uses the `u`
+ * flag, so it alone matches exactly one code point and rejects empty and
+ * multi-code-point values; `codePoints` is kept only for the uppercase form
+ * (06.1-REVIEW WR-04).
  */
 export function keyLabel(raw: string | undefined): string | null {
-  if (typeof raw !== "string" || codePoints(raw) !== 1) return null;
-  if (!PRINTABLE.test(raw)) return null;
+  if (typeof raw !== "string" || !PRINTABLE.test(raw)) return null;
   const upper = raw.toUpperCase();
   return codePoints(upper) === 1 ? upper : raw;
 }
