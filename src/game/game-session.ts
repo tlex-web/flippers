@@ -102,10 +102,11 @@
  * not re-armed, so it is one save per ball. `trySave(ballId)` spends the save
  * as a kickback (the 06-08 center post); a drain of the kicked ball on the
  * step of the kickback or within `KICKBACK_GRACE_STEPS` after it is kept as a
- * backstop re-serve that counts once, as the kickback (research A4, 06-REVIEW
- * CR-01: the kick does not always keep the ball in play, and it must never
- * leave the player worse off than the backstop). A tilt, the bonus state and
- * game over disarm it and end the grace.
+ * backstop re-serve that counts once (research A4, 06-REVIEW CR-01: the kick
+ * does not always keep the ball in play, and it must never leave the player
+ * worse off than the backstop). On the kickback's own step the kick never
+ * reached a live ball, so that save is reported as a backstop (WR-02). A
+ * tilt, the bonus state and game over disarm it and end the grace.
  *
  * High score (PLSH-08, D-15, research Open Question 3): the session submits
  * the final score to its `HighScoreSink` (`GameSessionOptions.highScore`,
@@ -397,13 +398,16 @@ export class GameSession implements RulesGate, RuleHooks {
    * ball to the plunger. Spends the save as a backstop, unless a kickback
    * already spent it within the grace (then it counts once, as the kickback;
    * `lastSaveStep` moves to this step so the HUD's BALL SAVED explains the
-   * re-serve).
+   * re-serve). A drain on the very step of the kickback means the kick never
+   * reached a live ball, so the save is reported as the backstop it became and
+   * the presentation plays no post flourish or kick sparks (06-REVIEW WR-02).
    */
   private backstop(): void {
     this.world.removeBall(this.drained);
     this.drained = NO_BALL;
     this.drainCount++;
     if (this.inKickbackGrace()) {
+      if (this.savedAtStep === this.step) this.lastSaveKind = "backstop";
       this.lastSaveStep = this.step;
     } else if (this.save.consume("backstop")) {
       this.saveCount++;

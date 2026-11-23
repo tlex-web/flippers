@@ -1187,7 +1187,7 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getDrainCount()).toBe(1);
   });
 
-  it("a kickback and a drain of the same ball on the same step keep the ball: remove then add, the ball unchanged, one save, as a kickback", () => {
+  it("a kickback and a drain of the same ball on the same step keep the ball: remove then add, the ball unchanged, one save, reported as a backstop (the kick never reached a live ball, 06-REVIEW WR-02)", () => {
     const r = makeRig();
     startSaved(r);
     // The post kicker calls trySave during the step's dispatch; the drain is
@@ -1202,7 +1202,9 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getState()).toBe("playing");
     expect(r.session.getBall()).toBe(1);
     expect(r.session.getSaveCount()).toBe(1);
-    expect(r.session.getLastSaveKind()).toBe("kickback");
+    // Read on the same step the presentation diffs it: no post flourish or
+    // kick sparks for a ball that is now sitting on the plunger.
+    expect(r.session.getLastSaveKind()).toBe("backstop");
 
     // The save is spent: the next drain of the re-served ball is real.
     r.tick(1);
