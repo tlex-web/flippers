@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { CollisionRouter } from "../app/collision-router";
 import type { PlungerPhase } from "../control/plunger-controller";
 import type { BallId, BallSpec, BallState, CollisionEvent } from "../physics/types";
+import { PLAYFIELD_CENTER_X } from "../table/spec";
 import {
   BALLS_PER_GAME,
   GameSession,
@@ -14,6 +15,10 @@ import { bonusDurationSteps } from "./bonus";
 import {
   BALL_SAVE_BLINK_STEPS,
   BALL_SAVE_STEPS,
+  BALL_SEARCH_IMPULSE,
+  BALL_SEARCH_KICKS,
+  BALL_SEARCH_SPEED_EPS,
+  BALL_SEARCH_STEPS,
   KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_IMPULSE,
@@ -43,6 +48,11 @@ import {
  *   game-over/relay case passes `NO_SAVE` (`ballSaveSteps: 0`) explicitly, and
  *   the save cases use the production default with `setBallX` to place the
  *   ball in or out of the chute.
+ * - ball search (plan 06.2-02, 6590dce IN-04): spy balls are still by default,
+ *   so a tilted case that ticks BALL_SEARCH_STEPS or more now gets search kicks
+ *   (and, after BALL_SEARCH_KICKS, a forfeit drain). The "ball search" describe
+ *   drives y and vx through `setBallY` / `setBallVx`, and `NO_SEARCH` is its
+ *   off control.
  */
 
 /** A flipper gate that ignores every call (the score and FSM cases do not read it). */
@@ -132,6 +142,10 @@ interface Rig {
   step(...events: CollisionEvent[]): void;
   /** Move every spy ball to `x` (default 0, left of the chute). */
   setBallX(x: number): void;
+  /** Move every spy ball to `y` (default 0, up-table of PLUNGER_ZONE). */
+  setBallY(y: number): void;
+  /** Set every spy ball's vx (default 0, at rest; vy stays 0). */
+  setBallVx(vx: number): void;
 }
 
 function drainOf(ballId: BallId): CollisionEvent {
@@ -145,13 +159,22 @@ function drainOf(ballId: BallId): CollisionEvent {
   };
 }
 
-/** A spy ball snapshot: the id, and x for the ball-save chute-exit test. */
-function spyBall(id: BallId, x: number): BallState {
-  return { id, x, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 };
+/**
+ * A spy ball snapshot: the id, x for the ball-save chute-exit test, and y and
+ * vx for the ball-search zone and stillness tests (both 0 by default).
+ */
+function spyBall(id: BallId, x: number, y: number, vx: number): BallState {
+  return { id, x, y, vx, vy: 0, radius: 0.2, angle: 0 };
 }
 
 /** The ball save disabled: the legacy FSM cases, whose spy balls sit at x = 0. */
 const NO_SAVE: GameSessionOptions = { ballSaveSteps: 0 };
+
+/**
+ * The search-off control (06.2): ball save and ball search both disabled, so a
+ * tilted motionless spy ball is never kicked or given up.
+ */
+const NO_SEARCH: GameSessionOptions = { ballSaveSteps: 0, ballSearchSteps: 0 };
 
 /**
  * The spy world: addBall hands out increasing ids from FIRST_ID, getBalls
@@ -166,6 +189,8 @@ function makeRig(options: GameSessionOptions = {}, extraBallIds: readonly BallId
   const live = new Set<BallId>();
   let nextId: BallId = FIRST_ID;
   let ballX = 0;
+  let ballY = 0;
+  let ballVx = 0;
   const world: GameSessionWorld = {
     addBall: (spec) => {
       calls.push({ op: "add", spec });
@@ -176,7 +201,7 @@ function makeRig(options: GameSessionOptions = {}, extraBallIds: readonly BallId
       calls.push({ op: "remove", id });
       live.delete(id);
     },
-    getBalls: () => [...live, ...extraBallIds].map((id) => spyBall(id, ballX)),
+    getBalls: () => [...live, ...extraBallIds].map((id) => spyBall(id, ballX, ballY, ballVx)),
     applyImpulse: (id, ix, iy) => {
       impulses.push({ id, ix, iy });
     },
@@ -215,6 +240,12 @@ function makeRig(options: GameSessionOptions = {}, extraBallIds: readonly BallId
     },
     setBallX: (x) => {
       ballX = x;
+    },
+    setBallY: (y) => {
+      ballY = y;
+    },
+    setBallVx: (vx) => {
+      ballVx = vx;
     },
   };
 }
@@ -541,6 +572,168 @@ describe("GameSession nudge and tilt (GAME-03, R9-R11)", () => {
     expect(r.session.getState()).toBe("playing");
     expect(r.session.isWarning()).toBe(false);
     expect(r.session.getTiltLevel()).toBe(1);
+  });
+});
+
+/**
+ * Start a game and tilt it with four "left" nudges (nudgeTimes). Returns the
+ * impulse count right after the tilt, so search kicks are read as
+ * `r.impulses.slice(mark)` and the four nudge impulses never count.
+ */
+function tiltAndMark(r: Rig): number {
+  r.session.onStart();
+  nudgeTimes(r, 4);
+  expect(r.session.getState()).toBe("tilted");
+  return r.impulses.length;
+}
+
+/** Ticks a still tilted ball needs for every kick plus the fallback trigger. */
+const SEARCH_OUT_TICKS = (BALL_SEARCH_KICKS + 1) * BALL_SEARCH_STEPS;
+
+describe("GameSession ball search (tilted soft-lock, 06.2)", () => {
+  it("B1: a still tilted ball left of centre is kicked +x on exactly the BALL_SEARCH_STEPS-th still tick", () => {
+    const r = makeRig(NO_SAVE);
+    const mark = tiltAndMark(r);
+    const active = r.session.activeBallId;
+    r.tick(BALL_SEARCH_STEPS - 1);
+    expect(r.impulses.slice(mark)).toEqual([]);
+    r.tick(1);
+    expect(r.impulses.slice(mark)).toEqual([{ id: active, ix: BALL_SEARCH_IMPULSE, iy: 0 }]);
+    expect(r.session.getBallSearchCount()).toBe(1);
+  });
+
+  it("B2: a still tilted ball right of PLAYFIELD_CENTER_X (outside the chute) is kicked -x, toward the centre", () => {
+    const r = makeRig(NO_SAVE);
+    r.setBallX(2.5);
+    expect(2.5).toBeGreaterThan(PLAYFIELD_CENTER_X);
+    const mark = tiltAndMark(r);
+    const active = r.session.activeBallId;
+    r.tick(BALL_SEARCH_STEPS);
+    expect(r.impulses.slice(mark)).toEqual([{ id: active, ix: -BALL_SEARCH_IMPULSE, iy: 0 }]);
+  });
+
+  it("B3: after BALL_SEARCH_KICKS kicks leave it still, the next trigger forfeits the ball through service() and ball 2 is served", () => {
+    const r = makeRig(NO_SAVE);
+    const mark = tiltAndMark(r);
+    const active = r.session.activeBallId;
+    const drains = r.session.getDrainCount();
+    r.tick(SEARCH_OUT_TICKS);
+    expect(r.impulses.slice(mark)).toHaveLength(BALL_SEARCH_KICKS);
+    expect(r.session.getState(), "the fallback only records the drain").toBe("tilted");
+    r.step();
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.isBonusForfeit()).toBe(true);
+    expect(r.calls[r.calls.length - 1]).toEqual({ op: "remove", id: active });
+    expect(r.session.getDrainCount()).toBe(drains + 1);
+    expect(r.session.getBallSearchCount()).toBe(BALL_SEARCH_KICKS);
+    finishBonus(r);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(2);
+  });
+
+  it("B4: a still ball while playing (a cradle) is never searched", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    const mark = r.impulses.length;
+    for (let i = 0; i < 3 * BALL_SEARCH_STEPS; i++) {
+      r.tick(1);
+      r.step();
+    }
+    expect(r.impulses.slice(mark)).toEqual([]);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBallSearchCount()).toBe(0);
+  });
+
+  it("B5: a tilted ball parked in PLUNGER_ZONE is never searched or drained (03-REVIEW CR-01)", () => {
+    const r = makeRig(NO_SAVE);
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    const mark = tiltAndMark(r);
+    const callsBefore = r.calls.length;
+    r.tick(SEARCH_OUT_TICKS + 10);
+    r.step();
+    expect(r.impulses.slice(mark)).toEqual([]);
+    expect(r.calls.slice(callsBefore).filter((c) => c.op === "remove")).toEqual([]);
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.session.getBallSearchCount()).toBe(0);
+  });
+
+  it("B6: a moving step restarts the still count; a speed of exactly BALL_SEARCH_SPEED_EPS counts as moving", () => {
+    for (const vx of [1, BALL_SEARCH_SPEED_EPS]) {
+      const r = makeRig(NO_SAVE);
+      const mark = tiltAndMark(r);
+      r.tick(BALL_SEARCH_STEPS - 1);
+      r.setBallVx(vx);
+      r.tick(1);
+      r.setBallVx(0);
+      r.tick(BALL_SEARCH_STEPS - 1);
+      expect(r.impulses.slice(mark), `vx ${vx}: no kick yet`).toEqual([]);
+      r.tick(1);
+      expect(r.impulses.slice(mark), `vx ${vx}: kick after a full still run`).toHaveLength(1);
+    }
+  });
+
+  it("B7: with ballSearchSteps 0 (NO_SEARCH) a still tilted ball is never kicked or given up", () => {
+    const r = makeRig(NO_SEARCH);
+    const mark = tiltAndMark(r);
+    r.tick(3000);
+    r.step();
+    expect(r.impulses.slice(mark)).toEqual([]);
+    expect(r.session.getState()).toBe("tilted");
+    expect(r.session.getBallSearchCount()).toBe(0);
+  });
+
+  it("B8: the search never touches the nudge count, the last nudge direction or the tilt meter", () => {
+    const r = makeRig(NO_SAVE);
+    const twin = makeRig(NO_SEARCH);
+    tiltAndMark(r);
+    tiltAndMark(twin);
+    r.tick(SEARCH_OUT_TICKS);
+    twin.tick(SEARCH_OUT_TICKS);
+    expect(r.session.getBallSearchCount()).toBe(BALL_SEARCH_KICKS);
+    expect(r.session.getTiltLevel()).toBe(twin.session.getTiltLevel());
+    r.step();
+    twin.step();
+    expect(r.session.isBonusForfeit()).toBe(true);
+    expect(r.session.getNudgeCount()).toBe(4);
+    expect(r.session.getLastNudgeDir()).toBe("left");
+    expect(r.session.getTiltLevel()).toBe(twin.session.getTiltLevel());
+  });
+
+  it("B9: only the active ball is searched, never an untracked ball", () => {
+    const r = makeRig(NO_SAVE, [77]);
+    const mark = tiltAndMark(r);
+    const active = r.session.activeBallId;
+    r.tick(BALL_SEARCH_KICKS * BALL_SEARCH_STEPS);
+    const kicks = r.impulses.slice(mark);
+    expect(kicks).toHaveLength(BALL_SEARCH_KICKS);
+    for (const k of kicks) expect(k.id).toBe(active);
+  });
+
+  it("B10: the kick budget resets per ball, and a tilted last ball's forfeit reaches game over (onStart accepted again)", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    for (let ball = 1; ball <= BALLS_PER_GAME; ball++) {
+      expect(r.session.getBall()).toBe(ball);
+      nudgeTimes(r, 4);
+      expect(r.session.getState()).toBe("tilted");
+      r.tick(SEARCH_OUT_TICKS);
+      r.step();
+      expect(r.session.isBonusForfeit(), `ball ${ball} forfeit`).toBe(true);
+      expect(r.session.getBallSearchCount()).toBe(ball * BALL_SEARCH_KICKS);
+      finishBonus(r);
+    }
+    expect(r.session.getState()).toBe("game-over");
+    expect(r.session.onStart()).toBe(true);
+  });
+
+  it("B11: with ballSearchSteps 10 the first kick lands on exactly the 10th still tick", () => {
+    const r = makeRig({ ballSaveSteps: 0, ballSearchSteps: 10 });
+    const mark = tiltAndMark(r);
+    r.tick(9);
+    expect(r.impulses.slice(mark)).toEqual([]);
+    r.tick(1);
+    expect(r.impulses.slice(mark)).toHaveLength(1);
   });
 });
 
