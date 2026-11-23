@@ -93,7 +93,17 @@ export interface RulesGate {
  * not allocate per call and must not touch the world or the rules.
  */
 export interface ReactiveFeedback {
-  onKick(kind: "bumper" | "slingshot", elementId: number, normalImpulse: number): void;
+  /**
+   * A registered kick. (px, py) is the contact point (m), copied out of the
+   * pooled event as scalars (06-12: where the impact particles spawn).
+   */
+  onKick(
+    kind: "bumper" | "slingshot",
+    elementId: number,
+    normalImpulse: number,
+    px: number,
+    py: number,
+  ): void;
   onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void;
 }
 
@@ -489,6 +499,6 @@ export class ReactiveElements {
     k.pendingBall = e.ballId;
     this.gate.award(k.points);
     this.hooks.onSwitch(kind, e.elementId, false);
-    this.feedback.onKick(kind, e.elementId, e.normalImpulse);
+    this.feedback.onKick(kind, e.elementId, e.normalImpulse, e.point.x, e.point.y);
   };
 }

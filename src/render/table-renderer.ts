@@ -8,7 +8,8 @@
  * offset, sets the shaken world transform and draws only what moves, in this
  * order: insert lamps, element flashes, the ball-save post flourish, both bats
  * at their interpolated angles, the plunger and its charge meter, one baked soft shadow
- * per ball (PLSH-03, D-20) and every ball at its interpolated position.
+ * per ball (PLSH-03, D-20), every ball at its interpolated position and, last,
+ * the impact particles.
  *
  * Lamp pass (PLSH-04, D-21): every shape in the lamp table (`buildLampShapes`,
  * built once in the constructor) reads its level from the frame's `LampReader`
@@ -40,6 +41,17 @@
  * (`bakeShadow`), stamped source-over at globalAlpha 1 with one `drawImage` per
  * ball at ball center + (SHADOW_OFFSET_X_M, SHADOW_OFFSET_Y_M), a fixed size
  * that never scales with speed.
+ *
+ * Particle pass (PLSH-02, D-19, 06-12): drawn last, over the balls, under
+ * "lighter" from `frame.effects.particles` at `frame.alpha`. One index loop per
+ * particle kind with its color assigned once (rings and bumper sparks
+ * FLASH_BUMPER, sling sparks SLING_RUBBER); dead slots are skipped. A spark is a
+ * streak of length max(PARTICLE_STREAK_MIN_M, speed * PARTICLE_STREAK_S) back
+ * along its velocity from its interpolated position, PARTICLE_STREAK_WIDTH_M
+ * wide, at globalAlpha (1 - age/life)^2; a ring is an arc of radius
+ * size * (1 + age/life) (1.0R to 2.0R, under HALO_SCALE) whose width goes
+ * RING_WIDTH_START_M to RING_WIDTH_END_M at 0.9 * (1 - age/life)^2. Particles
+ * stay on under reduced motion (D-18).
  *
  * Screen shake (PLSH-01, D-17, D-18, research Pitfall 8): `frame.effects.shake`
  * is sampled once per `draw()` at `frame.alpha` into a renderer-owned
@@ -90,7 +102,9 @@ import {
   RUBBER_LINE_M,
   SAVE_LIT,
   SENSOR_LINE_M,
+  SLING_RUBBER,
 } from "./palette";
+import { RING, SPARK_BUMPER, SPARK_SLING, type ParticlePool } from "./particles";
 import {
   bakeHalo,
   bakeShadow,
@@ -189,6 +203,16 @@ interface FlashPath {
 
 const TAU = Math.PI * 2;
 const HALF_PI = Math.PI / 2;
+
+/** Spark streak: length speed * PARTICLE_STREAK_S, at least PARTICLE_STREAK_MIN_M (UI-SPEC). */
+export const PARTICLE_STREAK_S = 0.025;
+export const PARTICLE_STREAK_MIN_M = 0.02;
+/** Spark streak width (photosensitive cap, T-6-25). */
+export const PARTICLE_STREAK_WIDTH_M = 0.012;
+/** Shockwave ring line width over its life, and its peak alpha factor. */
+export const RING_WIDTH_START_M = 0.02;
+export const RING_WIDTH_END_M = 0.006;
+export const RING_ALPHA = 0.9;
 
 /** Meter quarter-tick alpha (fixed color, intensity through globalAlpha). */
 const METER_TICK_ALPHA = 0.45;
@@ -476,6 +500,7 @@ export class TableRenderer {
     this.drawPlunger(frame.plungerCharge);
     this.drawBallShadows(frame.balls);
     this.drawBalls(frame.balls);
+    if (effects) this.drawParticles(effects.particles, frame.alpha);
 
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
@@ -822,6 +847,76 @@ export class TableRenderer {
       const b = balls[i];
       if (!b) continue;
       ctx.drawImage(shadow.canvas, b.x + dx, b.y + dy, d, d);
+    }
+  }
+
+  /**
+   * The particle pass (D-19): under "lighter", rings then bumper sparks then
+   * sling sparks, each kind's color assigned once. Index loops over the pool's
+   * typed arrays; no allocation, gradient, blur or text. Ends source-over at
+   * alpha 1.
+   */
+  private drawParticles(particles: ParticlePool, alpha: number): void {
+    const ctx = this.ctx;
+    const a = alpha > 0 ? (alpha < 1 ? alpha : 1) : 0;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = FLASH_BUMPER;
+    this.drawRings(particles, a);
+    this.drawSparks(particles, a, SPARK_BUMPER);
+    ctx.strokeStyle = SLING_RUBBER;
+    this.drawSparks(particles, a, SPARK_SLING);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  /** Every live ring: an arc growing 1.0R to 2.0R, thinning and fading. */
+  private drawRings(p: ParticlePool, a: number): void {
+    const ctx = this.ctx;
+    const n = p.capacity;
+    for (let i = 0; i < n; i++) {
+      if (p.kind[i] !== RING) continue;
+      const life = p.life[i] ?? 0;
+      const age = p.age[i] ?? 0;
+      if (!(age < life)) continue;
+      const t = age / life;
+      const f = 1 - t;
+      const x0 = p.px[i] ?? 0;
+      const y0 = p.py[i] ?? 0;
+      const x = x0 + ((p.x[i] ?? 0) - x0) * a;
+      const y = y0 + ((p.y[i] ?? 0) - y0) * a;
+      ctx.globalAlpha = RING_ALPHA * f * f;
+      ctx.lineWidth = RING_WIDTH_START_M + (RING_WIDTH_END_M - RING_WIDTH_START_M) * t;
+      ctx.beginPath();
+      ctx.arc(x, y, (p.size[i] ?? 0) * (1 + t), 0, TAU);
+      ctx.stroke();
+    }
+  }
+
+  /** Every live spark of `kind`: a streak back along its velocity, fading. */
+  private drawSparks(p: ParticlePool, a: number, kind: number): void {
+    const ctx = this.ctx;
+    const n = p.capacity;
+    ctx.lineWidth = PARTICLE_STREAK_WIDTH_M;
+    for (let i = 0; i < n; i++) {
+      if (p.kind[i] !== kind) continue;
+      const life = p.life[i] ?? 0;
+      const age = p.age[i] ?? 0;
+      if (!(age < life)) continue;
+      const vx = p.vx[i] ?? 0;
+      const vy = p.vy[i] ?? 0;
+      const speed = Math.hypot(vx, vy);
+      if (!(speed > 0)) continue;
+      const f = 1 - age / life;
+      const x0 = p.px[i] ?? 0;
+      const y0 = p.py[i] ?? 0;
+      const x = x0 + ((p.x[i] ?? 0) - x0) * a;
+      const y = y0 + ((p.y[i] ?? 0) - y0) * a;
+      const len = Math.max(PARTICLE_STREAK_MIN_M, speed * PARTICLE_STREAK_S) / speed;
+      ctx.globalAlpha = f * f;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - vx * len, y - vy * len);
+      ctx.stroke();
     }
   }
 

@@ -122,7 +122,7 @@ describe("CueFeedback (AUD-01/RND-03)", () => {
     const q = new CueQueue();
     const flash = new SpyFlash();
     const fb = new CueFeedback(q, flash);
-    fb.onKick("bumper", 202, FULL * 0.8);
+    fb.onKick("bumper", 202, FULL * 0.8, 0, 0);
     expect(q.size).toBe(1);
     expect(q.at(0)?.kind).toBe("bumper");
     expect(q.at(0)?.elementId).toBe(202);
@@ -136,7 +136,7 @@ describe("CueFeedback (AUD-01/RND-03)", () => {
     const q = new CueQueue();
     const flash = new SpyFlash();
     const fb = new CueFeedback(q, flash);
-    fb.onKick("slingshot", 300, FULL * 0.1);
+    fb.onKick("slingshot", 300, FULL * 0.1, 0, 0);
     expect(q.at(0)?.kind).toBe("slingshot");
     expect(q.at(0)?.strength).toBeCloseTo(0.1, 12);
     expect(flash.records).toEqual([[300, KICK_FLASH_FLOOR]]);
@@ -156,7 +156,7 @@ describe("CueFeedback (AUD-01/RND-03)", () => {
     const q = new CueQueue();
     const fb = new CueFeedback(q);
     expect(() => {
-      fb.onKick("bumper", 200, FULL);
+      fb.onKick("bumper", 200, FULL, 0, 0);
       fb.onSensor("rollover", 402, true);
     }).not.toThrow();
     expect(q.size).toBe(2);

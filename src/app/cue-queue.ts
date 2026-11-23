@@ -108,11 +108,18 @@ export interface FlashSink {
 
 /**
  * Where registered hits reach the presentation effects (06-09: the screen
- * shake; the particle plans extend it). Step-path writes of scalars only; the
- * render side implements it and never holds a world or rules handle.
+ * shake; 06-12: the impact particles at the contact point (px, py)). Step-path
+ * writes of scalars only; the render side implements it and never holds a
+ * world or rules handle.
  */
 export interface FxSink {
-  onKick(kind: "bumper" | "slingshot", elementId: number, strength: number): void;
+  onKick(
+    kind: "bumper" | "slingshot",
+    elementId: number,
+    strength: number,
+    px: number,
+    py: number,
+  ): void;
   onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void;
 }
 
@@ -198,11 +205,17 @@ export class CueFeedback implements ReactiveFeedback {
     this.fx = fx;
   }
 
-  onKick(kind: "bumper" | "slingshot", elementId: number, normalImpulse: number): void {
+  onKick(
+    kind: "bumper" | "slingshot",
+    elementId: number,
+    normalImpulse: number,
+    px: number,
+    py: number,
+  ): void {
     const s = impulseStrength(normalImpulse, BALL_MASS);
     this.cues.push(kind, elementId, s);
     if (this.flash) this.flash.record(elementId, Math.max(KICK_FLASH_FLOOR, s));
-    if (this.fx) this.fx.onKick(kind, elementId, s);
+    if (this.fx) this.fx.onKick(kind, elementId, s, px, py);
   }
 
   onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void {

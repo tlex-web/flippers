@@ -272,7 +272,7 @@ describe("ShakeTracker under reducedMotion (D-18, T-6-18)", () => {
   it("through the EffectsTracker, a nudge, a bumper, a drain and a tilt all read exactly 0 under reducedMotion (and move the view without it)", () => {
     const fx = new EffectsTracker(resolve(TABLE_SPEC));
     fx.onNudge("left");
-    fx.onKick("bumper", 202, 1);
+    fx.onKick("bumper", 202, 1, 0, 0);
     fx.onDrain();
     fx.onTilt();
     const out: ShakeOut = { x: 0, y: 0 };

@@ -22,6 +22,7 @@ import {
   type LampShape,
 } from "./lamps";
 import type { EffectsReader } from "./effects";
+import { ParticlePool } from "./particles";
 import {
   BG_BOTTOM,
   FLASH_FLIPPER,
@@ -845,7 +846,7 @@ class FixedShake extends ShakeTracker {
 }
 
 function fixedEffects(x: number, y: number): EffectsReader {
-  return { shake: new FixedShake(x, y) };
+  return { shake: new FixedShake(x, y), particles: new ParticlePool() };
 }
 
 /** Every setTransform after the frame's opening identity, as its (e, f) pair. */
@@ -945,7 +946,12 @@ describe("TableRenderer screen shake (PLSH-01, D-17, D-18, Pitfall 8)", () => {
     for (const alpha of [0, 0.5]) {
       rig.rec.clear();
       rig.renderer.draw(
-        frameOf(rig.world, { flash, alpha, effects: { shake }, reducedMotion: true }),
+        frameOf(rig.world, {
+          flash,
+          alpha,
+          effects: { shake, particles: new ParticlePool() },
+          reducedMotion: true,
+        }),
       );
       const calls = callsOf(rig.rec);
       expect(calls[2]?.args.slice(1)).toEqual([0, 0]);
@@ -957,7 +963,9 @@ describe("TableRenderer screen shake (PLSH-01, D-17, D-18, Pitfall 8)", () => {
     }
     // The same state without reducedMotion does move the view.
     rig.rec.clear();
-    rig.renderer.draw(frameOf(rig.world, { flash, effects: { shake } }));
+    rig.renderer.draw(
+      frameOf(rig.world, { flash, effects: { shake, particles: new ParticlePool() } }),
+    );
     const moved = callsOf(rig.rec)[2]?.args.slice(1) as number[];
     expect(moved[0] !== 0 || moved[1] !== 0).toBe(true);
   });
