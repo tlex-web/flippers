@@ -17,10 +17,16 @@
  *   never writes them.
  *
  * A slot is live while `age < life`; a fresh pool has every slot dead (both 0).
- * Sparks feel drag PARTICLE_DRAG_PER_S and gravity PARTICLE_GRAVITY along +y;
- * rings never move, they only age (the renderer grows them from `size`).
+ * Sparks (bumper, sling and save) feel drag PARTICLE_DRAG_PER_S and gravity
+ * PARTICLE_GRAVITY along +y; motes drift at constant velocity (no drag, no
+ * gravity); rings and glints never move, they only age (the renderer grows a
+ * ring from `size` and scales a glint's baked star with its age).
  * A spark's life is capped at emit so it never travels farther than
  * PARTICLE_MAX_TRAVEL_M from its spawn point (photosensitive footprint, T-6-25).
+ *
+ * Reward particles (06-13, D-19): a rollover, inlane or skill-shot award is one
+ * static glint (GLINT_LIFE_STEPS fixed steps) plus a few motes drifting up-table
+ * (-y), each kind code carrying the reward's color for the renderer.
  *
  * DOM-free and engine-free.
  */
@@ -45,6 +51,29 @@ export const SPARK_BUMPER = 1;
 export const SPARK_SLING = 2;
 /** A bumper shockwave ring (FLASH_BUMPER). */
 export const RING = 3;
+/** Reward glints: one baked star at the sensor (06-13, D-19). */
+export const GLINT_ROLLOVER = 4;
+export const GLINT_INLANE = 5;
+export const GLINT_SKILL = 6;
+/** Reward motes: small discs drifting up-table. */
+export const MOTE_ROLLOVER = 7;
+export const MOTE_INLANE = 8;
+export const MOTE_SKILL = 9;
+/** A spark off the ball-save post on a kickback save (SAVE_LIT). */
+export const SPARK_SAVE = 10;
+
+/** A glint lives this many fixed steps (UI-SPEC: 42 steps, 0.35 s). */
+export const GLINT_LIFE_STEPS = 42;
+/** Mote speed range (m/s), up-table. */
+export const MOTE_SPEED_MIN = 0.15;
+export const MOTE_SPEED_MAX = 0.3;
+/** Mote heading: within +/- this angle of straight up (-y), the horizontal jitter. */
+export const MOTE_JITTER_RAD = (15 * Math.PI) / 180;
+/** Mote life range (s). */
+export const MOTE_LIFE_MIN = 0.6;
+export const MOTE_LIFE_MAX = 0.8;
+/** Drawn mote radius (m, UI-SPEC). */
+export const MOTE_RADIUS_M = 0.018;
 
 /**
  * Farthest a spark may travel from its spawn point before it dies, m
@@ -146,33 +175,70 @@ export class ParticlePool {
     const angle = Math.atan2(ny, nx) + (2 * rnd() - 1) * spreadRad;
     const speed = speedMin + (speedMax - speedMin) * rnd();
     const life = capSparkLife(speed, lifeMin + (lifeMax - lifeMin) * rnd());
+    this.place(kind, x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, life, 0);
+  }
+
+  /** One shockwave ring centered at (x, y), starting at `radius`, for `lifeSeconds`. */
+  emitRing(x: number, y: number, radius: number, lifeSeconds: number): void {
+    this.place(RING, x, y, 0, 0, lifeSeconds, radius);
+  }
+
+  /**
+   * One reward glint of `kind` at (x, y): static, GLINT_LIFE_STEPS fixed steps
+   * long. Draws nothing from the stream. Overwrites the oldest slot.
+   */
+  emitGlint(kind: number, x: number, y: number): void {
+    this.place(kind, x, y, 0, 0, GLINT_LIFE_STEPS * FIXED_DT, 0);
+  }
+
+  /**
+   * One reward mote of `kind` at (x, y), drifting up-table: its speed in
+   * [MOTE_SPEED_MIN, MOTE_SPEED_MAX], its heading within +/- MOTE_JITTER_RAD of
+   * straight up and its life in [MOTE_LIFE_MIN, MOTE_LIFE_MAX], each drawn from
+   * the pool's stream (speed, heading, life). Overwrites the oldest slot.
+   */
+  emitMote(kind: number, x: number, y: number): void {
+    const rnd = this.random;
+    const speed = MOTE_SPEED_MIN + (MOTE_SPEED_MAX - MOTE_SPEED_MIN) * rnd();
+    const heading = (2 * rnd() - 1) * MOTE_JITTER_RAD;
+    const life = MOTE_LIFE_MIN + (MOTE_LIFE_MAX - MOTE_LIFE_MIN) * rnd();
+    this.place(
+      kind,
+      x,
+      y,
+      Math.sin(heading) * speed,
+      -Math.cos(heading) * speed,
+      life,
+      MOTE_RADIUS_M,
+    );
+  }
+
+  /** One draw in [0, 1) from the pool's own stream (emitter counts). */
+  draw(): number {
+    return this.random();
+  }
+
+  /** Write one particle at the ring head and advance it. */
+  private place(
+    kind: number,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    life: number,
+    size: number,
+  ): void {
     const i = this.head;
     this.kind[i] = kind;
     this.x[i] = x;
     this.y[i] = y;
     this.px[i] = x;
     this.py[i] = y;
-    this.vx[i] = Math.cos(angle) * speed;
-    this.vy[i] = Math.sin(angle) * speed;
+    this.vx[i] = vx;
+    this.vy[i] = vy;
     this.age[i] = 0;
     this.life[i] = life;
-    this.size[i] = 0;
-    this.head = i + 1 < this.capacity ? i + 1 : 0;
-  }
-
-  /** One shockwave ring centered at (x, y), starting at `radius`, for `lifeSeconds`. */
-  emitRing(x: number, y: number, radius: number, lifeSeconds: number): void {
-    const i = this.head;
-    this.kind[i] = RING;
-    this.x[i] = x;
-    this.y[i] = y;
-    this.px[i] = x;
-    this.py[i] = y;
-    this.vx[i] = 0;
-    this.vy[i] = 0;
-    this.age[i] = 0;
-    this.life[i] = lifeSeconds;
-    this.size[i] = radius;
+    this.size[i] = size;
     this.head = i + 1 < this.capacity ? i + 1 : 0;
   }
 
@@ -192,13 +258,17 @@ export class ParticlePool {
       const cy = y[i] ?? 0;
       this.px[i] = cx;
       this.py[i] = cy;
-      if (this.kind[i] !== RING) {
+      const k = this.kind[i];
+      if (k === SPARK_BUMPER || k === SPARK_SLING || k === SPARK_SAVE) {
         const nvx = (vx[i] ?? 0) * DAMP;
         const nvy = (vy[i] ?? 0) * DAMP + GRAVITY_STEP;
         vx[i] = nvx;
         vy[i] = nvy;
         x[i] = cx + nvx * FIXED_DT;
         y[i] = cy + nvy * FIXED_DT;
+      } else if (k === MOTE_ROLLOVER || k === MOTE_INLANE || k === MOTE_SKILL) {
+        x[i] = cx + (vx[i] ?? 0) * FIXED_DT;
+        y[i] = cy + (vy[i] ?? 0) * FIXED_DT;
       }
       age[i] = a + FIXED_DT;
     }

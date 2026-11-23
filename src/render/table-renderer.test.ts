@@ -87,8 +87,14 @@ const LAMP_COLORS: readonly string[] = [...new Set(LAMP_SHAPES.map((s) => s.lit)
 /** Lamp halo sprites baked per resize: one per distinct lit color (06-03, D-21). */
 const LAMP_HALO_LAYERS = LAMP_COLORS.length;
 
-/** Every layer one resize creates: the static layer, the halos, the shadow and the lamp halos. */
-const LAYERS_PER_RESIZE = 1 + HALO_LAYERS + SHADOW_LAYERS + LAMP_HALO_LAYERS;
+/** Reward star sprites baked per resize: one per glint color, after the lamp halos (06-13, D-19). */
+const STAR_LAYERS = 3;
+
+/**
+ * Every layer one resize creates: the static layer, the halos, the shadow, the
+ * lamp halos and the reward stars.
+ */
+const LAYERS_PER_RESIZE = 1 + HALO_LAYERS + SHADOW_LAYERS + LAMP_HALO_LAYERS + STAR_LAYERS;
 
 /** Index of the ball-shadow sprite among one resize's layers (baked after the halos). */
 const SHADOW_LAYER_INDEX = 1 + HALO_LAYERS;

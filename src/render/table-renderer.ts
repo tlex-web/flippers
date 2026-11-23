@@ -50,8 +50,14 @@
  * along its velocity from its interpolated position, PARTICLE_STREAK_WIDTH_M
  * wide, at globalAlpha (1 - age/life)^2; a ring is an arc of radius
  * size * (1 + age/life) (1.0R to 2.0R, under HALO_SCALE) whose width goes
- * RING_WIDTH_START_M to RING_WIDTH_END_M at 0.9 * (1 - age/life)^2. Particles
- * stay on under reduced motion (D-18).
+ * RING_WIDTH_START_M to RING_WIDTH_END_M at 0.9 * (1 - age/life)^2. Save sparks
+ * (06-13) are SAVE_LIT streaks on the same model. Reward particles (06-13,
+ * D-19): a glint stamps its color's baked star (`bakeStar`, one per glint color
+ * per resize: FLASH_SENSOR rollover, INLANE_LIT inlane, SKILL_LIT skill shot)
+ * centered on it with side STAR_GLINT_M * (0.6 + 0.4 * age/life), never more
+ * than STAR_GLINT_M; a mote is one disc of radius MOTE_RADIUS_M in the same
+ * color; both at globalAlpha (1 - age/life)^2. Particles stay on under reduced
+ * motion (D-18).
  *
  * Screen shake (PLSH-01, D-17, D-18, research Pitfall 8): `frame.effects.shake`
  * is sampled once per `draw()` at `frame.alpha` into a renderer-owned
@@ -77,7 +83,7 @@ import type { BallState, FlipperState, PhysicsWorld } from "../physics/types";
 import { deriveKickFace } from "../game/reactive-elements";
 import type { ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
-import type { EffectsReader } from "./effects";
+import { pathMidpoint, type EffectsReader } from "./effects";
 import { FLASH_EPS, FLASH_TIMING, type FlashTracker } from "./flash";
 import { buildLampShapes, postPose, type LampReader, type LampShape, type PostPose } from "./lamps";
 import {
@@ -92,6 +98,7 @@ import {
   FLASH_SLING,
   FLASH_WALL,
   FLIPPER_BODY,
+  INLANE_LIT,
   FLIPPER_EDGE,
   LAMP_HOTSPOT,
   METER_FILL,
@@ -102,17 +109,33 @@ import {
   RUBBER_LINE_M,
   SAVE_LIT,
   SENSOR_LINE_M,
+  SKILL_LIT,
   SLING_RUBBER,
 } from "./palette";
-import { RING, SPARK_BUMPER, SPARK_SLING, type ParticlePool } from "./particles";
+import {
+  GLINT_INLANE,
+  GLINT_ROLLOVER,
+  GLINT_SKILL,
+  MOTE_INLANE,
+  MOTE_RADIUS_M,
+  MOTE_ROLLOVER,
+  MOTE_SKILL,
+  RING,
+  SPARK_BUMPER,
+  SPARK_SAVE,
+  SPARK_SLING,
+  type ParticlePool,
+} from "./particles";
 import {
   bakeHalo,
   bakeShadow,
+  bakeStar,
   HALO_SCALE,
   SENSOR_HALO_M,
   SHADOW_OFFSET_X_M,
   SHADOW_OFFSET_Y_M,
   SHADOW_RADIUS_M,
+  STAR_GLINT_M,
 } from "./sprites";
 import type { ShakeOut } from "./shake";
 import { bakeStatic, traceElement, type Layer, type LayerFactory } from "./static-layer";
@@ -213,6 +236,8 @@ export const PARTICLE_STREAK_WIDTH_M = 0.012;
 export const RING_WIDTH_START_M = 0.02;
 export const RING_WIDTH_END_M = 0.006;
 export const RING_ALPHA = 0.9;
+/** A reward glint's star starts at this fraction of STAR_GLINT_M and grows to 1 (UI-SPEC). */
+export const GLINT_SCALE_START = 0.6;
 
 /** Meter quarter-tick alpha (fixed color, intensity through globalAlpha). */
 const METER_TICK_ALPHA = 0.45;
@@ -246,32 +271,6 @@ const RING_HOTSPOT_TO = 1.5 * Math.PI;
 /** Ball-save post rim stroke width (m, UI-SPEC post flourish). */
 const POST_RIM_M = 0.02;
 
-/** Point at half the arc length of an element's polyline (its first vertex if degenerate). */
-function pathMidpoint(el: ResolvedElement): { x: number; y: number } {
-  const v = el.vertices;
-  const first = v[0];
-  if (!first) return { x: 0, y: 0 };
-  let total = 0;
-  for (let i = 1; i < v.length; i++) {
-    const a = v[i - 1];
-    const b = v[i];
-    if (a && b) total += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  let left = total / 2;
-  for (let i = 1; i < v.length; i++) {
-    const a = v[i - 1];
-    const b = v[i];
-    if (!a || !b) continue;
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len > 0 && left <= len) {
-      const t = left / len;
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    }
-    left -= len;
-  }
-  return { x: first.x, y: first.y };
-}
-
 export class TableRenderer {
   private readonly canvas: CanvasTarget;
   private readonly ctx: CanvasRenderingContext2D;
@@ -303,6 +302,10 @@ export class TableRenderer {
   private bumperHalo: Layer | null = null;
   private sensorHalo: Layer | null = null;
   private ballShadow: Layer | null = null;
+  /** One baked star per glint color: rollover, inlane, skill shot (06-13). */
+  private starRollover: Layer | null = null;
+  private starInlane: Layer | null = null;
+  private starSkill: Layer | null = null;
   private lampHalos: (Layer | null)[] = [];
   private flashLit = false;
   private ballGradient: CanvasGradient | null = null;
@@ -460,6 +463,11 @@ export class TableRenderer {
       lampHalos.push(color && hr > 0 ? bakeHalo(this.layers, color, 2 * hr * view.scale) : null);
     }
     this.lampHalos = lampHalos;
+    // One reward star per glint color, at its full on-screen size.
+    const starPx = STAR_GLINT_M * view.scale;
+    this.starRollover = bakeStar(this.layers, FLASH_SENSOR, starPx);
+    this.starInlane = bakeStar(this.layers, INLANE_LIT, starPx);
+    this.starSkill = bakeStar(this.layers, SKILL_LIT, starPx);
     this.bakes++;
   }
 
@@ -851,10 +859,10 @@ export class TableRenderer {
   }
 
   /**
-   * The particle pass (D-19): under "lighter", rings then bumper sparks then
-   * sling sparks, each kind's color assigned once. Index loops over the pool's
-   * typed arrays; no allocation, gradient, blur or text. Ends source-over at
-   * alpha 1.
+   * The particle pass (D-19): under "lighter", rings then bumper, sling and
+   * save sparks, then the reward glints and motes, each kind's color assigned
+   * once. Index loops over the pool's typed arrays; no allocation, gradient,
+   * blur or text. Ends source-over at alpha 1.
    */
   private drawParticles(particles: ParticlePool, alpha: number): void {
     const ctx = this.ctx;
@@ -865,8 +873,67 @@ export class TableRenderer {
     this.drawSparks(particles, a, SPARK_BUMPER);
     ctx.strokeStyle = SLING_RUBBER;
     this.drawSparks(particles, a, SPARK_SLING);
+    ctx.strokeStyle = SAVE_LIT;
+    this.drawSparks(particles, a, SPARK_SAVE);
+    this.drawGlints(particles, a, GLINT_ROLLOVER, this.starRollover);
+    this.drawGlints(particles, a, GLINT_INLANE, this.starInlane);
+    this.drawGlints(particles, a, GLINT_SKILL, this.starSkill);
+    this.drawMotes(particles, a, MOTE_ROLLOVER, FLASH_SENSOR);
+    this.drawMotes(particles, a, MOTE_INLANE, INLANE_LIT);
+    this.drawMotes(particles, a, MOTE_SKILL, SKILL_LIT);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
+  }
+
+  /**
+   * Every live glint of `kind`: its baked star centered on it, side
+   * STAR_GLINT_M * (0.6 + 0.4 * age/life), at (1 - age/life)^2.
+   */
+  private drawGlints(p: ParticlePool, a: number, kind: number, star: Layer | null): void {
+    if (!star) return;
+    const ctx = this.ctx;
+    const n = p.capacity;
+    for (let i = 0; i < n; i++) {
+      if (p.kind[i] !== kind) continue;
+      const life = p.life[i] ?? 0;
+      const age = p.age[i] ?? 0;
+      if (!(age < life)) continue;
+      const t = age / life;
+      const f = 1 - t;
+      const x0 = p.px[i] ?? 0;
+      const y0 = p.py[i] ?? 0;
+      const x = x0 + ((p.x[i] ?? 0) - x0) * a;
+      const y = y0 + ((p.y[i] ?? 0) - y0) * a;
+      const side = STAR_GLINT_M * (GLINT_SCALE_START + (1 - GLINT_SCALE_START) * t);
+      ctx.globalAlpha = f * f;
+      ctx.drawImage(star.canvas, x - side / 2, y - side / 2, side, side);
+    }
+  }
+
+  /** Every live mote of `kind`: one disc of radius MOTE_RADIUS_M in `color`, fading. */
+  private drawMotes(p: ParticlePool, a: number, kind: number, color: string): void {
+    const ctx = this.ctx;
+    const n = p.capacity;
+    let colored = false;
+    for (let i = 0; i < n; i++) {
+      if (p.kind[i] !== kind) continue;
+      const life = p.life[i] ?? 0;
+      const age = p.age[i] ?? 0;
+      if (!(age < life)) continue;
+      if (!colored) {
+        ctx.fillStyle = color;
+        colored = true;
+      }
+      const f = 1 - age / life;
+      const x0 = p.px[i] ?? 0;
+      const y0 = p.py[i] ?? 0;
+      const x = x0 + ((p.x[i] ?? 0) - x0) * a;
+      const y = y0 + ((p.y[i] ?? 0) - y0) * a;
+      ctx.globalAlpha = f * f;
+      ctx.beginPath();
+      ctx.arc(x, y, MOTE_RADIUS_M, 0, TAU);
+      ctx.fill();
+    }
   }
 
   /** Every live ring: an arc growing 1.0R to 2.0R, thinning and fading. */

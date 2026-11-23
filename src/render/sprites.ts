@@ -3,8 +3,10 @@
  * glow drawn once per resize into its own small layer; the live frame stamps it
  * with `drawImage` under "lighter" and scales its intensity through
  * `globalAlpha`. The ball shadow is the same kind of layer, stamped source-over
- * under each ball. The rgba stop strings are built here at bake time only, never
- * in `draw()` (Pitfall 3); the shadow takes its stops from palette.ts.
+ * under each ball. A reward star glint (06-13) is a 4-point star over a soft
+ * core, baked once per glint color and stamped under "lighter". The rgba stop
+ * strings are built here at bake time only, never in `draw()` (Pitfall 3); the
+ * shadow takes its stops from palette.ts.
  */
 
 import { BALL_RADIUS_M } from "../physics/constants";
@@ -30,6 +32,17 @@ const SHADOW_MID_STOP = 0.5;
 const HALO_CORE_ALPHA = 0.9;
 const HALO_MID_ALPHA = 0.35;
 const HALO_MID_STOP = 0.4;
+
+/**
+ * A reward star glint's full width (m, UI-SPEC): smaller than the 0.4 m sensor
+ * it marks (photosensitive footprint, T-6-28).
+ */
+export const STAR_GLINT_M = 0.24;
+/** Star core: alpha at the center and its radius as a fraction of the half-side. */
+const STAR_CORE_ALPHA = 0.8;
+const STAR_CORE_RADIUS = 0.45;
+/** Star arm width at the center, as a fraction of the side. */
+const STAR_ARM_WIDTH = 0.12;
 
 /** "#rgb" or "#rrggbb" to its channels; throws on anything else (a palette bug). */
 function hexChannels(hex: string): readonly [number, number, number] {
@@ -68,6 +81,47 @@ export function bakeHalo(layers: LayerFactory, hexColor: string, sizePx: number)
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, n, n);
+  return layer;
+}
+
+/**
+ * Bake one reward star glint (06-13, D-19): a square layer of side
+ * max(2, round(sizePx)) device pixels holding a soft radial core (`hexColor`
+ * at STAR_CORE_ALPHA in the center to 0 at STAR_CORE_RADIUS of the half-side)
+ * under a 4-point star: two thin crossed diamonds reaching the layer's edges,
+ * each STAR_ARM_WIDTH of the side across at the center, filled in `hexColor`.
+ * The caller passes its color from palette.ts; the stop strings are built here,
+ * at bake time only. The live frame stamps it under "lighter" and scales it to
+ * at most STAR_GLINT_M across.
+ */
+export function bakeStar(layers: LayerFactory, hexColor: string, sizePx: number): Layer {
+  const [r, g, b] = hexChannels(hexColor);
+  const n = Math.max(2, Number.isFinite(sizePx) ? Math.round(sizePx) : 2);
+  const layer = layers.create(n, n);
+  const ctx = layer.ctx;
+  const c = n / 2;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  const core = ctx.createRadialGradient(c, c, 0, c, c, c * STAR_CORE_RADIUS);
+  core.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${STAR_CORE_ALPHA})`);
+  core.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+  ctx.fillStyle = core;
+  ctx.fillRect(0, 0, n, n);
+  const w = (n * STAR_ARM_WIDTH) / 2;
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.beginPath();
+  ctx.moveTo(c, 0);
+  ctx.lineTo(c + w, c);
+  ctx.lineTo(c, n);
+  ctx.lineTo(c - w, c);
+  ctx.closePath();
+  ctx.moveTo(0, c);
+  ctx.lineTo(c, c - w);
+  ctx.lineTo(n, c);
+  ctx.lineTo(c, c + w);
+  ctx.closePath();
+  ctx.fill();
   return layer;
 }
 
