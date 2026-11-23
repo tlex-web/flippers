@@ -483,6 +483,19 @@ describe("TABLE_SPEC layout", () => {
     }
   });
 
+  it("segToSegDist (06.1-REVIEW IN-01): crossing segments are at distance 0; touching 0; parallel at their gap", () => {
+    const seg = (ax: number, ay: number, bx: number, by: number): Segment => ({
+      a: { x: ax, y: ay },
+      b: { x: bx, y: by },
+    });
+    // Proper crossing (an X): every endpoint is ~0.7071 from the other segment.
+    expect(segToSegDist(seg(0, 0, 1, 1), seg(0, 1, 1, 0))).toBe(0);
+    // T: one segment's endpoint lies on the other.
+    expect(segToSegDist(seg(0, 0, 1, 0), seg(0.5, 0, 0.5, 1))).toBe(0);
+    // Parallel: the gap between them.
+    expect(segToSegDist(seg(0, 0, 1, 0), seg(0, 0.3, 1, 0.3))).toBeCloseTo(0.3, 12);
+  });
+
   it("(d) drains seeded open-field drops within 30 s with no trap and no escape", () => {
     const probe = makeTableWorld();
     const walls = probe.getBoundarySegments();
