@@ -163,6 +163,45 @@ export const TILT_LEVEL = 3.0;
 export const WARNING_FLASH_STEPS = 120;
 
 // ---------------------------------------------------------------------------
+// Ball search (tilted soft-lock, 06.2)
+// ---------------------------------------------------------------------------
+//
+// Runs only while tilted, when the flippers, nudges and kickers are all dead
+// and nothing else can free a ball resting in a dead bat's hinge pocket or on
+// a bumper apex (6590dce IN-04). Real-pinball ball-search convention: kick the
+// ball, and if that fails, give it up and end the ball. Counted in fixed steps,
+// never a wall clock.
+
+/**
+ * Consecutive still fixed steps (240 = 2 s at 120 Hz) outside PLUNGER_ZONE
+ * before a tilted ball is searched. Probe: the longest still run of any ball
+ * that went on to drain was 114 steps over 1,077 dead-bat drops, so this is
+ * 2.1x the worst legitimate pause (research A1, HMR-tunable).
+ */
+export const BALL_SEARCH_STEPS = 240;
+
+/**
+ * "Still" speed (m/s): a ball below it counts toward BALL_SEARCH_STEPS. A
+ * pocketed ball sleeps at 0. Same scale as PLUNGER_REST_SPEED_EPS.
+ */
+export const BALL_SEARCH_SPEED_EPS = 0.05;
+
+/**
+ * Search kick (kg·m/s), applied horizontally toward PLAYFIELD_CENTER_X through
+ * `applyImpulse` (velocity only, never a position write). Equal to
+ * NUDGE_IMPULSE. Probe: it frees both hinge pockets (drain in 101 steps) and
+ * all three bumper apexes; kicks up, down or away from the centre re-trap the
+ * hinge ball, 8 of 8.
+ */
+export const BALL_SEARCH_IMPULSE = NUDGE_IMPULSE;
+
+/**
+ * Search kicks before a still tilted ball is given up and recorded as drained
+ * (the tilted ball is forfeit anyway).
+ */
+export const BALL_SEARCH_KICKS = 2;
+
+// ---------------------------------------------------------------------------
 // Skill shot (PLSH-05)
 // ---------------------------------------------------------------------------
 //

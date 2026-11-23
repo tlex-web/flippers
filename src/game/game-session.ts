@@ -61,6 +61,26 @@
  * (`getNudgeCount()`, `getLastNudgeDir()`). `tick()` decays the meter. Time is the step count
  * advanced by `tick()`, never a wall clock or a random source.
  *
+ * Ball search (plan 06.2-02, 6590dce IN-04, GAME-02/GAME-03): while
+ * `"tilted"`, a ball can come to rest where nothing on a dead table frees it
+ * (a dead bat's hinge pocket, a bumper apex), and `onStart()` is refused while
+ * tilted, so the game would hang. The last thing `tick()` does is
+ * `ballSearch()`: once the active ball has been still (speed below
+ * `BALL_SEARCH_SPEED_EPS`) outside `PLUNGER_ZONE` for `ballSearchSteps`
+ * consecutive steps (default `BALL_SEARCH_STEPS`), it gets one
+ * `BALL_SEARCH_IMPULSE` kick, horizontally toward `PLAYFIELD_CENTER_X`
+ * through `applyImpulse` (velocity only). After `BALL_SEARCH_KICKS` kicks that
+ * leave it still, the next trigger records it as drained, and the same step's
+ * `service()` forfeits it on the existing tilted path (drain counter, forfeit
+ * tally, next serve or game over). The kick budget resets on every serve,
+ * re-serve and tilt entry. Tilted only: a cradled ball is a still ball in play,
+ * and no live-play pocket exists (one flip frees the hinge, live bumpers kick
+ * the apex). Stillness, never position: the parked plunger ball lies below the
+ * drain line and the plunger stays live in tilt, so the zone is excluded and
+ * the drain stays bus-only (see the CR-01 paragraph below). The search is not a
+ * nudge: it never feeds the tilt meter, the nudge count or the nudge
+ * direction; `getBallSearchCount()` counts its kicks for presentation.
+ *
  * The drain is read from the collision bus only (the drain sensor, spec id 600),
  * never from a positional `y > DRAIN_Y` test: the plunger rest position lies
  * BELOW the drain line, so a positional check mistakes the parked ball for a
@@ -130,8 +150,8 @@ import {
   type PlungerController,
   type PlungerPhase,
 } from "../control/plunger-controller";
-import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
-import { PLUNGER_ZONE } from "../table/spec";
+import type { BallId, BallSpec, BallState, CollisionEvent, PhysicsWorld } from "../physics/types";
+import { PLAYFIELD_CENTER_X, PLUNGER_ZONE } from "../table/spec";
 import { BallSave, type SaveLampPhase } from "./ball-save";
 import { BonusCounters, BonusTally, bonusDurationSteps } from "./bonus";
 import { HighScore, type HighScoreSink } from "./high-score";
@@ -141,6 +161,10 @@ import { TiltMeter } from "./tilt-meter";
 import {
   BALL_SAVE_BLINK_STEPS,
   BALL_SAVE_STEPS,
+  BALL_SEARCH_IMPULSE,
+  BALL_SEARCH_KICKS,
+  BALL_SEARCH_SPEED_EPS,
+  BALL_SEARCH_STEPS,
   KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_DIRS,
@@ -193,6 +217,13 @@ export interface GameSessionOptions {
    * sit at x = 0 pass 0 explicitly; the live game uses the default.
    */
   readonly ballSaveSteps?: number;
+  /**
+   * Ball search (06.2): consecutive still steps outside `PLUNGER_ZONE` before
+   * a tilted ball is kicked toward the centre (default `BALL_SEARCH_STEPS`; 0
+   * or less disables the search). Spy-rig tests whose motionless balls would
+   * otherwise be searched while tilted pass 0; the live game uses the default.
+   */
+  readonly ballSearchSteps?: number;
   /**
    * The best score (PLSH-08): submitted once when the game ends (default an
    * in-memory `HighScore(null)`, so the session stays storage-free and
@@ -318,6 +349,18 @@ export class GameSession implements RulesGate, RuleHooks {
    */
   private graceEndsAt = -1;
 
+  /** Still steps before a tilted ball is searched (0 or less: search off). */
+  private readonly searchSteps: number;
+
+  /** Consecutive still steps of the tilted active ball outside PLUNGER_ZONE. */
+  private stillSteps = 0;
+
+  /** Search kicks spent on the ball in play (reset on serve, re-serve and tilt). */
+  private searchKicks = 0;
+
+  /** Search kicks since construction (presentation counter). */
+  private searchCount = 0;
+
   /** The best score, submitted once per game at game over (PLSH-08). */
   private readonly highScore: HighScoreSink;
 
@@ -342,6 +385,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.flippers = flippers;
     this.plunger = options.plunger ?? IDLE_PLUNGER;
     this.save = new BallSave(options.ballSaveSteps ?? BALL_SAVE_STEPS);
+    this.searchSteps = options.ballSearchSteps ?? BALL_SEARCH_STEPS;
     this.highScore = options.highScore ?? new HighScore(null);
     router.register(this.onEvent);
     this.flippers.setEnabled(false); // boot into attract: the flippers are dead
@@ -531,6 +575,7 @@ export class GameSession implements RulesGate, RuleHooks {
       this.skill.disarm();
       this.save.disarm();
       this.endGrace();
+      this.resetSearch();
     }
   }
 
@@ -538,8 +583,9 @@ export class GameSession implements RulesGate, RuleHooks {
    * Advance the session clock by one fixed step, decay the tilt meter, step
    * the skill shot with the plunger phase (read after `plunger.applyEdges`, so
    * a press on this step freezes the lane shown on this step) and step the ball
-   * save with the active ball's x (the chute-exit test). Call once per fixed
-   * step, after the game edges.
+   * save with the active ball's x (the chute-exit test), then run the tilted
+   * ball search (`ballSearch()`, last, so its kick lands between steps). Call
+   * once per fixed step, after the game edges.
    */
   tick(): void {
     this.step++;
@@ -556,6 +602,65 @@ export class GameSession implements RulesGate, RuleHooks {
     this.prevPlungerPhase = phase;
     this.skill.update(phase, resting);
     this.save.update(this.activeBallX());
+    this.ballSearch();
+  }
+
+  /**
+   * The tilted ball search (06.2, 6590dce IN-04). Only while `"tilted"`, with
+   * an active ball and the search on: count consecutive steps where the active
+   * ball (found by id; untracked balls are never read) is outside
+   * `PLUNGER_ZONE` (inclusive bounds) with speed below `BALL_SEARCH_SPEED_EPS`
+   * (a speed of exactly the threshold counts as moving). Any other step resets
+   * the count. On the `searchSteps`-th still step the count restarts and the
+   * ball gets one `BALL_SEARCH_IMPULSE` kick, horizontally toward
+   * `PLAYFIELD_CENTER_X` (+x left of it, -x at or right of it), while fewer
+   * than `BALL_SEARCH_KICKS` were spent on this ball; after that, the trigger
+   * records the ball as drained and this step's `service()` forfeits it on the
+   * tilted path. Never a position test, never `isRestingInZone` (that is the
+   * inside-the-zone rest test), and it never touches the nudge or tilt state.
+   * Allocates nothing.
+   */
+  private ballSearch(): void {
+    if (this.state !== "tilted" || this.active === NO_BALL || this.searchSteps <= 0) {
+      this.stillSteps = 0;
+      return;
+    }
+    const balls = this.world.getBalls();
+    let b: BallState | undefined;
+    for (let i = 0; i < balls.length; i++) {
+      const c = balls[i];
+      if (c && c.id === this.active) {
+        b = c;
+        break;
+      }
+    }
+    if (!b) {
+      this.stillSteps = 0;
+      return;
+    }
+    const z = PLUNGER_ZONE;
+    const inZone = b.x >= z.minX && b.x <= z.maxX && b.y >= z.minY && b.y <= z.maxY;
+    if (inZone || Math.hypot(b.vx, b.vy) >= BALL_SEARCH_SPEED_EPS) {
+      this.stillSteps = 0;
+      return;
+    }
+    this.stillSteps++;
+    if (this.stillSteps < this.searchSteps) return;
+    this.stillSteps = 0;
+    if (this.searchKicks < BALL_SEARCH_KICKS) {
+      this.searchKicks++;
+      this.searchCount++;
+      const sign = b.x < PLAYFIELD_CENTER_X ? 1 : -1;
+      this.world.applyImpulse(this.active, sign * BALL_SEARCH_IMPULSE, 0);
+    } else if (this.drained === NO_BALL) {
+      this.drained = this.active;
+    }
+  }
+
+  /** Restart the ball search for a new ball, a re-serve or a tilt entry. */
+  private resetSearch(): void {
+    this.stillSteps = 0;
+    this.searchKicks = 0;
   }
 
   /** The active ball's x, or NaN with no ball (which never starts the save). */
@@ -749,6 +854,14 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.lastNudgeDir;
   }
 
+  /**
+   * Ball-search kicks since construction (06.2). A future coil cue keys on it;
+   * there is no cue this phase. Never counted as a nudge.
+   */
+  getBallSearchCount(): number {
+    return this.searchCount;
+  }
+
   /** Fixed steps since the drain that entered `"bonus"`; 0 in any other state. */
   getBonusElapsed(): number {
     return this.state === "bonus" ? this.step - this.bonusStartStep : 0;
@@ -854,6 +967,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.scoredLanes.length = 0;
     this.bonusCounters.reset();
     this.skipRequested = false;
+    this.resetSearch();
     this.state = "playing";
     this.active = this.world.addBall(this.spawn);
     this.flippers.setEnabled(true);
@@ -869,6 +983,7 @@ export class GameSession implements RulesGate, RuleHooks {
    * second attempt (06-REVIEW IN-04).
    */
   private reServe(): void {
+    this.resetSearch();
     this.active = this.world.addBall(this.spawn);
     this.skill.disarm();
   }

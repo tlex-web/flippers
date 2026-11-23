@@ -161,7 +161,7 @@ describe("tilted hinge-pocket ball search on TABLE_SPEC (6590dce IN-04, GAME-02,
     const side = sideIdx === 0 ? "left" : "right";
 
     it(`RED control: with the ball search off, the tilted ${side} hinge-pocket ball never drains and the game stays tilted (the soft-lock)`, () => {
-      const g = makePocketGame(sideIdx, { ballSaveSteps: 0 });
+      const g = makePocketGame(sideIdx, { ballSaveSteps: 0, ballSearchSteps: 0 });
       tiltInPocket(g, sideIdx);
       for (let i = 0; i < RED_RUN_STEPS; i++) g.step();
 
@@ -187,6 +187,7 @@ describe("tilted hinge-pocket ball search on TABLE_SPEC (6590dce IN-04, GAME-02,
       const tiltStep = g.session.getStep();
 
       let n = 0;
+      let firstKickStep = -1;
       while (!g.drainedIds.includes(id)) {
         if (n++ >= SEARCH_CAP_STEPS) {
           throw new Error(
@@ -194,13 +195,17 @@ describe("tilted hinge-pocket ball search on TABLE_SPEC (6590dce IN-04, GAME-02,
           );
         }
         g.step();
+        if (firstKickStep < 0 && g.session.getBallSearchCount() > 0) {
+          firstKickStep = g.session.getStep();
+        }
       }
       const drainStep = g.session.getStep();
+      const steps = `tilt ${tiltStep}, first kick ${firstKickStep}, bus drain ${drainStep}`;
 
-      expect(
-        g.session.getState(),
-        `${side}: drained at session step ${drainStep} (tilt ${tiltStep})`,
-      ).toBe("bonus");
+      expect(g.session.getBallSearchCount(), `${side}: searched (${steps})`).toBeGreaterThanOrEqual(
+        1,
+      );
+      expect(g.session.getState(), `${side}: ${steps}`).toBe("bonus");
       expect(g.session.isBonusForfeit(), `${side}: the tilted ball is a forfeit`).toBe(true);
       expect(g.session.getNudgeCount(), `${side}: the search is not a nudge`).toBe(TILT_NUDGES);
 
