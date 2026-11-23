@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 06
 current_phase_name: Juice & Polish
-status: executing
-stopped_at: Completed 06-13-PLAN.md
-last_updated: "2026-11-23T00:51:14.370Z"
+status: verifying
+stopped_at: Completed 06-14-PLAN.md
+last_updated: "2026-11-23T01:04:02.126Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 execution started
-state_head: d8ec1842c729eb1e87e6deeefb874d2e96c4ba6d
+state_head: 725abe6dea5aa5a83431571fc9af8c2fe8d3fb95
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 56
-  completed_plans: 55
+  completed_plans: 56
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 Phase: 06 (Juice & Polish) — EXECUTING
 Plan: 14 of 14
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-22 — Phase 06 execution started
 
 Progress: [████████░░] 83%
@@ -117,6 +117,7 @@ Progress: [████████░░] 83%
 | Phase 06 P11 | 13 min | 2 tasks | 10 files |
 | Phase 06 P12 | 16min | 2 tasks | 10 files |
 | Phase 06 P13 | 20min | 2 tasks | 8 files |
+| Phase 06 P14 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,8 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-13: Kickback save sparks spread +/-80 deg around straight up from the post top rim on the bumper speed/life ranges (post kick normal not reported; probes within ~12 deg of up)
 - [Phase 06]: 06-13: Reward motes move at constant velocity (no drag/gravity) with +/-15 deg heading jitter; the 3-or-4 count is one draw from the pool's seeded stream
 - [Phase 06]: 06-13: A bank-completing rollover pass still glints as a rollover pass; the skill glint sits at the awarded rollover's midpoint
+- [Phase 06]: 06-14: Phase-6 replay script = Enter on step 0 + D-05 anchor hold (121..183) + state-keyed reactions (full plunge on any rest, skip first non-forfeit tally at +10, tilt ball 2 at +240 after launch); full 3-ball game fits in 3600 steps
+- [Phase 06]: 06-14: ReactiveSoakWorld arms the ball save by default (always-armed trySave counts postKicks); saveArmed:false restores the Phase-4 wrapper
 
 ### Pending Todos
 
@@ -292,6 +295,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T00:51:12.256Z
-Stopped at: Completed 06-13-PLAN.md
+Last session: 2026-11-23T01:04:00.783Z
+Stopped at: Completed 06-14-PLAN.md
 Resume file: None
