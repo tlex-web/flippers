@@ -1125,6 +1125,24 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
       }
     });
 
+    it("C4b (04-REVIEW IN-01): at the slowest Windows rate with its 20% deviation, a single Shift held across a clear counts its own 480 ms auto-repeat as a press", () => {
+      const input = new FlipperInput({ windowsShiftHeal: true });
+      input.handleKeyDown(tev("ShiftLeft", true, false, 0));
+      expect(input.drainEdges().leftPress).toBe(true);
+      input.handleFocus();
+      expect(input.drainEdges().leftRelease).toBe(true);
+
+      // The held Shift's first post-clear auto-repeat: ignored, marker set.
+      input.handleKeyDown(tev("ShiftLeft", true, true, 1000));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("left")).toBe(false);
+
+      // Its next auto-repeat 480 ms later exceeds SHIFT_REPEAT_GAP_MS.
+      input.handleKeyDown(tev("ShiftLeft", true, true, 1480));
+      expect(input.drainEdges().leftPress).toBe(true);
+      expect(input.isHeld("left")).toBe(true);
+    });
+
     it("C5 (residual): a re-press within SHIFT_REPEAT_GAP_MS of the previous auto-repeat is missed", () => {
       const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
       input.handleKeyDown(tev("ShiftRight", true, true, T + 200));
@@ -1132,6 +1150,17 @@ describe("Windows Shift heal after a force-clear and on Shift keydowns (G-04-21)
       input.handleKeyDown(tev("ShiftRight", true, true, T + 233));
       expect(anyEdge(input.drainEdges())).toBe(false);
       expect(input.isHeld("right")).toBe(false);
+    });
+
+    it("C5b (04-REVIEW IN-02): a missed fast re-press is recovered by a slower re-press of the same Shift after more than SHIFT_REPEAT_GAP_MS", () => {
+      const { input, T } = primedAfterClear(focus, "ShiftLeft", "ShiftRight");
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 200));
+      expect(anyEdge(input.drainEdges())).toBe(false);
+      expect(input.isHeld("right")).toBe(false);
+
+      input.handleKeyDown(tev("ShiftRight", true, true, T + 200 + SHIFT_REPEAT_GAP_MS + 1));
+      expect(input.drainEdges().rightPress).toBe(true);
+      expect(input.isHeld("right")).toBe(true);
     });
 
     it("C6: a missed fast re-press held past the typematic delay is taken on its own first auto-repeat", () => {
