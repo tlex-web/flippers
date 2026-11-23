@@ -314,14 +314,14 @@ Plans:
   4. A plain `npx prettier --check .` passes on this Windows checkout through `.gitattributes` (`* text=auto eol=lf`), with no uncommitted user edit touched. The keyLabel guard, the test literals, segToSegDist and the limit wording are cleaned up (06.1 WR-04, IN-01..IN-04).
   5. `npx vitest run`, `npx tsc --noEmit`, `npx eslint .`, `npm run soak` and `npm run build` are green, the 06.1 review ledger reads `open: 0`, and the soft-lock todo sits in `todos/completed/` with a resolution.
 
-**Plans:** 1/6 plans executed (3 waves)
+**Plans:** 2/6 plans executed (3 waves)
 
 Plans:
 **Wave 1**
 - [x] 06.2-01-PLAN.md — Line endings (IN-04): `.gitattributes` `* text=auto eol=lf`, guarded LF refresh of clean CRLF files in this checkout and the user's main tree (uncommitted edits untouched), plain prettier check green [wave 1]
 
 **Wave 2** *(blocked on Wave 1; four plans run in parallel)*
-- [ ] 06.2-02-PLAN.md — Tilted soft-lock: real-table hinge-pocket RED, then a tilted-only ball search in GameSession (240 still steps, kick toward the centre, forfeit after 2 kicks, `ballSearchSteps` off-switch), a `ballSearchSteps: 0` RED control, and spy-rig rules with mutation teeth [wave 2]
+- [x] 06.2-02-PLAN.md — Tilted soft-lock: real-table hinge-pocket RED, then a tilted-only ball search in GameSession (240 still steps, kick toward the centre, forfeit after 2 kicks, `ballSearchSteps` off-switch), a `ballSearchSteps: 0` RED control, and spy-rig rules with mutation teeth [wave 2]
 - [ ] 06.2-03-PLAN.md — WR-01 inlane sensor end derived from the funnel line (case (f) RED first, arrow pins), IN-01 segToSegDist crossing fix, user look check (blocking) [wave 2]
 - [ ] 06.2-04-PLAN.md — WR-02 pinch sweep liveness plus walled-off inlane RED control; WR-03 kickback e2e asserts the unaided grace re-serve, then bonus [wave 2]
 - [ ] 06.2-05-PLAN.md — WR-04 single keyLabel guard, IN-02 escaped test literals, IN-03 raise/rest limit wording [wave 2]
