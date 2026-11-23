@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { BALL_RADIUS_M } from "../physics/constants";
+import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
 import type { BallState } from "../physics/types";
 import { TABLE_SPEC } from "../table/spec";
@@ -22,9 +22,10 @@ import {
   type LampShape,
 } from "./lamps";
 import type { EffectsReader } from "./effects";
-import { ParticlePool } from "./particles";
+import { ParticlePool, SPARK_BUMPER, SPARK_SLING } from "./particles";
 import {
   BG_BOTTOM,
+  FLASH_BUMPER,
   FLASH_FLIPPER,
   FLASH_WALL,
   LAMP_HOTSPOT,
@@ -33,6 +34,7 @@ import {
   RUBBER_LINE_M,
   SAVE_LIT,
   SKILL_LIT,
+  SLING_RUBBER,
 } from "./palette";
 import {
   HALO_SCALE,
@@ -1159,5 +1161,168 @@ describe("TableRenderer ball-save ring and post flourish (plan 06-10, D-07, D-10
       expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
     }
     expect(rig.layers.createCount).toBe(atResize);
+  });
+});
+
+/** Effects with a still shake and the given particles. */
+function particleEffects(particles: ParticlePool): EffectsReader {
+  return { shake: new ShakeTracker(), particles };
+}
+
+/**
+ * A pool with 3 live bumper sparks, 2 live sling sparks, 1 live ring and one
+ * dead spark, each live one ticked once so px/py trail x/y.
+ */
+function livePool(): ParticlePool {
+  const p = new ParticlePool();
+  p.emitSpark(SPARK_BUMPER, 1, 1, 1, 0, 0, 2, 2, 2 * FIXED_DT, 2 * FIXED_DT);
+  for (let i = 0; i < 3; i++) p.tick();
+  p.emitSpark(SPARK_BUMPER, 1.5, 4, 1, 0, 0, 2, 2, 0.4, 0.4);
+  p.emitSpark(SPARK_BUMPER, 1.5, 4, 0, -1, 0, 0.5, 0.5, 0.4, 0.4);
+  p.emitSpark(SPARK_BUMPER, 1.5, 4, -0.6, 0.8, 0, 3, 3, 0.4, 0.4);
+  p.emitSpark(SPARK_SLING, 0.8, 6, 0.8, -0.6, 0, 1.5, 1.5, 0.3, 0.3);
+  p.emitSpark(SPARK_SLING, 0.8, 6, 0.6, -0.8, 0, 2.2, 2.2, 0.3, 0.3);
+  p.emitRing(1.5, 4, 0.12, 24 * FIXED_DT);
+  p.tick();
+  return p;
+}
+
+/** The log after the frame's last "lighter" set: the particle pass. */
+function particlePass(rec: Recorder): { start: number; calls: CallEntry[] } {
+  let start = -1;
+  rec.log.forEach((e, i) => {
+    if (e.kind === "set" && e.name === "globalCompositeOperation" && e.value === "lighter")
+      start = i;
+  });
+  const calls: CallEntry[] = [];
+  if (start < 0) return { start, calls };
+  for (let i = start + 1; i < rec.log.length; i++) {
+    const e = rec.log[i];
+    if (e?.kind === "call") calls.push(e);
+  }
+  return { start, calls };
+}
+
+const MARKS = ["moveTo", "lineTo", "arc", "stroke", "fill"] as const;
+
+function markCounts(rec: Recorder): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of MARKS) out[m] = rec.calls(m).length;
+  return out;
+}
+
+describe("TableRenderer particle pass (PLSH-02, D-19, D-24)", () => {
+  it("live sparks and a ring: last, under lighter, one streak per live spark in its element color and one arc per live ring; ends clean", () => {
+    const rig = makeRig();
+    const pool = livePool();
+    expect(pool.aliveCount()).toBe(6);
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 0.5 }));
+
+    const { start, calls } = particlePass(rig.rec);
+    expect(start).toBeGreaterThan(0);
+    // Drawn last: after the final ball fill.
+    const lastFill = rig.rec.log
+      .map((e) => e.kind === "call" && e.name === "fill")
+      .lastIndexOf(true);
+    expect(start).toBeGreaterThan(lastFill);
+    expect(calls.filter((c) => c.name === "fill")).toHaveLength(0);
+    expect(calls.filter((c) => c.name === "moveTo")).toHaveLength(5);
+    expect(calls.filter((c) => c.name === "lineTo")).toHaveLength(5);
+    expect(calls.filter((c) => c.name === "arc")).toHaveLength(1);
+    expect(calls.filter((c) => c.name === "stroke")).toHaveLength(6);
+
+    // Each stroke under lighter, in its kind's color, at a positive alpha <= 1.
+    const colors: string[] = [];
+    const widths: number[] = [];
+    rig.rec.log.forEach((e, i) => {
+      if (i <= start || e.kind !== "call" || e.name !== "stroke") return;
+      expect(stateAt(rig.rec, i, "globalCompositeOperation", "source-over")).toBe("lighter");
+      const a = stateAt(rig.rec, i, "globalAlpha", 1) as number;
+      expect(a).toBeGreaterThan(0);
+      expect(a).toBeLessThanOrEqual(1);
+      expect(stateAt(rig.rec, i, "lineWidth", 0) as number).toBeLessThanOrEqual(0.02);
+      colors.push(stateAt(rig.rec, i, "strokeStyle", "") as string);
+      widths.push(stateAt(rig.rec, i, "lineWidth", 0) as number);
+    });
+    expect(colors.filter((c) => c === FLASH_BUMPER)).toHaveLength(4);
+    expect(colors.filter((c) => c === SLING_RUBBER)).toHaveLength(2);
+    expect(widths.filter((w) => w === 0.012)).toHaveLength(5);
+
+    // Streaks: from the position interpolated at alpha, back along the velocity,
+    // max(0.02, speed * 0.025) long, 0.012 m wide.
+    const moves = calls.filter((c) => c.name === "moveTo");
+    const lines = calls.filter((c) => c.name === "lineTo");
+    let k = 0;
+    for (let i = 0; i < pool.capacity; i++) {
+      const kind = pool.kind[i];
+      if (kind !== SPARK_BUMPER && kind !== SPARK_SLING) continue;
+      if (!((pool.age[i] ?? 0) < (pool.life[i] ?? 0))) continue;
+      const found = moves.findIndex((m) => {
+        const x = (pool.px[i] ?? 0) + ((pool.x[i] ?? 0) - (pool.px[i] ?? 0)) * 0.5;
+        const y = (pool.py[i] ?? 0) + ((pool.y[i] ?? 0) - (pool.py[i] ?? 0)) * 0.5;
+        return (
+          Math.abs((m.args[0] as number) - x) < 1e-9 && Math.abs((m.args[1] as number) - y) < 1e-9
+        );
+      });
+      expect(found).toBeGreaterThanOrEqual(0);
+      const m = moves[found] as CallEntry;
+      const l = lines[found] as CallEntry;
+      const dx = (m.args[0] as number) - (l.args[0] as number);
+      const dy = (m.args[1] as number) - (l.args[1] as number);
+      const vx = pool.vx[i] ?? 0;
+      const vy = pool.vy[i] ?? 0;
+      const speed = Math.hypot(vx, vy);
+      expect(Math.hypot(dx, dy)).toBeCloseTo(Math.max(0.02, speed * 0.025), 9);
+      expect((dx * vx + dy * vy) / (Math.hypot(dx, dy) * speed)).toBeCloseTo(1, 9);
+      k++;
+    }
+    expect(k).toBe(5);
+
+    // The ring: one arc at its center, radius size * (1 + age/life) <= 2R.
+    const arc = calls.find((c) => c.name === "arc") as CallEntry;
+    expect(arc.args[0]).toBeCloseTo(1.5, 6);
+    expect(arc.args[1]).toBeCloseTo(4, 6);
+    expect(arc.args[2]).toBeCloseTo(0.12 * (1 + 1 / 24), 6);
+    expect(arc.args[2] as number).toBeLessThanOrEqual(2 * 0.12);
+
+    expect(rig.rec.calls("createLinearGradient")).toHaveLength(0);
+    expect(rig.rec.calls("createRadialGradient")).toHaveLength(0);
+    expect(
+      rig.rec.sets("shadowBlur").filter((s) => typeof s.value !== "number" || s.value > 0),
+    ).toHaveLength(0);
+    expect(rig.rec.calls("fillText")).toHaveLength(0);
+    expect(rig.rec.calls("strokeText")).toHaveLength(0);
+    expect(rig.rec.ctx.globalAlpha).toBe(1);
+    expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+
+  it("the particle pass still draws under reducedMotion (D-18)", () => {
+    const rig = makeRig();
+    rig.renderer.draw(
+      frameOf(rig.world, { effects: particleEffects(livePool()), reducedMotion: true }),
+    );
+    const { calls } = particlePass(rig.rec);
+    expect(calls.filter((c) => c.name === "stroke")).toHaveLength(6);
+  });
+
+  it("with no live particles (empty or all dead) it draws no particle marks", () => {
+    const base = makeRig();
+    base.renderer.draw(frameOf(base.world, { effects: null }));
+    const expected = markCounts(base.rec);
+
+    const empty = makeRig();
+    empty.renderer.draw(frameOf(empty.world, { effects: particleEffects(new ParticlePool()) }));
+    expect(markCounts(empty.rec)).toEqual(expected);
+
+    const dead = new ParticlePool();
+    dead.emitSpark(SPARK_BUMPER, 1, 1, 1, 0, 0, 2, 2, FIXED_DT, FIXED_DT);
+    dead.emitRing(1, 1, 0.1, FIXED_DT);
+    for (let i = 0; i < 3; i++) dead.tick();
+    expect(dead.aliveCount()).toBe(0);
+    const spent = makeRig();
+    spent.renderer.draw(frameOf(spent.world, { effects: particleEffects(dead) }));
+    expect(markCounts(spent.rec)).toEqual(expected);
+    expect(spent.rec.ctx.globalAlpha).toBe(1);
+    expect(spent.rec.ctx.globalCompositeOperation).toBe("source-over");
   });
 });

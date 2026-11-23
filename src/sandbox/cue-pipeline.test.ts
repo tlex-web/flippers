@@ -7,6 +7,7 @@ import {
   KICK_FLASH_FLOOR,
   type CueKind,
   type FlashSink,
+  type FxSink,
 } from "../app/cue-queue";
 import { AudioEngine, ENV_FLOOR } from "../audio/audio-engine";
 import { AudioUnlock } from "../audio/audio-unlock";
@@ -25,6 +26,8 @@ import {
 import { mulberry32 } from "../harness/prng";
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { EffectsTracker } from "../render/effects";
+import { SPARK_BUMPER } from "../render/particles";
 import { FixedStepLoop } from "../sim/loop";
 
 // Heavy simulation suite: the 5 s default timeout is too tight under load, so
@@ -68,21 +71,38 @@ interface Rig {
   readonly gate: TestGate;
   readonly cues: CueQueue;
   readonly flash: SpyFlash;
+  /** Contact points of every bumper-202 event, copied out (cases k-l). */
+  readonly points202: { x: number; y: number }[];
   run(n: number): void;
 }
 
 /**
  * The main.ts composition. `feedback` replaces the CueFeedback sink when given
  * (case j); `cues` and `flash` then stay empty because nothing writes to them.
+ * `fxFor` builds the FxSink handed to CueFeedback's third argument (cases k-l,
+ * plan 06-12); a read-only listener registered ahead of ReactiveElements copies
+ * the bumper-202 contact points out of the pooled events.
  */
-function makeRig(live: boolean, feedbackOverride?: ReactiveFeedback): Rig {
+function makeRig(
+  live: boolean,
+  feedbackOverride?: ReactiveFeedback,
+  fxFor?: (world: PlanckWorld) => FxSink,
+): Rig {
   const world = new PlanckWorld();
   new FlipperController(world);
   const router = new CollisionRouter(world);
+  const points202: { x: number; y: number }[] = [];
+  if (fxFor) {
+    router.register((e) => {
+      if (e.elementId === 202 && e.elementKind === "bumper") {
+        points202.push({ x: e.point.x, y: e.point.y });
+      }
+    });
+  }
   const gate = new TestGate(live);
   const cues = new CueQueue();
   const flash = new SpyFlash();
-  const feedback = feedbackOverride ?? new CueFeedback(cues, flash);
+  const feedback = feedbackOverride ?? new CueFeedback(cues, flash, fxFor?.(world));
   const reactive = new ReactiveElements(world, router, gate, feedback);
   const loop = new FixedStepLoop(world);
   const onPostStep = (): void => {
@@ -92,7 +112,7 @@ function makeRig(live: boolean, feedbackOverride?: ReactiveFeedback): Rig {
   const run = (n: number): void => {
     for (let i = 0; i < n; i++) loop.advance(FIXED_DT * 1000, undefined, onPostStep);
   };
-  return { world, gate, cues, flash, run };
+  return { world, gate, cues, flash, points202, run };
 }
 
 const TWO_SECONDS = Math.round(2 / FIXED_DT);
@@ -386,5 +406,94 @@ describe("presentation sink fault isolation on the real table (T-05-21, Pitfall 
     expect(hasCue(cueRig.cues, "bumper", 202)).toBe(true);
     expect(throwRig.cues.size).toBe(0);
     expect(throwRig.flash.records.length).toBe(0);
+  });
+});
+
+/** One recorded kick: what reached the EffectsTracker, and the first spark it spawned. */
+interface KickRecord {
+  readonly kind: "bumper" | "slingshot";
+  readonly elementId: number;
+  readonly px: number;
+  readonly py: number;
+  /** The first spark slot this kick spawned (-1 when none). */
+  readonly spark: number;
+  readonly sparkX: number;
+  readonly sparkY: number;
+}
+
+/** The real EffectsTracker, recording each kick it receives. */
+class SpyEffects extends EffectsTracker {
+  readonly kicks: KickRecord[] = [];
+  override onKick(
+    kind: "bumper" | "slingshot",
+    elementId: number,
+    strength: number,
+    px: number,
+    py: number,
+  ): void {
+    const p = this.particles;
+    const before = new Float32Array(p.age);
+    const beforeLife = new Float32Array(p.life);
+    super.onKick(kind, elementId, strength, px, py);
+    let spark = -1;
+    for (let i = 0; i < p.capacity && spark < 0; i++) {
+      const fresh = p.age[i] === 0 && (p.life[i] !== beforeLife[i] || p.age[i] !== before[i]);
+      if (fresh && p.kind[i] === SPARK_BUMPER) spark = i;
+    }
+    this.kicks.push({
+      kind,
+      elementId,
+      px,
+      py,
+      spark,
+      sparkX: spark >= 0 ? (p.x[spark] ?? NaN) : NaN,
+      sparkY: spark >= 0 ? (p.y[spark] ?? NaN) : NaN,
+    });
+  }
+}
+
+describe("impact particles on the real table (PLSH-02, D-19, plan 06-12)", () => {
+  it("(k) a registered kick on bumper 202 reaches the EffectsTracker with the event's contact point; the first spark spawns within 0.01 m of the rim", () => {
+    const box: { fx: SpyEffects | null } = { fx: null };
+    const rig = makeRig(true, undefined, (world) => (box.fx = new SpyEffects(world.getElements())));
+    dropOnBumper202(rig);
+    expect(runToBumperCue(rig)).toBe(true);
+    const spy = box.fx;
+    if (!spy) throw new Error("no EffectsTracker attached");
+    const kick = spy.kicks.find((k) => k.kind === "bumper" && k.elementId === 202);
+    if (!kick) throw new Error("no bumper-202 kick reached the EffectsTracker");
+
+    // The scalars are the event's own contact point, copied bit for bit.
+    expect(rig.points202.some((pt) => pt.x === kick.px && pt.y === kick.py)).toBe(true);
+
+    const c = rig.world.getElements().find((el) => el.id === 202)?.circle;
+    if (!c) throw new Error("bumper 202 missing");
+    expect(kick.spark).toBeGreaterThanOrEqual(0);
+    const d = Math.hypot(kick.sparkX - c.center.x, kick.sparkY - c.center.y);
+    expect(Math.abs(d - c.radius)).toBeLessThanOrEqual(0.01);
+    // On the rim facing the contact.
+    const ux = (kick.sparkX - c.center.x) / d;
+    const uy = (kick.sparkY - c.center.y) / d;
+    const cx = kick.px - c.center.x;
+    const cy = kick.py - c.center.y;
+    expect((ux * cx + uy * cy) / Math.hypot(cx, cy)).toBeGreaterThan(0.999);
+    expect(spy.particles.aliveCount()).toBeGreaterThanOrEqual(13);
+  });
+
+  it("(l) while the session is not live (tilted), the same drop emits no particle", () => {
+    const box: { fx: SpyEffects | null } = { fx: null };
+    const rig = makeRig(
+      false,
+      undefined,
+      (world) => (box.fx = new SpyEffects(world.getElements())),
+    );
+    dropOnBumper202(rig);
+    rig.run(TWO_SECONDS);
+    const spy = box.fx;
+    if (!spy) throw new Error("no EffectsTracker attached");
+    // Not vacuous: the ball did strike bumper 202.
+    expect(rig.points202.length).toBeGreaterThan(0);
+    expect(spy.kicks).toHaveLength(0);
+    expect(spy.particles.aliveCount()).toBe(0);
   });
 });
