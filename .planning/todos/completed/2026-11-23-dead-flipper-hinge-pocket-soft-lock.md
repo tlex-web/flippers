@@ -28,3 +28,11 @@ Options, none chosen yet:
 Do not raise the slings beyond 0.35 m: at 0.40 m a ball is trapped here too.
 
 This is backlog per decision D-02 of phase 06.1. It was recorded, not fixed, in 06.1.
+
+## Resolution
+
+Closed 2026-11-23 by plan 06.2-02 on evidence.
+
+- Fix: a tilted-only ball search in GameSession. After BALL_SEARCH_STEPS (240) still steps outside PLUNGER_ZONE, the active ball is kicked toward the playfield centre (BALL_SEARCH_IMPULSE = NUDGE_IMPULSE). After BALL_SEARCH_KICKS (2) it is recorded as drained and forfeited on the existing tilted path. No geometry change. aa4a5d7 (real-table RED), c43b5be (fix), fe10d58 (spy-rig rule pins).
+- Evidence: src/game/ball-search.table.test.ts, with both hinge pockets searched free and forfeited, then ball 2 served (left pocket: kick at session step 687, drain at 777; right pocket: kick at 723, drain at 814; one kick each), and a ballSearchSteps: 0 RED control that stays soft-locked for 3,000 steps. The spy-rig describe 'GameSession ball search (tilted soft-lock, 06.2)' has mutation teeth. `npm run soak` was green.
+- Why not geometry: no funnel-only change removes the pocket (06.2-RESEARCH Probe 4); slings stay at 0.35 m.
