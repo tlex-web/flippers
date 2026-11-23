@@ -231,7 +231,11 @@ export class GameSession implements RulesGate, RuleHooks {
   /** The rotating lit-lane skill shot (PLSH-05). */
   private readonly skill = new SkillShot();
 
-  /** Step of the most recent skill-shot award, -1 before any. */
+  /**
+   * Step of the most recent skill-shot award, -1 before any and once that
+   * ball is lost (bonus entry, new game), so the HUD's SKILL SHOT never
+   * outlives it (06-REVIEW IN-01).
+   */
   private lastSkillStep = -1;
 
   /** Value of the most recent skill-shot award, 0 before any. */
@@ -401,6 +405,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.save.disarm();
     this.endGrace();
     this.lastSaveStep = -1;
+    this.lastSkillStep = -1;
     if (this.state === "tilted") this.tally.markForfeit();
     else this.tally.snapshot(this.bonusCounters);
     this.active = NO_BALL;
@@ -693,7 +698,10 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.lastSkillValue;
   }
 
-  /** `getStep()` at the most recent skill shot this game (-1 before any). */
+  /**
+   * `getStep()` at the most recent skill shot of the ball in play (-1 before
+   * any, and again once that ball drains to the bonus or a new game starts).
+   */
   getLastSkillStep(): number {
     return this.lastSkillStep;
   }

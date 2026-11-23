@@ -1262,6 +1262,21 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(1);
   });
 
+  it("a lost ball clears getLastSkillStep() so SKILL SHOT never outlives the ball that made it (06-REVIEW IN-01)", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    r.tick(5);
+    const lit = r.session.getSkillLitLane();
+    r.session.onSwitch("rollover", lit, false);
+    expect(r.session.getSkillShotCount()).toBe(1);
+    expect(r.session.getLastSkillStep()).toBe(5);
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getLastSkillStep()).toBe(-1);
+    expect(r.session.getSkillShotCount()).toBe(1); // the ladder is per game
+    expect(r.session.getLastSkillValue()).toBeGreaterThan(0);
+  });
+
   it("a lost ball and a new game clear getLastSaveStep() so BALL SAVED never outlives the saved ball (06-REVIEW WR-01)", () => {
     const r = makeRig();
     startSaved(r);

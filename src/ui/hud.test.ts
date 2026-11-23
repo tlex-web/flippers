@@ -239,6 +239,22 @@ describe("HudView status priority resolution (06-UI-SPEC rows 1, 5, 6, 7, 8)", (
     expect(status.textContent).toBe("TILT");
   });
 
+  it("game over inside the skill window shows the GAME OVER prompt, not SKILL SHOT (06-REVIEW IN-01)", () => {
+    const { view, src, status } = awarded();
+    src.state = "game-over";
+    src.step = 1020;
+    view.update(src);
+    expect(status.textContent).toBe(statusText("gameOver", 0));
+  });
+
+  it("a skill step cleared to -1 (the ball was lost) shows nothing on the next ball", () => {
+    const { view, src, status } = awarded();
+    src.skillStep = -1;
+    src.step = 1020;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
   it("SKILL SHOT outranks WARNING, and WARNING shows once the window expires", () => {
     const { view, src, status } = awarded();
     src.warning = true;

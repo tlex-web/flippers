@@ -294,9 +294,14 @@ export class HudView {
     const now = src.getStep();
     const skillStep = src.getLastSkillStep();
     const saveStep = src.getLastSaveStep();
-    const skillOn = src.getSkillShotCount() > 0 && now < skillStep + STATUS_TRANSIENT_STEPS;
-    // BALL SAVED belongs to a ball in play: never over the game-over prompt
-    // (the session also clears the save step when a ball is lost, 06-REVIEW WR-01).
+    // SKILL SHOT and BALL SAVED belong to a ball in play: never over the
+    // game-over prompt (the session also clears both steps when a ball is
+    // lost, 06-REVIEW WR-01, IN-01).
+    const skillOn =
+      state === "playing" &&
+      src.getSkillShotCount() > 0 &&
+      skillStep >= 0 &&
+      now < skillStep + STATUS_TRANSIENT_STEPS;
     const saveOn =
       state === "playing" &&
       src.getSaveCount() > 0 &&
