@@ -2,10 +2,11 @@
  * Engine-agnostic flipper state machine (D-05). It imports NO physics engine
  * (`planck`) — only the `PhysicsWorld` interface, and only as a TYPE — and drives
  * the world SOLELY through the sign-only `setFlipperMotor(id, direction)` hook
- * (+1 = toward the upper limit, -1 = toward the lower, 0 = hold). Speed magnitudes
- * live in the adapter's tuned constants, not here (D-05), so a future custom
- * solver reuses this FSM unchanged. Zero per-frame allocation: the per-flipper
- * records are built ONCE in the constructor and mutated in place.
+ * (+1 = toward the raise limit, -1 = toward the rest limit, 0 = hold). Speed
+ * magnitudes live in the adapter's tuned constants, not here (D-05), so a
+ * future custom solver reuses this FSM unchanged. Zero per-frame allocation:
+ * the per-flipper records are built ONCE in the constructor and mutated in
+ * place.
  *
  * Observable FSM (D-04/D-05): each flipper is in exactly one of
  *   resting -> flipping-up -> held-up -> returning -> resting
@@ -14,7 +15,7 @@
  *
  * Cradle hold (D-06(1)): through BOTH flipping-up and held-up the FSM re-asserts
  * `+1` on EVERY update — it never releases to 0 while up, or gravity + the ball's
- * weight would sag the bat off the upper limit.
+ * weight would sag the bat off the raise limit.
  *
  * Limit detection is mirror-independent. The UP limit is detected by settling:
  * the bat has REACHED it when its angle stops advancing (|delta| <
@@ -230,9 +231,9 @@ export class FlipperController {
 
       switch (fsm.phase) {
         case "flipping-up":
-          this.world.setFlipperMotor(fsm.id, 1); // hold into the upper limit
+          this.world.setFlipperMotor(fsm.id, 1); // hold into the raise limit
           if (!settled) fsm.moved = true;
-          else if (fsm.moved) fsm.phase = "held-up"; // pinned at upper limit
+          else if (fsm.moved) fsm.phase = "held-up"; // pinned at the raise limit
           break;
         case "held-up":
           this.world.setFlipperMotor(fsm.id, 1); // D-06(1): never release to 0
@@ -247,7 +248,6 @@ export class FlipperController {
           }
           if (fsm.restSettled >= REST_SETTLE_UPDATES) {
             fsm.phase = "resting";
-            fsm.moved = false;
             fsm.restSettled = 0;
             this.world.setFlipperMotor(fsm.id, 0); // settled at the rest limit
           } else {
@@ -255,7 +255,7 @@ export class FlipperController {
           }
           break;
         case "resting":
-          // Motor is already 0 (set on the transition in); the lower limit holds
+          // Motor is already 0 (set on the transition in); the rest limit holds
           // the bat, so no re-assert is needed.
           break;
       }
@@ -272,7 +272,6 @@ export class FlipperController {
     if (fsm.phase === "flipping-up" || fsm.phase === "held-up") {
       fsm.phase = "returning";
       fsm.coilOff++;
-      fsm.moved = false;
       fsm.restSettled = 0;
       fsm.prevAngle = this.angleOf(fsm.id, fsm.prevAngle);
       this.world.setFlipperMotor(fsm.id, -1);
