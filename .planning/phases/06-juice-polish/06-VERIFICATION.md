@@ -1,7 +1,7 @@
 ---
 phase: 06-juice-polish
-verified: 2026-11-23T02:40:00Z
-status: human_needed
+verified: 2026-11-23T12:30:00Z
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/06-juice-polish/06-01-PLAN.md
@@ -32,132 +32,131 @@ covered_files:
   - .planning/phases/06-juice-polish/06-13-SUMMARY.md
   - .planning/phases/06-juice-polish/06-14-PLAN.md
   - .planning/phases/06-juice-polish/06-14-SUMMARY.md
+  - src/app/cue-queue.ts
+  - src/game/ball-save.ts
+  - src/game/bonus.ts
   - src/game/game-session.ts
   - src/game/high-score.ts
   - src/game/reactive-elements.ts
+  - src/game/skill-shot.ts
+  - src/game/tuning.ts
+  - src/render/effects.ts
+  - src/render/lamps.ts
+  - src/render/shake.ts
+  - src/render/static-layer.ts
   - src/render/table-renderer.ts
   - src/sandbox/main.ts
-covered_digest: "v4:sha256:5e57b6317c03c28d7074e7e5c77146d3627869ab00b1f75d7d3011cd2a599a47"
+  - src/sandbox/presentation-observer.ts
+  - src/table/resolve.ts
+  - src/ui/hud.ts
+covered_digest: "v4:sha256:b7f4476a5361e29f6496dae66616e7c60ca16503a006ae388d7227b12672d86f"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Play several balls: nudge, hit bumpers, drain; watch the canvas"
-    expected: "Shake is subtle and decays quickly, the HUD never shakes, and reduced-motion OS setting removes the shake entirely"
-    why_human: "Perceptual subtlety and timing cannot be asserted headlessly (plan 06-14 D5 explicitly defers this to UAT)"
-  - test: "Look at the table at rest and in play"
-    expected: "Ball drop shadow, light pool and vignette read as 2.5D depth; lit vs unlit inserts and rollover lenses are clearly distinct; attract-mode chase is legible"
-    why_human: "Visual quality (glow, contrast, depth) is a perceptual judgement"
-  - test: "Plunge repeatedly with the lit skill-shot lane rotating; use a learned hold length"
-    expected: "A learned hold reliably reaches the lit lane (D-02 'bands not random'); SKILL SHOT status, sting and chevron glints fire; value ladder 5k..25k"
-    why_human: "Whether the 3-4 step charge bands feel learnable, not random, is a feel judgement the plan itself flagged for UAT"
-  - test: "Drain a ball in the center while the 7 s ball save is running, repeatedly, with the flippers idle and with them held"
-    expected: "Decision needed on CR-01 (see Gaps / Warnings): after a kickback the ball can fall back through the bat gap and drain within the save window, costing a ball even though BALL SAVED was just shown. Confirm this is acceptable, or fix"
-    why_human: "Open critical code-review finding with a design question (grace window vs accepted kickback behaviour)"
-  - test: "Finish a game with a new best, hard-reload the page in a real browser, then also try with storage blocked"
-    expected: "HIGH SCORE persists across reload and NEW HIGH SCORE fanfare plays; with storage blocked play continues silently"
-    why_human: "Real-browser localStorage persistence across sessions is not exercised by the headless tests (injected StorageLike only)"
-  - test: "Run on a 144 Hz display and a 60 Hz display"
-    expected: "Stable 60 fps with particles, shadows, vignette and shake active; count-up and bonus tally pacing feel right"
-    why_human: "Frame-rate and pacing feel need a real browser/GPU"
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/5
+  gaps_closed:
+    - "CR-01 kickback ball-save grace (fixed in two rounds, re-tested in UAT test 4)"
+    - "All six prior human_verification items (06-UAT.md 11/11 pass)"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 6: Juice & Polish Verification Report
 
 **Phase Goal:** The game crosses from correctly functioning to portfolio-grade: responsive feedback, depth, glowing lights, and rewarding flourishes that make play feel alive and shareable.
 **Verified:** 2026-11-23
-**Status:** human_needed
-**Re-verification:** No, initial verification
+**Status:** passed
+**Re-verification:** Yes. The earlier report (human_needed) was made stale by two code-review fix rounds (24b6c31..d64ad4c, edd8db7..b653ee4). I re-ran the gates and re-checked the code the rounds touched.
 
 ## Goal Achievement
 
-Everything the roadmap contract asks for exists, is substantive, is wired into the live composition root (`src/sandbox/main.ts`), and is covered by passing automated gates. No success criterion fails on code evidence. The phase cannot be called `passed` because (a) the phase is perceptual by nature and the plans themselves defer feel to UAT, and (b) the code review left one critical finding (CR-01) open and untriaged, which touches the ball-save behaviour and needs an explicit keep-or-fix decision.
+All five roadmap success criteria are backed by substantive, wired code and passing automated gates. The one open critical finding from the prior report (CR-01, kickback grace) is fixed and tested. The perceptual and real-browser items that kept the prior report at `human_needed` were tested by the developer in 06-UAT.md (status complete, 11 passed, 0 issues, 0 gaps), including the CR-01, WR-01, IN-01, IN-02 and IN-04 re-tests.
 
 ### Observable Truths (ROADMAP success criteria)
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Big hits and nudges produce a subtle, decaying screen shake / camera kick; bumper/target hits emit particle bursts and light flares | VERIFIED (perceptual tuning to human) | `render/shake.ts` (210 lines, trauma model, 13 tests) fed by `EffectsTracker.onNudge -> shake.kick` (effects.ts:315); `table-renderer.ts:481-511` samples shake once, blits the static layer at the shake offset, applies shake to the world transform, then `drawParticles` (line 511). Reduced motion zeroes the offset (renderer lines 492-495). `particles.ts` (285 lines, 19 tests) plus bumper/sling/rollover emitters in effects.ts. `presentation.determinism.test.ts` asserts shaken blit, live particles and read-only presentation |
-| 2 | Depth reads clearly (ball shadow, shading/vignette) and insert/lane lights have distinct lit vs unlit state | VERIFIED (perceptual to human) | `table-renderer.ts:304,457,509` baked ball shadow drawn per ball; `static-layer.ts` bakes light pool, drop shadows, unlit lenses and vignette (VIGNETTE_* palette tokens). `lamps.ts` (579 lines, 47 tests) `LampTracker` fade/blink, wired in main.ts:253 and `lamps.update()` at line 332 |
-| 3 | A precise plunger charge over a lit lane earns a skill-shot bonus on launch | VERIFIED | `game/skill-shot.ts` + `GameSession` composition. `skill-shot-e2e.test.ts:248` "D-05 anchor: N=62 with 401 lit hits rollover 401 first and awards the skill shot" runs on the real `TABLE_SPEC` + `PlanckWorld` and passes in the full suite. Ladder and rotate/freeze rules unit-tested in `skill-shot.test.ts` |
-| 4 | Scores count up with animation and an end-of-ball bonus tally; a near-drain can trigger a center-post ball-save flourish | VERIFIED with warning (CR-01) | Count-up in `ui/hud.ts` (0.20 s time constant on the step clock, wired at main.ts:555-556). `game/bonus.ts` + `GameSession` "bonus" state (service() lines 340-370) snapshot, tally, skip, forfeit. Center post element 610 + `ReactiveElements` post kicker (`hooks.trySave`) and `ball-save.ts`; post flourish in lamps.ts, sparks in effects.ts. Tests: bonus (16), ball-save (14), reactive-table kickback + energy-bound + RED control. Warning: see CR-01 |
-| 5 | The local high score persists across sessions via `localStorage` | VERIFIED in code; real-browser reload to human | `game/high-score.ts` (94 lines) guarded get/set with try/catch; `main.ts:212` `new HighScore(safeLocalStorage())`, session submits once at game end; HUD best line and `highScore` fanfare. 22 tests incl. hostile storage. The real-browser reload is not exercised headlessly |
+| 1 | Big hits and nudges produce a subtle, decaying screen shake; bumper/target hits emit particle bursts and light flares | VERIFIED | `render/shake.ts` (trauma model) fed from `EffectsTracker` kicks and nudges. `table-renderer.ts:472-483` samples the shake once, blits the static layer at the shake offset and zeroes it when `frame.reducedMotion` is set. `particles.ts` plus bumper/sling/rollover emitters in `effects.ts`. `main.ts:547` passes `reducedMotion`, and `main.ts:555-556` updates the HUD, which sits outside the canvas so it never shakes. UAT test 1 passed (subtle, decays, reduced motion removes shake). |
+| 2 | Depth reads clearly (ball shadow, shading/vignette) and insert/lane lights have distinct lit vs unlit state | VERIFIED | Baked ball shadow stamped per ball in `table-renderer.ts`. `static-layer.ts` bakes the light pool, drop shadows, unlit lenses and vignette. `lamps.ts` (`LampTracker`, constructed at `main.ts:253`, `lamps.update()` at `main.ts:332`). UAT test 2 passed. |
+| 3 | A precise plunger charge over a lit lane earns a skill-shot bonus on launch | VERIFIED | `game/skill-shot.ts` composed into `GameSession`. The test "D-05 anchor" in `skill-shot-e2e.test.ts` runs on the real `TABLE_SPEC` with `PlanckWorld` and passes when run alone. UAT test 3 passed (learned hold reliably reaches the lit lane). UAT tests 8 and 11 confirm one skill shot per ball and no carry-over or overlap with GAME OVER. |
+| 4 | Scores count up with animation and an end-of-ball bonus tally; a near-drain can trigger a center-post ball-save flourish | VERIFIED | Count-up in `ui/hud.ts` on the step clock. `game/bonus.ts` plus the `GameSession` "bonus" state, with `BonusView` wired at `main.ts:402`/`556`. Post element 610 through `ReactiveElements` calling `GameSession.trySave` (`game-session.ts:610-621`). Behavior-dependent invariant: a kicked ball that drains anywhere inside the original save window is re-served, not lost. I read the implementation (`graceEndsAt = step + max(KICKBACK_GRACE_STEPS, remaining - 1)`, `inKickbackGrace()` at `:453`, `endGrace()` on tilt, bonus entry, start and every backstop). The 28 tests matching "kickback" pass. They include the session boundary pins (840 saved / 841 lost; floor 1040 / 1041) and the e2e live kickback case, and the review confirms the boundary has no off-by-one. UAT tests 4, 7, 9 and 10 passed. |
+| 5 | The local high score persists across browser sessions via `localStorage` | VERIFIED | `game/high-score.ts` has guarded read and write, each in its own try/catch. `main.ts:212` builds `new HighScore(safeLocalStorage())`. The session submits once per game and the HUD shows the best line and fanfare. Hostile-storage tests pass. UAT test 5 passed in a real browser (reload persistence, blocked storage plays silently). |
 
-**Score:** 5/5 truths verified, 0 behavior-unverified, 0 overrides. Human items listed in frontmatter.
+**Score:** 5/5 truths verified, 0 behavior-unverified, 0 overrides.
 
-### Plan-level must-haves (spot-verified, not just trusted)
+### Plan-level must-haves (spot-verified)
 
 | Must-have | Status | Evidence |
 |-----------|--------|----------|
-| D-05 anchor: 62 charging steps, 401 lit, first scoring switch awards skill shot | VERIFIED | Test above passes (one of 1264) |
-| Virtual center post element 610, kicks only above center, energy-bounded, RED control | VERIFIED | 06-08 truths; `reactive-table.test.ts` kickback tests pass; `hooks.trySave` wiring present in reactive-elements.ts |
-| Presentation modules are read-only (bit-identical outcome with all attached, reduced motion on and off) | VERIFIED | `presentation.determinism.test.ts`, `game.determinism.test.ts` (60/120/144 Hz) pass in `npm test` |
-| Rules-live soak with armed save, postKicks > 0 | UNVERIFIED BY ME (accepted from SUMMARY) | The fast soak variant runs inside `npm test` and passes. The 630 s `npm run soak` gate was not re-run by this verifier (time budget); 06-14 SUMMARY claims pass |
+| D-05 anchor (62 charging steps, 401 lit, first scoring switch awards the skill shot) | VERIFIED | Run alone: 1 passed |
+| Center post element 610 kicks only above center, energy-bounded | VERIFIED | Kickback tests pass (7 files, 28 tests) |
+| Presentation modules are read-only (bit-identical outcomes with all attached, reduced motion on and off) | VERIFIED | `presentation.determinism.test.ts` and `game.determinism.test.ts` (60/120/144 Hz) pass in the full run |
+| Rules-live soak with armed save | PARTIAL, accepted | The fast soak variant runs in `npm test` and passes. The 630 s `npm run soak` gate was not re-run by this verifier. The 06-14 SUMMARY claims it passed, and the later fix rounds touched `game-session.ts`, so the long soak has not been run since them. The CR-01 change only widens when a drain is re-served, and the e2e and determinism tests cover it. Optional follow-up: run `npm run soak` before release. |
 
 ### Required Artifacts / Key Links
 
 | Artifact / Link | Status | Details |
 |-----------------|--------|---------|
-| `game/skill-shot.ts`, `bonus.ts`, `ball-save.ts`, `high-score.ts`, `tuning.ts` | VERIFIED | Exist, substantive, imported by GameSession / main.ts |
-| `render/shake.ts`, `particles.ts`, `effects.ts`, `lamps.ts`, `flash.ts`, `palette.ts`, `sprites.ts`, `static-layer.ts`, `table-renderer.ts` | VERIFIED | Substantive; `EffectsTracker` and `LampTracker` constructed in main.ts:227,253 and passed into the renderer frame (shake, lamps, effects, reducedMotion at main.ts:547) |
-| `ui/hud.ts` (`HudView`, `BonusView`) | VERIFIED | Constructed main.ts:392,402; updated every frame at 555-556 |
-| `ReactiveElements` -> `GameSession.trySave` via `RuleHooks` | WIRED | main.ts passes session as the rule hooks (main.ts:213) |
-| `GameSession` -> `HighScore` -> `safeLocalStorage()` | WIRED | main.ts:210-215 |
+| `game/skill-shot.ts`, `bonus.ts`, `ball-save.ts`, `high-score.ts`, `tuning.ts` | VERIFIED | Exist, substantive, imported by `GameSession` / `main.ts` |
+| `render/shake.ts`, `particles.ts`, `effects.ts`, `lamps.ts`, `static-layer.ts`, `table-renderer.ts` | VERIFIED | Substantive; `EffectsTracker` and `LampTracker` constructed in `main.ts:227,253` and consumed by the renderer frame |
+| `ui/hud.ts` (`HudView`, `BonusView`) | VERIFIED | Constructed `main.ts:392,402`; updated each frame `main.ts:555-556` |
+| `PresentationObserver` | WIRED | Constructed `main.ts:240`; `observer.observe()` at `main.ts:330`, then `lamps.update()` |
+| `ReactiveElements` -> `GameSession.trySave` | WIRED | Session passed as the rule hooks |
+| `GameSession` -> `HighScore` -> `safeLocalStorage()` | WIRED | `main.ts:210-215`, `main.ts:569` |
 
 ### Data-Flow (Level 4)
 
-Presentation reads session/world state through read-only getters; the determinism gates prove outcome equality with and without presentation attached and assert non-vacuity (particles live, lamp above 0.5, HUD and overlay written). No static/hollow data source found.
+Presentation reads session and world state through read-only getters. The determinism gates prove outcome equality with and without presentation attached and assert non-vacuity. No static, hollow or disconnected data source found.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Full suite | `npm test` | 60 files, 1264 tests passed (6.2 s) | PASS |
-| Type check | `npx tsc --noEmit` | no output | PASS |
-| Lint | `npx eslint .` | no output | PASS |
-| Production build | `npm run build` | tsc + vite build OK, 49 modules, 77.9 kB gzip | PASS |
-| Debt markers | grep TBD/FIXME/XXX in `src` | none | PASS |
-| 630 s soak gate | `npm run soak` | not run by verifier | SKIPPED (see above) |
+| Full suite | `npx vitest run` | 60 files, 1288 tests passed | PASS |
+| Type check | `npx tsc --noEmit` | exit 0 | PASS |
+| Lint | `npx eslint .` | exit 0 | PASS |
+| Production build | `npm run build` | tsc + vite build OK, 78.06 kB gzip JS | PASS |
+| Skill-shot anchor | `vitest run -t "D-05 anchor"` | 1 passed | PASS |
+| Kickback / grace | `vitest run -t "kickback"` | 28 passed across 7 files | PASS |
+| Debt markers | grep TBD/FIXME/XXX in `src` | 0 hits | PASS |
+| 630 s soak | `npm run soak` | not run | SKIPPED (see above) |
+
+### Probe Execution
+
+No `scripts/*/tests/probe-*.sh` probes exist and none are declared by the plans. Not applicable.
 
 ### Requirements Coverage
 
-Every ID in the phase header appears in at least one PLAN `requirements:` field and is marked Complete in REQUIREMENTS.md. No orphaned requirements.
+Every PLSH-01..08 ID appears in at least one PLAN `requirements:` field, is mapped to Phase 6 and marked Complete in REQUIREMENTS.md. No orphaned requirements.
 
 | Requirement | Source Plan(s) | Description | Status | Evidence |
 |-------------|----------------|-------------|--------|----------|
-| PLSH-01 | 06-09, 06-14 | Decaying screen shake / camera kick on big hits and nudges | SATISFIED | shake.ts, effects.ts onNudge, renderer shake transform, reduced-motion zeroing |
-| PLSH-02 | 06-12, 06-13, 06-14 | Particle bursts and light flares on bumper/target hits | SATISFIED | particles.ts, effects.ts emitters, renderer drawParticles, contact flashes |
-| PLSH-03 | 06-02, 06-14 | Ball-drop shadow and shading/vignette | SATISFIED | baked ball shadow, static-layer light pool, drop shadows, vignette |
-| PLSH-04 | 06-03, 06-14 | Glowing insert/lane lights, lit vs unlit state | SATISFIED | lamps.ts, baked unlit lenses/rims, attract chase |
-| PLSH-05 | 06-01, 06-03, 06-04, 06-14 | Skill shot on launch | SATISFIED | skill-shot.ts, D-05 anchor e2e test, stings and status line |
-| PLSH-06 | 06-05, 06-06, 06-14 | Score count-up and end-of-ball bonus tally | SATISFIED | bonus.ts, "bonus" FSM state, HudView count-up, BonusView |
-| PLSH-07 | 06-07, 06-08, 06-10, 06-14 | Center-post ball-save flourish on near-drain | SATISFIED with defect CR-01 | ball-save.ts, post element 610, kickback, flourish |
-| PLSH-08 | 06-11, 06-14 | Persisted local high score | SATISFIED | high-score.ts, main.ts wiring, HUD best line |
+| PLSH-01 | 06-09, 06-14 | Decaying screen shake on big hits and nudges | SATISFIED | `shake.ts`, renderer shake transform, reduced-motion zeroing, UAT 1 |
+| PLSH-02 | 06-12, 06-13, 06-14 | Particle bursts and light flares on bumper/target hits | SATISFIED | `particles.ts`, `effects.ts` emitters, `drawParticles` |
+| PLSH-03 | 06-02, 06-14 | Ball-drop shadow and shading/vignette | SATISFIED | Baked ball shadow, `static-layer.ts` light pool and vignette, UAT 2 |
+| PLSH-04 | 06-03, 06-14 | Glowing insert/lane lights, lit vs unlit | SATISFIED | `lamps.ts`, baked unlit lenses, UAT 2 |
+| PLSH-05 | 06-01, 06-03, 06-04, 06-14 | Skill shot on launch | SATISFIED | `skill-shot.ts`, D-05 anchor e2e, UAT 3, 8, 11 |
+| PLSH-06 | 06-05, 06-06, 06-14 | Score count-up and end-of-ball bonus tally | SATISFIED | `bonus.ts`, bonus FSM state, `HudView` / `BonusView`, UAT 6 |
+| PLSH-07 | 06-07, 06-08, 06-10, 06-14 | Center-post ball-save flourish on near-drain | SATISFIED | `ball-save.ts`, post element 610, kickback plus grace through the save window, UAT 4, 7, 9, 10 |
+| PLSH-08 | 06-11, 06-14 | Persisted local high score | SATISFIED | `high-score.ts`, `main.ts` wiring, UAT 5 |
 
-### Anti-Patterns / Open Review Findings
+### Anti-Patterns / Review Findings
 
-06-REVIEW.md reported 1 critical, 4 warnings, 5 info; 06-REVIEW-DISPOSITION.md shows all 10 still `open` (untriaged). Debt-marker scan is clean.
+06-REVIEW.md (round 3): 0 critical, 0 warning, 2 info. 06-REVIEW-DISPOSITION.md: CR-01, WR-01..04 and IN-03..06 are `fixed`. IN-01 and IN-02 of the latest review are `open`. No debt markers. No blocker anti-patterns.
 
 | ID | Severity | Impact on goal |
 |----|----------|----------------|
-| CR-01 | Critical (reviewer) | I confirmed the mechanism in code. `GameSession.trySave` (game-session.ts ~537-545) consumes the one per-ball save as a kickback. `service()` (line 361) only backstops a drain when `savedAtStep === step`. A later drain falls through to the bonus state and the ball is lost, even inside the 7 s save window and after the player saw BALL SAVED, the sting and the post flourish. `game-session.test.ts:1213` ("a kickback followed by a drain on a LATER step is a real drain") pins this as intended, so it was a planned trade-off (research A4), not an oversight. The reviewer's headless probe says a dead-center drop falls back through the bat gap and drains about 100 steps later. I did not re-run that probe. It weakens the "ball-save" promise but does not make PLSH-07 / SC4 literally false ("can trigger a flourish" is met), so I rate it a WARNING needing a human decision, not a goal-blocking gap |
-| WR-01 | Warning | "BALL SAVED" can show after the ball is lost and can outrank the GAME OVER prompt (hud.ts 296-315). Linked to CR-01 |
-| WR-02 | Warning | Same-step kickback+drain plays post flourish/sparks for a ball that was re-served to the plunger (visual defect) |
-| WR-03 | Warning | Chevron and arrow geometry plus skill-shot lane ids hard-coded, not derived from `TABLE_SPEC` (silent drift risk if the table moves) |
-| WR-04 | Warning (necessity) | Dead `if (!d) return` guard in `ShakeTracker.kick` |
-| IN-01..05 | Info | parseBest leniency, dead code, render-to-sandbox type import, backstop re-serve can reopen skill shot, lamp shape table built twice |
+| IN-01 (round 3) | Info | The new HUD test "a skill step cleared to -1 shows nothing" passes without the `skillStep >= 0` guard it claims to pin. A test-strength issue, not a behavior defect. Suggested fix: set `src.step = 50` in that test. |
+| IN-02 (round 3) | Info | `SaveKind` is still declared in `ball-save.ts` although only `GameSession` produces it. Cosmetic placement. |
 
 ### Human Verification Required
 
-See frontmatter `human_verification`. Summary: shake subtlety and reduced motion, depth and lamp look, skill-shot band learnability (D-02), the CR-01 keep-or-fix decision, real-browser high-score reload, and 60 fps on a real 144 Hz display.
+None outstanding. The prior items were verified in 06-UAT.md (11/11 passed, status complete): shake and reduced motion, depth and lamps, skill-shot band learnability, the CR-01 ball-save behavior, real-browser high-score persistence, and 60 fps on 60 Hz and 144 Hz displays.
 
 ### Gaps Summary
 
-No must-have truth failed, no artifact is missing, stubbed or unwired, and all automated gates I ran are green. The phase is verified to the extent a headless check can. Two items hold it short of `passed`:
-
-1. **CR-01 (and linked WR-01/WR-02) needs a decision.** Either fix it (the reviewer's `KICKBACK_GRACE_STEPS` backstop window, or kick toward a bat) and re-run the soak gates, or record it as `deferred`/`skipped` in 06-REVIEW-DISPOSITION.md with a reason. Until then a critical finding remains `open`. If you choose to fix, expect `game-session.test.ts:1213` and the e2e at `game-e2e.test.ts:1058` to need inverting, and the determinism/soak gates to be re-run.
-2. **Perceptual UAT** the plans deferred to `/gsd-verify-work`.
-
-The 630 s `npm run soak` gate was not re-run by this verifier. Its fast variant runs in `npm test`.
+No gaps. No truth failed, no artifact is missing, stubbed or unwired, and the gates are green (1288 tests, tsc, eslint, build). Two items for follow-up that do not block the goal: run the 630 s `npm run soak` once before release, since `game-session.ts` changed after its last recorded pass, and close the two open info findings.
 
 ---
 
