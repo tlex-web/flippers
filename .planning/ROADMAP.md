@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works (completed 2026-11-21)
 - [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
-- [ ] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene**
+- [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
 
 ## Phase Details
 
@@ -284,7 +284,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A raised bat can no longer pinch the ball against a slingshot (WR-03: both slings and their inlane sensors move 0.35 m up-table, proven by a seeded every-step sweep with a RED control and approved by eye and feel), and the open Phase 4-6 review and format debt is fixed or explicitly dispositioned.
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 5/5 plans executed (4 waves)
+**Plans:** 5/5 plans complete (4 waves)
 
 Plans:
 **Wave 1**
