@@ -16,18 +16,31 @@ import {
   SLING_SPARK_SPEED_MIN,
 } from "./effects";
 import {
+  GLINT_INLANE,
+  GLINT_LIFE_STEPS,
+  GLINT_ROLLOVER,
+  GLINT_SKILL,
+  MOTE_INLANE,
+  MOTE_ROLLOVER,
+  MOTE_SKILL,
+  MOTE_SPEED_MAX,
+  MOTE_SPEED_MIN,
   PARTICLE_CAPACITY,
   PARTICLE_DRAG_PER_S,
   PARTICLE_GRAVITY,
   ParticlePool,
   RING,
   SPARK_BUMPER,
+  SPARK_SAVE,
   SPARK_SLING,
 } from "./particles";
 
 /**
  * PLSH-02 / D-19 (plan 06-12 Task 2): the impact particle pool, the bumper and
  * slingshot emitters and the photosensitivity footprint (T-6-25..27).
+ *
+ * Plan 06-13 Task 2 adds the reward half: sensor and skill-shot glints with
+ * their motes, and the kickback save sparks off the post.
  *
  * The pool is a fixed 160-slot struct of typed arrays on the fixed-step clock
  * with its own seeded stream; the emitters live in the EffectsTracker and are
@@ -51,6 +64,41 @@ function slingFace(id: number): { nx: number; ny: number } {
   const face = el ? deriveKickFace(el) : null;
   if (!face) throw new Error(`sling ${id} has no kick face`);
   return { nx: face.nx, ny: face.ny };
+}
+
+/** Point at half the arc length of element `id`'s path (computed here, independently). */
+function sensorMid(id: number): { x: number; y: number } {
+  const v = ELEMENTS.find((e) => e.id === id)?.vertices ?? [];
+  const pts = v.map((p) => ({ x: p.x, y: p.y }));
+  if (pts.length < 2) throw new Error(`sensor ${id} has no path`);
+  const lens: number[] = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1] as { x: number; y: number };
+    const b = pts[i] as { x: number; y: number };
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    lens.push(l);
+    total += l;
+  }
+  let left = total / 2;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1] as { x: number; y: number };
+    const b = pts[i] as { x: number; y: number };
+    const l = lens[i - 1] ?? 0;
+    if (l > 0 && left <= l) {
+      const t = left / l;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    left -= l;
+  }
+  throw new Error(`sensor ${id}: midpoint not found`);
+}
+
+/** The ball-save post's circle (element 610, kind "post"). */
+function postCircle(): { cx: number; cy: number; r: number } {
+  const c = ELEMENTS.find((el) => el.kind === "post")?.circle;
+  if (!c) throw new Error("post missing");
+  return { cx: c.center.x, cy: c.center.y, r: c.radius };
 }
 
 /** Live slots of `kind`, by index. */
@@ -324,5 +372,126 @@ describe("particle footprint (T-6-25, photosensitive safety)", () => {
     expect(sparks).toBe(16_000);
     expect(maxTravel).toBeLessThanOrEqual(0.63);
     expect(maxRing).toBeLessThanOrEqual(2 * b.r);
+  });
+});
+
+describe("EffectsTracker reward and save emitters (06-13, D-19)", () => {
+  /** Assert one glint of `glint` and 3 or 4 motes of `mote` at (x, y), and nothing else live. */
+  function expectReward(p: ParticlePool, glint: number, mote: number, x: number, y: number): void {
+    const glints = liveOf(p, glint);
+    expect(glints).toHaveLength(1);
+    const motes = liveOf(p, mote);
+    expect(motes.length).toBeGreaterThanOrEqual(3);
+    expect(motes.length).toBeLessThanOrEqual(4);
+    expect(p.aliveCount()).toBe(1 + motes.length);
+    for (const i of [...glints, ...motes]) {
+      expect(p.x[i]).toBeCloseTo(x, 5);
+      expect(p.y[i]).toBeCloseTo(y, 5);
+    }
+  }
+
+  it("onSensor(rollover, 401) emits exactly one GLINT_ROLLOVER at rollover 401's midpoint and 3 or 4 MOTE_ROLLOVER there", () => {
+    const fx = new EffectsTracker(ELEMENTS);
+    fx.onSensor("rollover", 401);
+    const m = sensorMid(401);
+    expectReward(fx.particles, GLINT_ROLLOVER, MOTE_ROLLOVER, m.x, m.y);
+  });
+
+  it("onSensor(lane, 500) emits one GLINT_INLANE and 3 or 4 MOTE_INLANE at inlane 500's midpoint", () => {
+    const fx = new EffectsTracker(ELEMENTS);
+    fx.onSensor("lane", 500);
+    const m = sensorMid(500);
+    expectReward(fx.particles, GLINT_INLANE, MOTE_INLANE, m.x, m.y);
+  });
+
+  it("motes move up-table (vy < 0) at 0.15 to 0.30 m/s and keep that speed tick to tick", () => {
+    const fx = new EffectsTracker(ELEMENTS);
+    const p = fx.particles;
+    for (let k = 0; k < 10; k++) {
+      fx.onSensor("rollover", 400 + (k % 3));
+      fx.onSensor("lane", 500 + (k % 2));
+    }
+    const motes = [...liveOf(p, MOTE_ROLLOVER), ...liveOf(p, MOTE_INLANE)];
+    expect(motes.length).toBeGreaterThanOrEqual(60);
+    const speed0 = motes.map((i) => Math.hypot(p.vx[i] ?? 0, p.vy[i] ?? 0));
+    for (const s of speed0) {
+      expect(s).toBeGreaterThanOrEqual(MOTE_SPEED_MIN - F32);
+      expect(s).toBeLessThanOrEqual(MOTE_SPEED_MAX + F32);
+    }
+    for (let t = 0; t < 30; t++) {
+      const y0 = motes.map((i) => p.y[i] ?? 0);
+      fx.tick();
+      motes.forEach((i, k) => {
+        expect(p.vy[i] ?? 0).toBeLessThan(0);
+        expect(Math.hypot(p.vx[i] ?? 0, p.vy[i] ?? 0)).toBeCloseTo(speed0[k] ?? 0, 6);
+        expect(p.y[i] ?? 0).toBeLessThan(y0[k] ?? 0);
+      });
+    }
+  });
+
+  it("a glint never moves and dies after 42 steps", () => {
+    expect(GLINT_LIFE_STEPS).toBe(42);
+    const fx = new EffectsTracker(ELEMENTS);
+    const p = fx.particles;
+    fx.onSensor("rollover", 400);
+    const i = liveOf(p, GLINT_ROLLOVER)[0] ?? -1;
+    const x = p.x[i];
+    const y = p.y[i];
+    for (let t = 0; t < 41; t++) {
+      fx.tick();
+      expect(p.x[i]).toBe(x);
+      expect(p.y[i]).toBe(y);
+      expect(p.vx[i]).toBe(0);
+      expect(p.vy[i]).toBe(0);
+    }
+    expect(liveOf(p, GLINT_ROLLOVER)).toHaveLength(1);
+    fx.tick();
+    expect(liveOf(p, GLINT_ROLLOVER)).toHaveLength(0);
+  });
+
+  it("onSkillShot(402) emits one GLINT_SKILL and 3 or 4 MOTE_SKILL at rollover 402's midpoint; an unknown or non-sensor lane emits nothing", () => {
+    const fx = new EffectsTracker(ELEMENTS);
+    fx.onSkillShot(402);
+    const m = sensorMid(402);
+    expectReward(fx.particles, GLINT_SKILL, MOTE_SKILL, m.x, m.y);
+
+    const none = new EffectsTracker(ELEMENTS);
+    none.onSkillShot(-1);
+    none.onSkillShot(99_999);
+    none.onSkillShot(202);
+    expect(none.particles.aliveCount()).toBe(0);
+  });
+
+  it("onSave(kickback) emits exactly 10 SPARK_SAVE sparks from the post's top rim point, each within 80 degrees of straight up, with the impact speed and life", () => {
+    const post = postCircle();
+    const fx = new EffectsTracker(ELEMENTS);
+    const p = fx.particles;
+    for (let k = 0; k < 12; k++) {
+      fx.onSave("kickback");
+      const sparks = liveOf(p, SPARK_SAVE).filter((i) => p.age[i] === 0);
+      expect(sparks).toHaveLength(10);
+      expect(p.aliveCount()).toBe(10);
+      for (const i of sparks) {
+        expect(p.x[i]).toBeCloseTo(post.cx, 5);
+        expect(p.y[i]).toBeCloseTo(post.cy - post.r, 5);
+        const vx = p.vx[i] ?? 0;
+        const vy = p.vy[i] ?? 0;
+        expect(angleBetween(vx, vy, 0, -1)).toBeLessThanOrEqual(80 * DEG + F32);
+        const speed = Math.hypot(vx, vy);
+        expect(speed).toBeGreaterThanOrEqual(BUMPER_SPARK_SPEED_MIN - F32);
+        expect(speed).toBeLessThanOrEqual(BUMPER_SPARK_SPEED_MAX + F32);
+        expect(p.life[i]).toBeGreaterThanOrEqual(BUMPER_SPARK_LIFE_MIN - F32);
+        expect(p.life[i]).toBeLessThanOrEqual(BUMPER_SPARK_LIFE_MAX + F32);
+      }
+      for (let t = 0; t < 120; t++) fx.tick();
+      expect(p.aliveCount()).toBe(0);
+    }
+  });
+
+  it("onSave(backstop) and onSave(none) emit nothing", () => {
+    const fx = new EffectsTracker(ELEMENTS);
+    fx.onSave("backstop");
+    fx.onSave("none");
+    expect(fx.particles.aliveCount()).toBe(0);
   });
 });

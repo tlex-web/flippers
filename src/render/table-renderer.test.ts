@@ -22,12 +22,26 @@ import {
   type LampShape,
 } from "./lamps";
 import type { EffectsReader } from "./effects";
-import { ParticlePool, SPARK_BUMPER, SPARK_SLING } from "./particles";
+import {
+  GLINT_INLANE,
+  GLINT_ROLLOVER,
+  GLINT_SKILL,
+  MOTE_INLANE,
+  MOTE_RADIUS_M,
+  MOTE_ROLLOVER,
+  MOTE_SKILL,
+  ParticlePool,
+  SPARK_BUMPER,
+  SPARK_SAVE,
+  SPARK_SLING,
+} from "./particles";
 import {
   BG_BOTTOM,
   FLASH_BUMPER,
   FLASH_FLIPPER,
+  FLASH_SENSOR,
   FLASH_WALL,
+  INLANE_LIT,
   LAMP_HOTSPOT,
   POST_BODY,
   ROLLOVER_LIT,
@@ -42,6 +56,7 @@ import {
   SHADOW_OFFSET_X_M,
   SHADOW_OFFSET_Y_M,
   SHADOW_RADIUS_M,
+  STAR_GLINT_M,
 } from "./sprites";
 import { ShakeTracker, type ShakeOut } from "./shake";
 import { TableRenderer, type CanvasTarget, type RenderFrame } from "./table-renderer";
@@ -1330,5 +1345,178 @@ describe("TableRenderer particle pass (PLSH-02, D-19, D-24)", () => {
     expect(markCounts(spent.rec)).toEqual(expected);
     expect(spent.rec.ctx.globalAlpha).toBe(1);
     expect(spent.rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+});
+
+/** The three reward star sprites one resize bakes (last), in order rollover, inlane, skill. */
+function starCanvases(rig: Rig): unknown[] {
+  return rig.layers.layers
+    .slice(LAYERS_PER_RESIZE - STAR_LAYERS, LAYERS_PER_RESIZE)
+    .map((l) => l.canvas);
+}
+
+/** Every drawImage of a star sprite, with its log index. */
+function starDraws(rig: Rig): { at: number; call: CallEntry }[] {
+  const stars = new Set(starCanvases(rig));
+  const out: { at: number; call: CallEntry }[] = [];
+  rig.rec.log.forEach((e, i) => {
+    if (e.kind === "call" && e.name === "drawImage" && stars.has(e.args[0]))
+      out.push({ at: i, call: e });
+  });
+  return out;
+}
+
+/** The live slot of `kind` (the first one). */
+function slotOf(p: ParticlePool, kind: number): number {
+  for (let i = 0; i < p.capacity; i++) {
+    if (p.kind[i] === kind && (p.age[i] ?? 0) < (p.life[i] ?? 0)) return i;
+  }
+  throw new Error(`no live slot of kind ${kind}`);
+}
+
+/** Assert the frame drew no gradient, blur or text and ended source-over at alpha 1. */
+function expectCleanPass(rig: Rig): void {
+  expect(rig.rec.calls("createLinearGradient")).toHaveLength(0);
+  expect(rig.rec.calls("createRadialGradient")).toHaveLength(0);
+  expect(
+    rig.rec.sets("shadowBlur").filter((s) => typeof s.value !== "number" || s.value > 0),
+  ).toHaveLength(0);
+  expect(rig.rec.calls("fillText")).toHaveLength(0);
+  expect(rig.rec.calls("strokeText")).toHaveLength(0);
+  expect(rig.rec.ctx.globalAlpha).toBe(1);
+  expect(rig.rec.ctx.globalCompositeOperation).toBe("source-over");
+}
+
+describe("TableRenderer reward particles (plan 06-13, D-19, D-24)", () => {
+  it("resize bakes one star sprite per glint color after the lamp halos, and draws never bake again", () => {
+    const rig = makeRig();
+    expect(starCanvases(rig)).toHaveLength(3);
+    const pool = new ParticlePool();
+    pool.emitGlint(GLINT_ROLLOVER, 1, 2);
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool) }));
+    expect(rig.layers.createCount).toBe(LAYERS_PER_RESIZE);
+  });
+
+  it("a live glint stamps its color's star centered on it, side STAR_GLINT_M * (0.6 + 0.4 * age/life), under lighter at (1 - age/life)^2", () => {
+    const rig = makeRig();
+    const pool = new ParticlePool();
+    pool.emitGlint(GLINT_ROLLOVER, 1.0, 2.0);
+    for (let i = 0; i < 21; i++) pool.tick();
+    pool.emitGlint(GLINT_INLANE, 0.6, 7.0);
+    for (let i = 0; i < 7; i++) pool.tick();
+    pool.emitGlint(GLINT_SKILL, 2.2, 1.9);
+    pool.tick();
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 0.5 }));
+
+    const draws = starDraws(rig);
+    expect(draws).toHaveLength(3);
+    const [rollover, inlane, skill] = starCanvases(rig);
+    for (const [kind, canvas] of [
+      [GLINT_ROLLOVER, rollover],
+      [GLINT_INLANE, inlane],
+      [GLINT_SKILL, skill],
+    ] as const) {
+      const i = slotOf(pool, kind);
+      const t = (pool.age[i] ?? 0) / (pool.life[i] ?? 1);
+      const side = STAR_GLINT_M * (0.6 + 0.4 * t);
+      const d = draws.find((e) => e.call.args[0] === canvas);
+      expect(d).toBeDefined();
+      const [, x, y, w, h] = (d as { call: CallEntry }).call.args as number[];
+      expect(w).toBeCloseTo(side, 9);
+      expect(h).toBeCloseTo(side, 9);
+      expect((x ?? 0) + (w ?? 0) / 2).toBeCloseTo(pool.x[i] ?? 0, 6);
+      expect((y ?? 0) + (h ?? 0) / 2).toBeCloseTo(pool.y[i] ?? 0, 6);
+      const at = (d as { at: number }).at;
+      expect(stateAt(rig.rec, at, "globalCompositeOperation", "source-over")).toBe("lighter");
+      expect(stateAt(rig.rec, at, "globalAlpha", 1) as number).toBeCloseTo((1 - t) * (1 - t), 9);
+    }
+    expectCleanPass(rig);
+  });
+
+  it("a live mote draws one disc of radius 0.018 m in its reward color at the interpolated position", () => {
+    const rig = makeRig();
+    const pool = new ParticlePool();
+    pool.emitMote(MOTE_ROLLOVER, 1, 2);
+    pool.emitMote(MOTE_ROLLOVER, 1.2, 2);
+    pool.emitMote(MOTE_INLANE, 0.6, 7);
+    pool.emitMote(MOTE_SKILL, 2.2, 1.9);
+    pool.tick();
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 0.5 }));
+
+    const { start, calls } = particlePass(rig.rec);
+    expect(start).toBeGreaterThan(0);
+    const arcs = calls.filter((c) => c.name === "arc");
+    expect(arcs).toHaveLength(4);
+    expect(calls.filter((c) => c.name === "fill")).toHaveLength(4);
+    expect(calls.filter((c) => c.name === "stroke")).toHaveLength(0);
+    expect(MOTE_RADIUS_M).toBe(0.018);
+    for (const a of arcs) expect(a.args[2]).toBe(MOTE_RADIUS_M);
+    // Each disc sits at its mote's position interpolated at alpha.
+    for (let i = 0; i < pool.capacity; i++) {
+      if (!((pool.age[i] ?? 0) < (pool.life[i] ?? 0))) continue;
+      const x = (pool.px[i] ?? 0) + ((pool.x[i] ?? 0) - (pool.px[i] ?? 0)) * 0.5;
+      const y = (pool.py[i] ?? 0) + ((pool.y[i] ?? 0) - (pool.py[i] ?? 0)) * 0.5;
+      expect(
+        arcs.some(
+          (a) =>
+            Math.abs((a.args[0] as number) - x) < 1e-9 &&
+            Math.abs((a.args[1] as number) - y) < 1e-9,
+        ),
+      ).toBe(true);
+    }
+    const colors: string[] = [];
+    rig.rec.log.forEach((e, i) => {
+      if (i <= start || e.kind !== "call" || e.name !== "fill") return;
+      expect(stateAt(rig.rec, i, "globalCompositeOperation", "source-over")).toBe("lighter");
+      colors.push(stateAt(rig.rec, i, "fillStyle", "") as string);
+    });
+    expect(colors.filter((c) => c === FLASH_SENSOR)).toHaveLength(2);
+    expect(colors.filter((c) => c === INLANE_LIT)).toHaveLength(1);
+    expect(colors.filter((c) => c === SKILL_LIT)).toHaveLength(1);
+    expectCleanPass(rig);
+  });
+
+  it("a live save spark draws one SAVE_LIT streak under lighter", () => {
+    const rig = makeRig();
+    const pool = new ParticlePool();
+    pool.emitSpark(SPARK_SAVE, 1.3, 5.7, 0, -1, 0, 2, 2, 0.4, 0.4);
+    pool.emitSpark(SPARK_SAVE, 1.3, 5.7, 0.5, -0.8, 0, 2.5, 2.5, 0.4, 0.4);
+    pool.tick();
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 0.5 }));
+    const { start } = particlePass(rig.rec);
+    const colors: string[] = [];
+    rig.rec.log.forEach((e, i) => {
+      if (i <= start || e.kind !== "call" || e.name !== "stroke") return;
+      expect(stateAt(rig.rec, i, "globalCompositeOperation", "source-over")).toBe("lighter");
+      colors.push(stateAt(rig.rec, i, "strokeStyle", "") as string);
+    });
+    expect(colors).toEqual([SAVE_LIT, SAVE_LIT]);
+    expectCleanPass(rig);
+  });
+
+  it("footprint (T-6-28): over a glint's whole life the drawn side never exceeds 0.24 m, below the 0.4 m sensor", () => {
+    expect(STAR_GLINT_M).toBe(0.24);
+    expect(STAR_GLINT_M).toBeLessThan(0.4);
+    const rig = makeRig();
+    const pool = new ParticlePool();
+    pool.emitGlint(GLINT_ROLLOVER, 1, 2);
+    pool.emitGlint(GLINT_INLANE, 0.6, 7);
+    pool.emitGlint(GLINT_SKILL, 2.2, 1.9);
+    let maxSide = 0;
+    let stamps = 0;
+    for (let t = 0; t < 42; t++) {
+      rig.rec.clear();
+      rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 1 }));
+      for (const d of starDraws(rig)) {
+        maxSide = Math.max(maxSide, d.call.args[3] as number, d.call.args[4] as number);
+        stamps++;
+      }
+      pool.tick();
+    }
+    expect(stamps).toBe(3 * 42);
+    expect(maxSide).toBeLessThanOrEqual(STAR_GLINT_M + 1e-12);
+    rig.rec.clear();
+    rig.renderer.draw(frameOf(rig.world, { effects: particleEffects(pool), alpha: 1 }));
+    expect(starDraws(rig)).toHaveLength(0);
   });
 });

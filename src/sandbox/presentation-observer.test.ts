@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
+import type { SaveKind } from "../game/ball-save";
 import { BonusCounters, BonusTally } from "../game/bonus";
 import { SKILL_SHOT_MAX_POINTS, type NudgeDir } from "../game/tuning";
 import type { GameState } from "../game/game-session";
@@ -32,6 +33,7 @@ class FakeSession implements ObserverSession {
   nudges = 0;
   lastNudgeDir: NudgeDir = "left";
   saves = 0;
+  lastSaveKind: SaveKind | "none" = "none";
   newBests = 0;
   elapsed = 0;
   readonly tally = new BonusTally();
@@ -64,6 +66,9 @@ class FakeSession implements ObserverSession {
   }
   getSaveCount(): number {
     return this.saves;
+  }
+  getLastSaveKind(): SaveKind | "none" {
+    return this.lastSaveKind;
   }
   getNewBestCount(): number {
     return this.newBests;
@@ -124,7 +129,10 @@ class SpyFlash implements FlashSink {
   }
 }
 
-/** Records every effects call as "nudge:<dir>", "tilt" or "drain" (06-09). */
+/**
+ * Records every effects call as "nudge:<dir>", "tilt" or "drain" (06-09), and
+ * "skill:<lane>" or "save:<kind>" (06-13).
+ */
 class SpyFx implements ObserverFx {
   readonly calls: string[] = [];
   onNudge(dir: NudgeDir): void {
@@ -135,6 +143,12 @@ class SpyFx implements ObserverFx {
   }
   onDrain(): void {
     this.calls.push("drain");
+  }
+  onSkillShot(laneId: number): void {
+    this.calls.push(`skill:${laneId}`);
+  }
+  onSave(kind: SaveKind | "none"): void {
+    this.calls.push(`save:${kind}`);
   }
 }
 
@@ -793,5 +807,66 @@ describe("PresentationObserver: high score fanfare (06-11, D-15, D-25)", () => {
     );
     observer.observe();
     expect(cues.size).toBe(0);
+  });
+});
+
+describe("PresentationObserver: skill-shot and save effects (06-13, D-19)", () => {
+  it("a skill-count increment calls fx.onSkillShot(getLastSkillLane()) once, after its cue", () => {
+    const r = rig("playing", 1);
+    r.session.skillShots = 1;
+    r.session.lastSkillLane = 402;
+    r.session.lastSkillValue = 5000;
+    expect(step(r)).toEqual(["skillShot"]);
+    expect(r.fx.calls).toEqual(["skill:402"]);
+    step(r);
+    expect(r.fx.calls).toEqual(["skill:402"]);
+  });
+
+  it("a kickback save-count increment calls fx.onSave(kickback) once", () => {
+    const r = rig("playing", 1);
+    r.session.saves = 1;
+    r.session.lastSaveKind = "kickback";
+    expect(step(r)).toEqual(["ballSave"]);
+    expect(r.fx.calls).toEqual(["save:kickback"]);
+    step(r);
+    expect(r.fx.calls).toEqual(["save:kickback"]);
+  });
+
+  it("a backstop save calls onDrain then fx.onSave(backstop), once each", () => {
+    const r = rig("playing", 1);
+    r.session.drains = 1;
+    r.session.saves = 1;
+    r.session.lastSaveKind = "backstop";
+    expect(step(r)).toEqual(["drain", "ballSave"]);
+    expect(r.fx.calls).toEqual(["drain", "save:backstop"]);
+  });
+
+  it("a step with no skill or save increment calls neither", () => {
+    const r = rig("playing", 1);
+    r.session.lastSkillLane = 401;
+    r.session.lastSaveKind = "kickback";
+    step(r);
+    step(r);
+    expect(r.fx.calls).toEqual([]);
+  });
+
+  it("construction snapshots non-zero skill and save counts, so the first observe calls neither", () => {
+    const session = new FakeSession();
+    session.state = "playing";
+    session.skillShots = 2;
+    session.saves = 3;
+    const fx = new SpyFx();
+    const observer = new PresentationObserver(
+      new CueQueue(),
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+      fx,
+    );
+    observer.observe();
+    expect(fx.calls).toEqual([]);
   });
 });
