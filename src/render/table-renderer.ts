@@ -81,9 +81,9 @@
 import { BALL_RADIUS_M } from "../physics/constants";
 import type { BallState, FlipperState, PhysicsWorld } from "../physics/types";
 import { deriveKickFace } from "../game/reactive-elements";
-import type { ResolvedElement } from "../table/resolve";
+import { pathMidpoint, type ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
-import { pathMidpoint, type EffectsReader } from "./effects";
+import type { EffectsReader } from "./effects";
 import { FLASH_EPS, FLASH_TIMING, type FlashTracker } from "./flash";
 import { buildLampShapes, postPose, type LampReader, type LampShape, type PostPose } from "./lamps";
 import {

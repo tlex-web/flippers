@@ -272,3 +272,33 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
   }
   return out;
 }
+
+/**
+ * Point at half the arc length of an element's polyline (its first vertex if
+ * degenerate). Pure geometry over a resolved element, shared by the lamp
+ * lenses, the effects and the renderer (06-REVIEW IN-06).
+ */
+export function pathMidpoint(el: ResolvedElement): { x: number; y: number } {
+  const v = el.vertices;
+  const first = v[0];
+  if (!first) return { x: 0, y: 0 };
+  let total = 0;
+  for (let i = 1; i < v.length; i++) {
+    const a = v[i - 1];
+    const b = v[i];
+    if (a && b) total += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  let left = total / 2;
+  for (let i = 1; i < v.length; i++) {
+    const a = v[i - 1];
+    const b = v[i];
+    if (!a || !b) continue;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len > 0 && left <= len) {
+      const t = left / len;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    left -= len;
+  }
+  return { x: first.x, y: first.y };
+}

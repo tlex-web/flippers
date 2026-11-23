@@ -51,8 +51,7 @@
 
 import type { GameSession } from "../game/game-session";
 import { SKILL_SHOT_LANES } from "../game/tuning";
-import type { ResolvedElement } from "../table/resolve";
-import { pathMidpoint } from "./effects";
+import { pathMidpoint, type ResolvedElement } from "../table/resolve";
 import { FLASH_TIMING, flashLevel } from "./flash";
 import {
   INLANE_LIT,

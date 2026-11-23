@@ -5,8 +5,8 @@ import type { GameState } from "../game/game-session";
 import type { SkillPhase } from "../game/skill-shot";
 import { SKILL_SHOT_LANES } from "../game/tuning";
 import { PlanckWorld } from "../physics/planck-world";
+import { pathMidpoint } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
-import { pathMidpoint } from "./effects";
 import { flashLevel } from "./flash";
 import {
   buildLampShapes,
