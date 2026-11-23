@@ -270,26 +270,36 @@ const LEFT_LANE_GUIDE: readonly Vec2[] = [
 const ROLLOVER_Y = 0.95;
 
 /**
+ * Inlane exit line (y): shared by the left sling's lower-left vertex and the
+ * left inlane sensor, so the two cannot drift apart.
+ */
+const INLANE_Y = 4.6;
+
+/**
  * Left slingshot: a closed triangle above the left bat. Its vertical face
- * (x = 0.86) bounds the inlane; its lower face clears the raised bat; the
- * passage from its lower-left corner to the funnel wall is ≈ 0.45 m.
+ * (x = 0.86) bounds the inlane. Its lower face clears the raised bat by
+ * ≈ 0.453 m over the whole sweep, limit overshoot included (rule (1), WR-03;
+ * moved up-table 0.35 m in phase 06.1). The passage from its lower-left corner
+ * to the funnel wall is ≈ 0.65 m. Do not move it further: Δ 0.40 traps a
+ * dead-flipper ball near the left hinge.
  */
 const LEFT_SLING: readonly Vec2[] = [
-  { x: 0.86, y: 4.2 },
-  { x: 0.86, y: 4.95 },
-  { x: 1.16, y: 5.1 },
+  { x: 0.86, y: 3.85 },
+  { x: 0.86, y: INLANE_Y },
+  { x: 1.16, y: 4.75 },
 ];
 
 /** Left inlane sensor: across the inlane from the funnel wall to the sling. */
 const LEFT_INLANE: readonly Vec2[] = [
-  { x: 0.33, y: 4.95 },
-  { x: 0.84, y: 4.95 },
+  { x: 0.33, y: INLANE_Y },
+  { x: 0.84, y: INLANE_Y },
 ];
 
 /**
  * Open mid-field below the orbit guides and lane guides, around the bumper
  * cluster: the region the 03-03 table soak and the seeded flow proof draw ball
- * drop points from (callers reject points too close to a collider).
+ * drop points from. The left sling's top vertex (0.86, 3.85) and its mirror lie
+ * inside the region since 06.1; callers reject points too close to a collider.
  */
 export const OPEN_FIELD_REGION = {
   minX: 0.45,

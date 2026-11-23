@@ -307,7 +307,7 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
     if (!f) throw new Error("no face");
     // The hypotenuse, in whichever direction the loop closes it.
     const ends = [`${f.ax},${f.ay}`, `${f.bx},${f.by}`].sort();
-    expect(ends).toEqual(["0.86,4.2", "1.16,5.1"]);
+    expect(ends).toEqual(["0.86,3.85", "1.16,4.75"]);
     expect(f.nx).toBeCloseTo(0.9487, 3);
     expect(f.ny).toBeCloseTo(-0.3162, 3);
   });
@@ -328,24 +328,24 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
 describe("ReactiveElements slingshot filter (ELEM-02)", () => {
   it("a contact on the passive vertical face never kicks or scores", () => {
     const rig = makeRig(TABLE_SPEC);
-    rig.world.addBall(0, 0.66, 4.6);
-    rig.step([ev("slingshot", 300, 0.05, 0, 0.86, 4.6)]);
+    rig.world.addBall(0, 0.66, 4.25);
+    rig.step([ev("slingshot", 300, 0.05, 0, 0.86, 4.25)]);
     expect(rig.gate.awards).toHaveLength(0);
     expect(rig.world.impulses).toHaveLength(0);
   });
 
   it("a rolling contact on the face (0.0015) never kicks or scores", () => {
     const rig = makeRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
-    rig.step([ev("slingshot", 300, 0.0015, 0, 0.963, 4.479)]);
+    rig.world.addBall(0, 1.15, 4.07);
+    rig.step([ev("slingshot", 300, 0.0015, 0, 0.963, 4.129)]);
     expect(rig.gate.awards).toHaveLength(0);
     expect(rig.world.impulses).toHaveLength(0);
   });
 
   it("a face strike (0.0393) scores SLING_POINTS and kicks once along the face normal", () => {
     const rig = makeRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
-    rig.step([ev("slingshot", 300, 0.0393, 0, 0.963, 4.479)]);
+    rig.world.addBall(0, 1.15, 4.07);
+    rig.step([ev("slingshot", 300, 0.0393, 0, 0.963, 4.129)]);
     expect(rig.gate.awards).toEqual([SLING_POINTS]);
     expect(rig.world.impulses).toHaveLength(1);
     const call = rig.world.impulses[0];
@@ -457,7 +457,7 @@ function hooks(log: readonly LogEntry[]): LogEntry[] {
 }
 
 /** The real-table sling-300 face strike (see the ELEM-02 cases). */
-const FACE_STRIKE = { impulse: 0.0393, x: 0.963, y: 4.479 };
+const FACE_STRIKE = { impulse: 0.0393, x: 0.963, y: 4.129 };
 
 describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () => {
   it("a registered bumper hit logs the award, then onKick with the raw normalImpulse", () => {
@@ -493,7 +493,7 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
 
   it("while not live, no bumper, slingshot or sensor event produces a feedback call", () => {
     const rig = loggedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     rig.gate.live = false;
     rig.step([
       ev("bumper", 200, 0.0048),
@@ -506,7 +506,7 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
 
   it("a slingshot event below SLING_MIN_IMPULSE produces no feedback call", () => {
     const rig = loggedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     const below = SLING_MIN_IMPULSE * 0.99;
     rig.step([ev("slingshot", 300, below, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     expect(rig.log).toEqual([]);
@@ -514,7 +514,7 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
 
   it("a slingshot event farther than SLING_FACE_TOL from the kick face produces no feedback call", () => {
     const rig = loggedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     const f = deriveKickFace(tableElement(300));
     if (!f) throw new Error("no face");
     // Midpoint of the face, pushed out along the normal just past the tolerance.
@@ -527,7 +527,7 @@ describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () =
 
   it("a registered slingshot strike gives exactly one onKick(slingshot, id, impulse), after its award", () => {
     const rig = loggedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     expect(rig.log).toEqual([
       ["award", SLING_POINTS],
@@ -645,7 +645,7 @@ describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", 
 
   it("a registered sling strike calls onSwitch(slingshot, id, false) after its award", () => {
     const rig = hookedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     rig.step([ev("slingshot", 300, FACE_STRIKE.impulse, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     expect(rig.log).toEqual([
       ["award", SLING_POINTS],
@@ -656,7 +656,7 @@ describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", 
 
   it("a sub-threshold sling impulse and an off-face strike call nothing", () => {
     const rig = hookedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     rig.step([ev("slingshot", 300, SLING_MIN_IMPULSE * 0.99, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     const f = deriveKickFace(tableElement(300));
     if (!f) throw new Error("no face");
@@ -684,7 +684,7 @@ describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", 
 
   it("any contact while the gate is not live calls nothing", () => {
     const rig = hookedRig(TABLE_SPEC);
-    rig.world.addBall(0, 1.15, 4.42);
+    rig.world.addBall(0, 1.15, 4.07);
     rig.gate.live = false;
     rig.step([
       ev("bumper", 200, 0.0048),
@@ -735,7 +735,7 @@ describe("ReactiveElements rule hooks: the onSwitch contract (06-01, PLSH-05)", 
     const plain = makeRig(TABLE_SPEC);
     const hooked = hookedRig(TABLE_SPEC);
     for (const rig of [plain, hooked]) {
-      rig.world.addBall(0, 1.15, 4.42);
+      rig.world.addBall(0, 1.15, 4.07);
       for (const b of batches()) rig.step(b);
     }
     expect(hooked.gate.awards).toEqual(plain.gate.awards);
