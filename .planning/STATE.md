@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: "06.1"
-status: completed
+current_phase: "06.2"
+current_phase_name: "Address tech debt: ball-search soft-lock + 06.1 review triage"
+status: executing
 stopped_at: Phase 06.1 complete — all phases complete
-last_updated: "2026-11-23T18:23:12.130Z"
+last_updated: "2026-11-23T19:53:44.072Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 06.1 complete
-state_head: 6f4c81e4bb0e31abac48cc93a0ccfbbc537ca42c
+state_head: be48ce4abfa575dec546cc6c903b8b5628bb8993
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 6
-  total_plans: 61
+  total_plans: 67
   completed_plans: 61
-  percent: 86
 milestone_name: milestone
 ---
 
@@ -24,13 +24,13 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 close. All phases are complete (Phase 06.1 was last)
+**Current focus:** Phase 06.2: ball-search soft-lock + 06.1 review triage (before v1.0 close)
 
 ## Current Position
 
-Phase: 06.1
+Phase: 06.2 (Address tech debt: ball-search soft-lock + 06.1 review triage) — READY TO EXECUTE
 Plan: Not started
-Status: All phases complete
+Status: Ready to execute
 Last activity: 2026-11-23 — Phase 06.1 complete
 
 Progress: [█████████░] 86%
@@ -312,6 +312,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 06.1 inserted after Phase 6: Address tech debt: bat/sling pinch (WR-03) + review hygiene (URGENT)
+- Phase 06.2 inserted after Phase 06.1: Address tech debt: ball-search soft-lock + 06.1 review triage (from v1.0 re-audit) (URGENT)
 
 ## Deferred Items
 
