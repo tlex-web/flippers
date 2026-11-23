@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Reactive Elements & Game Rules** - Bumpers/slingshots/lanes score, a 3-ball loop runs, and nudge/tilt works (completed 2026-11-21)
 - [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
+- [ ] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene**
 
 ## Phase Details
 
@@ -277,3 +278,24 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Reactive Elements & Game Rules | 15/15 | Complete    | 2026-11-21 |
 | 5. Rendering & Audio | 8/8 | Complete    | 2026-11-22 |
 | 6. Juice & Polish | 14/14 | Complete    | 2026-11-23 |
+
+### Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene (INSERTED)
+
+**Goal:** A raised bat can no longer pinch the ball against a slingshot (WR-03: both slings and their inlane sensors move 0.35 m up-table, proven by a seeded every-step sweep with a RED control and approved by eye and feel), and the open Phase 4-6 review and format debt is fixed or explicitly dispositioned.
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 5 plans (4 waves)
+
+Plans:
+**Wave 1**
+- [ ] 06.1-01-PLAN.md — Format hygiene: .prettierignore scopes Prettier to source, one formatting-only commit over src/ and index.html, 05 deferred rows closed [wave 1]
+
+**Wave 2** *(blocked on Wave 1; both plans run in parallel)*
+- [ ] 06.1-02-PLAN.md — WR-03 fix (D-01): sling-pinch sweep RED then GREEN with an old-geometry RED control, slings and inlanes moved 0.35 m up-table, rule (1) clearance case, translated pins, kickback e2e re-authored, user look-and-feel checkpoint [wave 2]
+- [ ] 06.1-03-PLAN.md — 04 review hygiene: keyLabel rejects blank/control/mark labels (IN-04), flipper-input docs and C4b/C5b pins (IN-01..IN-03), FSM dead stores and wording (IN-07, IN-08; IN-06 untouched per D-03) [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 06.1-04-PLAN.md — 06 review hygiene: SaveKind moved to game-session.ts (IN-02), HUD skill-step test pins its guard with a recorded mutation (IN-01) [wave 3]
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 06.1-05-PLAN.md — Phase gate plus records: 04 and 06 ledgers to open 0, IN-06 deferred (D-03), lost soft-lock finding noted plus backlog todo (D-02), 02 jam-lag doc note (D-04) [wave 4]
