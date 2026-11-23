@@ -1133,7 +1133,7 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(1);
     expect(r.session.getLastSaveKind()).toBe("kickback");
     expect(r.session.getLastSaveStep()).toBe(1);
-    expect(r.session.getSaveLampPhase()).toBe("off");
+    expect(r.session.getSaveLampPhase()).toBe("steady"); // the grace still protects
     expect(r.session.trySave(FIRST_ID)).toBe(false);
     expect(r.session.getSaveCount()).toBe(1);
     expect(r.calls).toHaveLength(1); // a kickback touches no ball
@@ -1413,6 +1413,46 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     startAndDrain(g, BALLS_PER_GAME);
     expect(g.session.getState()).toBe("game-over");
     expect(g.session.getSaveLampPhase()).toBe("off");
+  });
+
+  it("the save lamp stays lit through the kickback grace: steady, then blink, then off once it ends (06-REVIEW IN-02)", () => {
+    // Kick on step 1: the grace runs through step BALL_SAVE_STEPS, the
+    // original window's last step.
+    const r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID)).toBe(true);
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(BALL_SAVE_STEPS - BALL_SAVE_BLINK_STEPS - 2); // 241 grace steps follow
+    expect(r.session.getSaveLampPhase()).toBe("steady");
+    r.tick(1); // 240 follow
+    expect(r.session.getSaveLampPhase()).toBe("blink");
+    r.tick(BALL_SAVE_BLINK_STEPS); // the grace's last step
+    expect(r.session.getStep()).toBe(BALL_SAVE_STEPS);
+    expect(r.session.getSaveLampPhase()).toBe("blink");
+    r.tick(1);
+    expect(r.session.getSaveLampPhase()).toBe("off");
+
+    // Kick on step 800 (41 window steps left): the floor governs and the lamp
+    // blinks from the kick to the floor's last step.
+    const late = makeRig();
+    startSaved(late);
+    late.tick(799);
+    expect(late.session.getSaveLampPhase()).toBe("blink");
+    expect(late.session.trySave(FIRST_ID)).toBe(true);
+    expect(late.session.getSaveLampPhase()).toBe("blink");
+    late.tick(KICKBACK_GRACE_STEPS);
+    expect(late.session.getSaveLampPhase()).toBe("blink");
+    late.tick(1);
+    expect(late.session.getSaveLampPhase()).toBe("off");
+
+    // A grace re-serve ends the grace: the lamp goes off.
+    const used = makeRig();
+    startSaved(used);
+    expect(used.session.trySave(FIRST_ID)).toBe(true);
+    used.tick(10);
+    used.step(drainOf(FIRST_ID));
+    expect(used.session.getState()).toBe("playing");
+    expect(used.session.getSaveLampPhase()).toBe("off");
   });
 
   it("the save is disarmed in game over after the last ball: onStart re-arms it", () => {

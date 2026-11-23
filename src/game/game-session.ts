@@ -139,6 +139,7 @@ import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
 import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
 import {
+  BALL_SAVE_BLINK_STEPS,
   BALL_SAVE_STEPS,
   KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
@@ -668,9 +669,21 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.lastSaveStep;
   }
 
-  /** The save lamp: the `BallSave` phase while playing, off in any other state. */
+  /**
+   * The save lamp: off in any state but playing. While playing, inside a
+   * kickback's grace it stays lit for the protection the grace still gives
+   * (06-REVIEW IN-02): steady while more than `BALL_SAVE_BLINK_STEPS` grace
+   * steps follow this one, blink for the rest. A grace that runs to the end of
+   * the original window therefore reads as the save would have (blinking one
+   * step sooner), and a kick late in the window blinks through the
+   * `KICKBACK_GRACE_STEPS` floor. Otherwise it is the `BallSave` phase.
+   */
   getSaveLampPhase(): SaveLampPhase {
-    return this.state === "playing" ? this.save.lampPhase() : "off";
+    if (this.state !== "playing") return "off";
+    if (this.inKickbackGrace()) {
+      return this.graceEndsAt - this.step > BALL_SAVE_BLINK_STEPS ? "steady" : "blink";
+    }
+    return this.save.lampPhase();
   }
 
   /** Fixed steps advanced by `tick()` since construction. */
