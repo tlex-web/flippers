@@ -459,6 +459,30 @@ describe("TABLE_SPEC layout", () => {
     }
   });
 
+  it("(f) inlane sensors reach the funnel wall: each lane sensor's wall-side end lies within 0.02 m of its funnel wall (06.1-REVIEW WR-01)", () => {
+    const elements = resolve(TABLE_SPEC);
+    const byId = (id: number) => {
+      const el = elements.find((e) => e.id === id);
+      if (!el) throw new Error(`no element ${id}`);
+      return el;
+    };
+    for (const [id, wallId] of [
+      [500, 120],
+      [501, 121],
+    ] as const) {
+      const sensorSegs = byId(id).segments;
+      const wallSegs = byId(wallId).segments;
+      expect(sensorSegs).toHaveLength(1);
+      expect(wallSegs).toHaveLength(1);
+      const sensor = sensorSegs[0] as Segment;
+      const wall = wallSegs[0] as Segment;
+      const d = Math.min(distToSegment(sensor.a, wall), distToSegment(sensor.b, wall));
+      const msg = `lane ${id} wall-side end ${d.toFixed(4)} m from wall ${wallId}`;
+      expect(d, msg).toBeLessThanOrEqual(0.02);
+      expect(d, msg).toBeGreaterThan(0);
+    }
+  });
+
   it("(d) drains seeded open-field drops within 30 s with no trap and no escape", () => {
     const probe = makeTableWorld();
     const walls = probe.getBoundarySegments();
