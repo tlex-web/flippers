@@ -549,7 +549,7 @@ describe("buildLampShapes (D-21 lamp table)", () => {
     }
   });
 
-  it("builds the two inlane arrows: a 0.16 x 0.12 head plus a 0.05 x 0.08 stem at (0.585, 4.72) and its mirror", () => {
+  it("builds the two inlane arrows: a 0.16 x 0.12 head plus a 0.05 x 0.08 stem at (0.585, 4.37) and its mirror", () => {
     for (const [lamp, cx] of [
       [LAMP_INLANE_500, 0.585],
       [LAMP_INLANE_501, 2.315],
@@ -565,14 +565,14 @@ describe("buildLampShapes (D-21 lamp table)", () => {
       expect(s.haloRadius).toBe(0.14);
       expect(s.lensRadius).toBeCloseTo(0.08, 12);
       expect(s.cx).toBeCloseTo(cx, 12);
-      expect(s.cy).toBeCloseTo(4.72, 12);
+      expect(s.cy).toBeCloseTo(4.37, 12);
       const xs = Array.from(s.xs);
       const ys = Array.from(s.ys);
       expect(xs.length).toBe(7);
-      // Head: 0.16 wide; whole arrow 0.12 + 0.08 tall, centered on (cx, 4.72).
+      // Head: 0.16 wide; whole arrow 0.12 + 0.08 tall, centered on (cx, 4.37).
       expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.16, 12);
-      expect(Math.min(...ys)).toBeCloseTo(4.72 - 0.1, 12);
-      expect(Math.max(...ys)).toBeCloseTo(4.72 + 0.1, 12);
+      expect(Math.min(...ys)).toBeCloseTo(4.37 - 0.1, 12);
+      expect(Math.max(...ys)).toBeCloseTo(4.37 + 0.1, 12);
       // Upward: the apex is the single top-most vertex, on the center line.
       const top = Math.min(...ys);
       expect(ys.filter((y) => Math.abs(y - top) < 1e-9).length).toBe(1);

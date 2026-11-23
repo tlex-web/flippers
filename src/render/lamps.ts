@@ -129,7 +129,7 @@ const ARROW_STEM_W_M = 0.05;
 const ARROW_STEM_H_M = 0.08;
 /**
  * Inlane arrow center offset (m): this far up-table of its inlane sensor's
- * midpoint (4.95 - 0.23 = 4.72 on the current table), on the same x.
+ * midpoint (4.6 - 0.23 = 4.37 on the current table), on the same x.
  */
 const ARROW_RISE_M = 0.23;
 /** Arrow halo radius (m). */

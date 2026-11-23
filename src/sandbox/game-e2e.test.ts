@@ -489,7 +489,7 @@ describe("IN-02 live: a release and re-press inside one fixed-step window", () =
  * touches nothing in either world, so the point is proven clear, not assumed
  * (the plan point 1.45, 2.2 reached the upper-right bumper within the cooldown).
  */
-const FREE_BALL = { x: 1.0, y: 3.8 } as const;
+const FREE_BALL = { x: 1.2, y: 3.8 } as const;
 const KEY_X = key("KeyX");
 
 /**
@@ -1011,6 +1011,28 @@ function noKickback(session: GameSession): RuleHooks {
   };
 }
 
+/**
+ * The player input that keeps the live-composition kickback's ball alive past
+ * the original save window (phase 06.1-02, PLSH-07). With the slings moved
+ * 0.35 m up-table (WR-03) the kicked ball, left alone, drains at session step
+ * 783: inside the original window (exit 235 + BALL_SAVE_STEPS = 1075), where
+ * the CR-01 grace backstops it, so the case's real-drain guards cannot hold
+ * without play. These values were found by a deterministic search that
+ * replayed this exact plunge and kick, then tried, in order, side (KeyZ, then
+ * Slash) x hold (12 steps, 48 steps, then a cradle held until
+ * KICKBACK_CRADLE_PAST_WINDOW_STEPS past the window) x press offset 0..300
+ * steps after the kick, against every guard in the case. The first candidate
+ * whose offsets o - 1, o and o + 1 all pass (same side and hold) is Slash,
+ * cradle, o = 1 (o = 0, 1, 2 each drain at session step 1294). Measured: kick
+ * at 534, drain at 1294 (> 1075, and 760 steps after the kick > the
+ * KICKBACK_GRACE_STEPS floor of 240).
+ */
+const KICKBACK_CRADLE_KEY = SLASH;
+/** Steps after the kick step at which the cradle key goes down. */
+const KICKBACK_CRADLE_OFFSET_STEPS = 1;
+/** The cradle is released this many steps past the original save window's end. */
+const KICKBACK_CRADLE_PAST_WINDOW_STEPS = 30;
+
 describe("ball save (PLSH-07): a launched ball that drains inside the window is re-served without costing the ball", () => {
   it("a full plunge drains inside BALL_SAVE_STEPS of the chute exit, is re-served on the plunger as ball 1, and the next drain enters the bonus state", () => {
     // Production options with the save on; the kickback is denied so this
@@ -1066,7 +1088,7 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(g.session.getSaveLampPhase()).toBe("steady"); // re-armed on the next serve
   });
 
-  it("in the live composition the same plunge is kicked back up off the center post: one kickback save, same ball, and its next drain enters the bonus state", () => {
+  it("in the live composition the same plunge is kicked back up off the center post and kept alive by a right-bat cradle: one kickback save, same ball, and its next drain enters the bonus state", () => {
     const g = makeGame(); // main.ts composition: the session is the rule hooks
     pressEnter(g);
     runSteps(g, FRAME_120_HZ, SETTLE_STEPS);
@@ -1103,6 +1125,23 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(g.session.activeBallId).toBe(first);
     expect(ballById(g, first).vy).toBeLessThan(0);
     expect(g.session.getBall()).toBe(1);
+
+    // Keep the kicked ball alive past the original save window: the player
+    // cradles it on the right bat (pressed KICKBACK_CRADLE_OFFSET_STEPS after
+    // the kick, held until KICKBACK_CRADLE_PAST_WINDOW_STEPS past the window),
+    // then lets go. No key is held from then on, so the drain is the ball's own.
+    while (g.session.getStep() < kickStep + KICKBACK_CRADLE_OFFSET_STEPS) {
+      step += g.frame(FRAME_120_HZ);
+    }
+    expect(g.session.getStep()).toBe(kickStep + KICKBACK_CRADLE_OFFSET_STEPS);
+    g.input.handleKeyDown(KICKBACK_CRADLE_KEY);
+    const cradleReleaseStep = exitSessionStep + BALL_SAVE_STEPS + KICKBACK_CRADLE_PAST_WINDOW_STEPS;
+    while (g.session.getStep() < cradleReleaseStep) {
+      if (g.drainedIds.includes(first)) throw new Error(`ball ${first} drained off the cradle`);
+      step += g.frame(FRAME_120_HZ);
+    }
+    g.input.handleKeyUp(KICKBACK_CRADLE_KEY);
+    expect(g.drainedIds).not.toContain(first);
 
     // One save per ball: the kicked ball's next drain, past both the kickback
     // grace floor and the original save window, is real. Preconditions
