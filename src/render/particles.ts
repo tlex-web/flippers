@@ -19,6 +19,8 @@
  * A slot is live while `age < life`; a fresh pool has every slot dead (both 0).
  * Sparks feel drag PARTICLE_DRAG_PER_S and gravity PARTICLE_GRAVITY along +y;
  * rings never move, they only age (the renderer grows them from `size`).
+ * A spark's life is capped at emit so it never travels farther than
+ * PARTICLE_MAX_TRAVEL_M from its spawn point (photosensitive footprint, T-6-25).
  *
  * DOM-free and engine-free.
  */
@@ -44,10 +46,44 @@ export const SPARK_SLING = 2;
 /** A bumper shockwave ring (FLASH_BUMPER). */
 export const RING = 3;
 
+/**
+ * Farthest a spark may travel from its spawn point before it dies, m
+ * (photosensitive footprint, T-6-25: the bound is about 0.63 m; 0.6 leaves
+ * headroom for float32 storage).
+ */
+export const PARTICLE_MAX_TRAVEL_M = 0.6;
+
 /** Velocity factor applied every step. */
 const DAMP = 1 - PARTICLE_DRAG_PER_S * FIXED_DT;
 /** Gravity velocity gain per step. */
 const GRAVITY_STEP = PARTICLE_GRAVITY * FIXED_DT;
+
+/**
+ * Upper bound on how far a spark launched at `speed` gets from its spawn point
+ * in `steps` ticks of `tick()`. The tick law integrates exactly to a launch
+ * part `speed * DAMP * (1 - DAMP^n) / drag` along the launch direction plus a
+ * gravity part `(g / drag) * (n * dt - DAMP * (1 - DAMP^n) / drag)` along +y;
+ * their sum bounds the distance for every direction (triangle inequality) and
+ * grows with `steps`, so it also bounds every earlier step.
+ */
+export function sparkTravelBound(speed: number, steps: number): number {
+  const k = PARTICLE_DRAG_PER_S;
+  const decay = DAMP * (1 - Math.pow(DAMP, steps));
+  return (speed * decay) / k + (PARTICLE_GRAVITY / k) * (steps * FIXED_DT - decay / k);
+}
+
+/**
+ * `life` shortened, when needed, so a spark of `speed` stays within
+ * PARTICLE_MAX_TRAVEL_M. The step count is taken one high to cover float32
+ * rounding of the stored age and life; a capped life is a whole number of
+ * steps one below the largest count the bound allows.
+ */
+function capSparkLife(speed: number, life: number): number {
+  let steps = Math.ceil(life / FIXED_DT) + 1;
+  if (sparkTravelBound(speed, steps) <= PARTICLE_MAX_TRAVEL_M) return life;
+  while (steps > 1 && sparkTravelBound(speed, steps) > PARTICLE_MAX_TRAVEL_M) steps--;
+  return (steps - 1) * FIXED_DT;
+}
 
 export class ParticlePool {
   readonly capacity: number;
@@ -90,7 +126,9 @@ export class ParticlePool {
    * One spark at (x, y): its direction lies within +/- `spreadRad` of the
    * (nx, ny) direction, its speed in [speedMin, speedMax] and its life in
    * [lifeMin, lifeMax], each drawn from the pool's stream (angle, speed, life).
-   * Overwrites the oldest slot.
+   * The life is then capped so the spark's travel stays within
+   * PARTICLE_MAX_TRAVEL_M (T-6-25); the draws are unchanged, so the stream
+   * stays in step. Overwrites the oldest slot.
    */
   emitSpark(
     kind: number,
@@ -107,7 +145,7 @@ export class ParticlePool {
     const rnd = this.random;
     const angle = Math.atan2(ny, nx) + (2 * rnd() - 1) * spreadRad;
     const speed = speedMin + (speedMax - speedMin) * rnd();
-    const life = lifeMin + (lifeMax - lifeMin) * rnd();
+    const life = capSparkLife(speed, lifeMin + (lifeMax - lifeMin) * rnd());
     const i = this.head;
     this.kind[i] = kind;
     this.x[i] = x;
