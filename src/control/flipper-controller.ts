@@ -17,7 +17,7 @@
  * `+1` on EVERY update — it never releases to 0 while up, or gravity + the ball's
  * weight would sag the bat off the raise limit.
  *
- * Limit detection is mirror-independent. The UP limit is detected by settling:
+ * Limit detection is mirror-independent. The raise limit is detected by settling:
  * the bat has REACHED it when its angle stops advancing (|delta| <
  * ANGLE_SETTLE_EPS) after it has actually moved. The detector is sign-agnostic:
  * since the 02 GAP-01 raiseSign fix, motor +1 raises the absolute

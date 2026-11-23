@@ -118,13 +118,13 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.lastMotor(0)).toBe(1);
   });
 
-  it("reaches held-up at the upper limit and STILL commands +1 every update (never 0) — D-06(1)", () => {
+  it("reaches held-up at the raise limit and STILL commands +1 every update (never 0) — D-06(1)", () => {
     const world = new SpyWorld([{ id: 0, angle: L_REST }]);
     const ctrl = new FlipperController(world);
 
     ctrl.onPressEdge(0);
     sweep(world, ctrl, 0, L_REST, L_UP, 4); // bat sweeps up
-    hold(world, ctrl, 0, L_UP, 2); // pinned at the upper limit -> settles to held-up
+    hold(world, ctrl, 0, L_UP, 2); // pinned at the raise limit -> settles to held-up
     expect(ctrl.getPhase(0)).toBe("held-up");
 
     // The cradle: every further update must re-assert +1, and NEVER release to 0.
@@ -136,7 +136,7 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.motorCalls.some((c) => c.direction === 0)).toBe(false);
   });
 
-  it("a release edge -> returning (-1), and settling at the lower limit -> resting (0)", () => {
+  it("a release edge -> returning (-1), and settling at the rest limit -> resting (0)", () => {
     const world = new SpyWorld([{ id: 0, angle: L_REST }]);
     const ctrl = new FlipperController(world);
 
@@ -151,7 +151,7 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.lastMotor(0)).toBe(-1);
 
     sweep(world, ctrl, 0, L_UP, L_REST, 4); // bat returns down
-    hold(world, ctrl, 0, L_REST, 2); // pinned at the lower limit -> resting
+    hold(world, ctrl, 0, L_REST, 2); // pinned at the rest limit -> resting
     expect(ctrl.getPhase(0)).toBe("resting");
     expect(world.lastMotor(0)).toBe(0);
   });
@@ -329,7 +329,7 @@ describe("FlipperController enable gate (GAME-03, R11, Pitfall 5)", () => {
     sweep(world, ctrl, 0, L_UP, L_REST, 4); // the dropped bat falls
     expect(ctrl.getPhase(0)).toBe("returning");
     expect(world.lastMotor(0)).toBe(-1);
-    hold(world, ctrl, 0, L_REST, 2); // pinned at the lower limit
+    hold(world, ctrl, 0, L_REST, 2); // pinned at the rest limit
     expect(ctrl.getPhase(0)).toBe("resting");
     expect(world.lastMotor(0)).toBe(0);
   });
