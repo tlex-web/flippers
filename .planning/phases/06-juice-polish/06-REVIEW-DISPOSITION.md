@@ -5,11 +5,11 @@ titles: json
 findings:
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The new HUD test \"a skill step cleared to -1 shows nothing\" passes without the guard it claims to pin"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`SaveKind` is still declared in `ball-save.ts`, which no longer uses it"
   - id: CR-01
     severity: critical
@@ -47,7 +47,7 @@ findings:
     severity: warning
     disposition: fixed
     title: "Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`"
-open: 2
+open: 0
 total: 11
 recorded: 2026-11-23T11:21:23.346Z
 ---
@@ -56,8 +56,8 @@ recorded: 2026-11-23T11:21:23.346Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
+| IN-01 | info | fixed | 06.1-04 8f1b9ae (HUD test steps to 50; mutation RED/GREEN recorded) |
+| IN-02 | info | fixed | 06.1-04 f420427 (SaveKind declared in game-session.ts) |
 | CR-01 | critical | fixed | 06-REVIEW-FIX.md (not in the current review) |
 | WR-01 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
 | IN-03 | info | fixed | 06-REVIEW-FIX.md (not in the current review) |
