@@ -1049,7 +1049,7 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(2);
   });
 
-  it("a backstop is the same ball: bonus counts, inlane flags, the skill phase and the ball number carry over", () => {
+  it("a backstop is the same ball: bonus counts, inlane flags and the ball number carry over", () => {
     const r = makeRig();
     startSaved(r);
     r.session.onSwitch("lane", 500, false); // first switch: disarms the skill shot
