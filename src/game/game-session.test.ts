@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
+import type { PlungerPhase } from "../control/plunger-controller";
 import type { BallId, BallSpec, BallState, CollisionEvent } from "../physics/types";
 import {
   BALLS_PER_GAME,
@@ -1067,6 +1068,29 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     const tally = r.session.getBonusTally();
     expect(tally.rows).toBe(2); // rollovers and inlanes from before the backstop
     expect(r.session.getBonusTotal()).toBe(2 * 1000 + 2000);
+  });
+
+  it("a backstop re-serve disarms an unresolved (frozen) skill shot: one attempt per ball (06-REVIEW IN-04)", () => {
+    let phase: PlungerPhase = "idle";
+    const r = makeRig({ plunger: { getPhase: () => phase } });
+    r.session.onStart();
+    expect(r.session.getSkillPhase()).toBe("rotating");
+    phase = "charging";
+    r.tick(1); // freezes the lane; spy balls at x = 0 start the save
+    expect(r.session.getSkillPhase()).toBe("frozen");
+    phase = "idle";
+    r.tick(1);
+    r.step(drainOf(FIRST_ID)); // drained without touching a scoring switch
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getSkillPhase()).toBe("off");
+    expect(r.session.getSkillLitLane()).toBe(-1);
+    r.tick(2);
+    expect(r.session.getSkillPhase()).toBe("off");
+    // A rollover on the re-served ball awards nothing.
+    r.session.onSwitch("rollover", 400, false);
+    expect(r.session.getSkillShotCount()).toBe(0);
+    expect(r.session.getScore()).toBe(0);
   });
 
   it("a tilt disarms the save: a drain while tilted inside the window is a forfeit tally, not a save", () => {

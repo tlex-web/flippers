@@ -98,8 +98,10 @@
  * is a backstop save: the ball is removed and a new one served to the plunger
  * through the private `reServe()`, with the same ball number, state playing
  * and the flippers on. That is the same ball (research A3): the bonus
- * counters, inlane flags, tilt meter and skill shot carry over and the save is
- * not re-armed, so it is one save per ball. `trySave(ballId)` spends the save
+ * counters, inlane flags and tilt meter carry over and the save is not
+ * re-armed, so it is one save per ball. The skill shot is disarmed: an
+ * unresolved (frozen) shot would otherwise reopen under the re-served ball and
+ * give it a second attempt, so it is one skill shot per ball (06-REVIEW IN-04). `trySave(ballId)` spends the save
  * as a kickback (the 06-08 center post); a drain of the kicked ball on the
  * step of the kickback or within `KICKBACK_GRACE_STEPS` after it is kept as a
  * backstop re-serve that counts once (research A4, 06-REVIEW CR-01: the kick
@@ -790,11 +792,13 @@ export class GameSession implements RulesGate, RuleHooks {
   /**
    * Re-serve the same ball after a backstop save: only a new ball at the spawn,
    * made active. State stays playing and the flippers stay on; the counters,
-   * inlane flags, tilt meter and skill shot are untouched and the save is not
-   * re-armed (research A3).
+   * inlane flags and tilt meter are untouched and the save is not re-armed
+   * (research A3). The skill shot is disarmed, so the same ball never gets a
+   * second attempt (06-REVIEW IN-04).
    */
   private reServe(): void {
     this.active = this.world.addBall(this.spawn);
+    this.skill.disarm();
   }
 
   /** Clear the tilt meter and the WARNING window (a new ball or a new game). */
