@@ -657,6 +657,25 @@ describe("HudView BALL SAVED row (plan 06-10 Task 2, 06-UI-SPEC row 5, D-10)", (
     expect(status.textContent).toBe("TILT · NO BONUS");
   });
 
+  it("game over inside the save window shows the GAME OVER prompt, not BALL SAVED (06-REVIEW WR-01)", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    src.state = "game-over";
+    src.step = 120;
+    view.update(src);
+    expect(status.textContent).not.toBe("BALL SAVED");
+    expect(status.textContent).toBe(statusText("gameOver", 0));
+  });
+
+  it("a save step cleared to -1 (the ball was lost) shows nothing on the next ball", () => {
+    const { view, src, status } = playing(100);
+    save(src, 100);
+    src.saveStep = -1;
+    src.step = 120;
+    view.update(src);
+    expect(status.textContent).toBe("");
+  });
+
   it("write-on-change: one write when BALL SAVED appears, none inside the window, one when it expires", () => {
     const { view, src, status } = playing(100);
     const before = status.writes;

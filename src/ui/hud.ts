@@ -78,7 +78,7 @@ export interface HudSource {
   isBonusForfeit(): boolean;
   /** Saves since construction, kickback or backstop. */
   getSaveCount(): number;
-  /** `getStep()` at the most recent save (-1 before any). */
+  /** `getStep()` at the most recent save of the ball in play (-1 before any, or once that ball is lost). */
   getLastSaveStep(): number;
   /** The best score (0 when none is stored or storage is unreadable). */
   getBest(): number;
@@ -295,7 +295,13 @@ export class HudView {
     const skillStep = src.getLastSkillStep();
     const saveStep = src.getLastSaveStep();
     const skillOn = src.getSkillShotCount() > 0 && now < skillStep + STATUS_TRANSIENT_STEPS;
-    const saveOn = src.getSaveCount() > 0 && now < saveStep + STATUS_TRANSIENT_STEPS;
+    // BALL SAVED belongs to a ball in play: never over the game-over prompt
+    // (the session also clears the save step when a ball is lost, 06-REVIEW WR-01).
+    const saveOn =
+      state === "playing" &&
+      src.getSaveCount() > 0 &&
+      saveStep >= 0 &&
+      now < saveStep + STATUS_TRANSIENT_STEPS;
     let code: StatusCode;
     let value = 0;
     if (state === "tilted") {

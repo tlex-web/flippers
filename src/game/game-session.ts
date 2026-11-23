@@ -274,7 +274,11 @@ export class GameSession implements RulesGate, RuleHooks {
   /** How the most recent save was spent ("none" before any). */
   private lastSaveKind: SaveKind | "none" = "none";
 
-  /** `step` at the most recent save, -1 before any. */
+  /**
+   * `step` at the most recent save of the ball in play, -1 before any and
+   * once that ball is lost (bonus entry, new game), so the HUD's BALL SAVED
+   * never outlives it (06-REVIEW WR-01).
+   */
   private lastSaveStep = -1;
 
   /**
@@ -327,6 +331,7 @@ export class GameSession implements RulesGate, RuleHooks {
         this.newBest = false;
         this.drained = NO_BALL;
         this.savedAtStep = -1;
+        this.lastSaveStep = -1;
         this.skill.reset();
         this.lastSkillStep = -1;
         this.lastSkillValue = 0;
@@ -375,6 +380,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.drainCount++;
     this.save.disarm();
     this.savedAtStep = -1;
+    this.lastSaveStep = -1;
     if (this.state === "tilted") this.tally.markForfeit();
     else this.tally.snapshot(this.bonusCounters);
     this.active = NO_BALL;
@@ -599,7 +605,10 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.lastSaveKind;
   }
 
-  /** `getStep()` at the most recent save (-1 before any). */
+  /**
+   * `getStep()` at the most recent save of the ball in play (-1 before any,
+   * and again once that ball drains to the bonus or a new game starts).
+   */
   getLastSaveStep(): number {
     return this.lastSaveStep;
   }

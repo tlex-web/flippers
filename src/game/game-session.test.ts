@@ -1236,6 +1236,25 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(1);
   });
 
+  it("a lost ball and a new game clear getLastSaveStep() so BALL SAVED never outlives the saved ball (06-REVIEW WR-01)", () => {
+    const r = makeRig();
+    startSaved(r);
+    r.step(drainOf(FIRST_ID)); // backstop save on step 1
+    expect(r.session.getLastSaveStep()).toBe(1);
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId)); // the re-served ball is lost
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getLastSaveStep()).toBe(-1);
+    expect(r.session.getSaveCount()).toBe(1);
+
+    const g = makeRig();
+    startSaved(g);
+    expect(g.session.trySave(FIRST_ID)).toBe(true);
+    nudgeTimes(g, 4); // tilt: the drain is a forfeit, the grace is over
+    g.step(drainOf(FIRST_ID));
+    expect(g.session.getLastSaveStep()).toBe(-1);
+  });
+
   it("a kickback followed by a drain after the grace is a real drain", () => {
     const r = makeRig();
     startSaved(r);
