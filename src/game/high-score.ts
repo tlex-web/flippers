@@ -35,14 +35,18 @@ export interface StorageLike {
 /** The one storage key (D-15, versioned; locked). */
 export const HISCORE_KEY = "flippers.hiscore.v1";
 
+/** A canonical decimal integer string: "0", or digits with no leading zero. */
+const DECIMAL_INTEGER = /^(0|[1-9]\d*)$/;
+
 /**
- * Parse a stored best (D-16): `Number(raw)`, accepted only when it is a
- * non-negative safe integer, otherwise 0. null (no value), "", "abc", "-1",
- * "1.5", "NaN", "Infinity" and "9007199254740993" all give 0; a fractional
- * value is rejected, never floored.
+ * Parse a stored best (D-16): accepted only when `raw` is a canonical decimal
+ * integer string whose value is a safe integer, otherwise 0. null (no value),
+ * "", "abc", "-1", "1.5", "NaN", "Infinity", "9007199254740993" and the
+ * non-decimal or padded forms `Number()` would accept ("0x10", "1e3", "0b11",
+ * " 42 ", "007") all give 0; a fractional value is rejected, never floored.
  */
 export function parseBest(raw: string | null): number {
-  if (raw === null) return 0;
+  if (raw === null || !DECIMAL_INTEGER.test(raw)) return 0;
   const n = Number(raw);
   return Number.isSafeInteger(n) && n >= 0 ? n : 0;
 }
