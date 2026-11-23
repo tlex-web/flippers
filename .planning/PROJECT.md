@@ -97,6 +97,9 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | One ball save per ball; a center-post kickback spends it but keeps the kicked ball protected until the save window would have ended (at least 2 s) | A kick can only improve on the guaranteed save, never cost a ball the plain backstop would have saved; the first fix (a fixed 2 s grace) still lost balls 2–7 s after a kick and was caught on re-review (edd8db7) | ✓ Phase 6 |
 | One skill shot per ball; a backstop re-serve disarms it | The re-served ball is the same ball, so it gets no second attempt (40295c0, UAT 8) | ✓ Phase 6 |
 | High score lives only in localStorage (`flippers.hiscore.v1`, canonical decimal string), every access silently guarded | No accounts or server in v1; blocked storage must never break play | ✓ Phase 6 |
+| Slings and inlane sensors move together 0.35 m up-table through one shared `INLANE_Y` (WR-03); no other offset without a new decision | Base and mid-bat inlane flips were firing the ball at up to 2.64× the no-sling speed. The ratio is 1.00 after the move and the bat clears the sling by 0.45 m. At 0.40 a ball gets trapped. The look and feel were approved at D-01. The wall-side inlane gap (review WR-01) was accepted at UAT | ✓ Phase 6.1 |
+| Prettier is scoped to source by `.prettierignore` | `npm run format` was also rewriting 233 planning, agent and CLAUDE.md files; review ledgers must not be reformatted by tooling | ✓ Phase 6.1 |
+| The dead-flipper hinge-pocket soft-lock is backlogged, not fixed in v1.0 (D-02) | It is reachable only with dead flippers (TILT) and a ball resting in a narrow pocket, and a page reload recovers. A pending todo carries the reproduction | — Pending (backlog) |
 
 ## Evolution
 
@@ -116,4 +119,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-23 after Phase 6*
+*Last updated: 2026-11-23 after Phase 6.1*

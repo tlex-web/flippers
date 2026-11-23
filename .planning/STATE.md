@@ -24,7 +24,7 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.1 — Address tech debt: bat/sling pinch (WR-03) + review hygiene
+**Current focus:** Milestone v1.0 close. All phases are complete (Phase 06.1 was last)
 
 ## Current Position
 
@@ -301,6 +301,7 @@ Recent decisions affecting current work:
 - [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
 - ~~[Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.~~ Resolved in 06.1: soak re-run green (06.1-01, 06.1-02, 06.1-05)
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
+- [Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.
 
 ### Quick Tasks Completed
 
@@ -322,6 +323,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T13:45:18.961Z
-Stopped at: Phase 06.1 complete — all phases complete
+Last session: 2026-11-23T18:30:00Z
+Stopped at: Phase 06.1 complete (UAT 1/1 passed, verification passed). All v1.0 phases are complete; the milestone is ready for audit and close
 Resume file: None
