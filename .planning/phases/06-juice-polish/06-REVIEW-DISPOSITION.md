@@ -21,7 +21,7 @@ findings:
     title: "Lamp geometry and skill-shot lanes are hard-coded copies of spec positions and ids"
   - id: WR-04
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`"
   - id: IN-01
     severity: info
@@ -43,9 +43,9 @@ findings:
     severity: info
     disposition: fixed
     title: "The lamp shape table is built twice"
-open: 1
+open: 0
 total: 10
-recorded: 2026-11-23T10:05:07.510Z
+recorded: 2026-11-23T10:05:28.358Z
 ---
 
 # Phase 06: Code Review Disposition
@@ -56,7 +56,7 @@ recorded: 2026-11-23T10:05:07.510Z
 | WR-01 | warning | fixed | 06-REVIEW-FIX.md |
 | WR-02 | warning | fixed | 06-REVIEW-FIX.md |
 | WR-03 | warning | fixed | 06-REVIEW-FIX.md |
-| WR-04 | warning | open | - |
+| WR-04 | warning | fixed | 06-REVIEW-FIX.md |
 | IN-01 | info | fixed | 06-REVIEW-FIX.md |
 | IN-02 | info | fixed | 06-REVIEW-FIX.md |
 | IN-03 | info | fixed | 06-REVIEW-FIX.md |
