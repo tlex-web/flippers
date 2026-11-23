@@ -314,7 +314,7 @@ Plans:
   4. A plain `npx prettier --check .` passes on this Windows checkout through `.gitattributes` (`* text=auto eol=lf`), with no uncommitted user edit touched. The keyLabel guard, the test literals, segToSegDist and the limit wording are cleaned up (06.1 WR-04, IN-01..IN-04).
   5. `npx vitest run`, `npx tsc --noEmit`, `npx eslint .`, `npm run soak` and `npm run build` are green, the 06.1 review ledger reads `open: 0`, and the soft-lock todo sits in `todos/completed/` with a resolution.
 
-**Plans:** 5/6 plans executed (3 waves)
+**Plans:** 6/6 plans executed (3 waves)
 
 Plans:
 **Wave 1**
@@ -327,4 +327,4 @@ Plans:
 - [x] 06.2-05-PLAN.md — WR-04 single keyLabel guard, IN-02 escaped test literals, IN-03 raise/rest limit wording [wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 06.2-06-PLAN.md — Phase gate plus records: full gate on the merged tree, main-tree LF re-check, 06.1 ledger to open 0, soft-lock todo completed, 04 lost-finding note resolved, STATE.md [wave 3]
+- [x] 06.2-06-PLAN.md — Phase gate plus records: full gate on the merged tree, main-tree LF re-check, 06.1 ledger to open 0, soft-lock todo completed, 04 lost-finding note resolved, STATE.md [wave 3]
