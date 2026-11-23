@@ -913,7 +913,8 @@ describe("PresentationObserver over a real GameSession: the kickback grace re-se
         live.delete(id);
       },
       // Every ball sits at x = 0, clear of the chute: the save timer starts at once.
-      getBalls: () => [...live].map((id) => ({ id, x: 0, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 })),
+      getBalls: () =>
+        [...live].map((id) => ({ id, x: 0, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 })),
       applyImpulse: () => {},
     };
     let batch: CollisionEvent[] = [];
