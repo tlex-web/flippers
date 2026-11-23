@@ -3,10 +3,11 @@ phase: "6"
 slug: "juice-polish"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-22"
+validated: "2026-11-23"
 ---
 
 # Phase 6 — Validation Strategy
@@ -38,29 +39,29 @@ created: "2026-11-22"
 
 ## Per-Task Verification Map
 
-Seeded from `06-RESEARCH.md` § Validation Architecture; task IDs are filled in once plans exist.
+Seeded from `06-RESEARCH.md` § Validation Architecture; plan/wave columns filled from plan frontmatter after execution (all 14 plans complete). Every row re-run green on 2026-11-23 (22 files, 585 tests); full suite 1264/1264; `npm run soak` green in 06-14.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | PLSH-01 | — | N/A | unit | `npx vitest run src/render/shake.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-01 | — | N/A | unit (recorder) | `npx vitest run src/render/table-renderer.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-01 | — | N/A | unit | `npx vitest run src/sandbox/presentation-observer.test.ts src/game/game-session.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-02 | — | N/A | unit | `npx vitest run src/render/particles.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-02 | — | N/A | integration | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-03 | — | N/A | unit (recorder) | `npx vitest run src/render/static-layer.test.ts src/render/table-renderer.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-04 | — | N/A | unit | `npx vitest run src/render/lamps.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-05 | — | N/A | unit | `npx vitest run src/game/skill-shot.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-05 | — | N/A | integration | `npx vitest run src/sandbox/skill-shot-e2e.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-06 | — | N/A | unit | `npx vitest run src/game/game-session.test.ts src/game/bonus.test.ts` | ✅ / ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-06 | — | N/A | unit | `npx vitest run src/ui/hud.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-07 | — | N/A | unit | `npx vitest run src/game/ball-save.test.ts src/game/reactive-elements.test.ts` | ❌ W0 / ✅ | ⬜ pending |
-| TBD | TBD | TBD | PLSH-07 | — | N/A | integration | `npx vitest run src/game/reactive-table.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-07 | — | N/A | soak | `npx vitest run src/harness/reactive-soak.test.ts` · `npm run soak` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | PLSH-08 | T-6-* | Corrupt/hostile `localStorage` values parse to 0; storage throws never crash the game | unit | `npx vitest run src/game/high-score.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | PLSH-08 | — | N/A | unit | `npx vitest run src/ui/hud.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | D-23 | — | N/A | integration | `npx vitest run src/sandbox/game.determinism.test.ts src/sandbox/presentation.determinism.test.ts` | ✅ extend | ⬜ pending |
-| TBD | TBD | TBD | D-24 | — | N/A | static/unit | `npx vitest run src/render/asset-free.test.ts src/render/table-renderer.test.ts` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | D-25 | — | N/A | unit | `npx vitest run src/audio/recipes.test.ts src/app/cue-queue.test.ts` | ✅ re-pin | ⬜ pending |
+| PLSH-01 | 06-09, 06-14 | 5, 9 | PLSH-01 | — | N/A | unit | `npx vitest run src/render/shake.test.ts` | ✅ | ✅ green |
+| PLSH-01 | 06-09, 06-14 | 5, 9 | PLSH-01 | — | N/A | unit (recorder) | `npx vitest run src/render/table-renderer.test.ts` | ✅ | ✅ green |
+| PLSH-01 | 06-09, 06-14 | 5, 9 | PLSH-01 | — | N/A | unit | `npx vitest run src/sandbox/presentation-observer.test.ts src/game/game-session.test.ts` | ✅ | ✅ green |
+| PLSH-02 | 06-12, 06-13, 06-14 | 7, 8, 9 | PLSH-02 | — | N/A | unit | `npx vitest run src/render/particles.test.ts` | ✅ | ✅ green |
+| PLSH-02 | 06-12, 06-13, 06-14 | 7, 8, 9 | PLSH-02 | — | N/A | integration | `npx vitest run src/sandbox/cue-pipeline.test.ts` | ✅ | ✅ green |
+| PLSH-03 | 06-02, 06-14 | 1, 9 | PLSH-03 | — | N/A | unit (recorder) | `npx vitest run src/render/static-layer.test.ts src/render/table-renderer.test.ts` | ✅ | ✅ green |
+| PLSH-04 | 06-03, 06-14 | 2, 9 | PLSH-04 | — | N/A | unit | `npx vitest run src/render/lamps.test.ts` | ✅ | ✅ green |
+| PLSH-05 | 06-01, 06-03, 06-04, 06-14 | 1, 2, 9 | PLSH-05 | — | N/A | unit | `npx vitest run src/game/skill-shot.test.ts` | ✅ | ✅ green |
+| PLSH-05 | 06-01, 06-03, 06-04, 06-14 | 1, 2, 9 | PLSH-05 | — | N/A | integration | `npx vitest run src/sandbox/skill-shot-e2e.test.ts` | ✅ | ✅ green |
+| PLSH-06 | 06-05, 06-06, 06-14 | 3, 4, 9 | PLSH-06 | — | N/A | unit | `npx vitest run src/game/game-session.test.ts src/game/bonus.test.ts` | ✅ | ✅ green |
+| PLSH-06 | 06-05, 06-06, 06-14 | 3, 4, 9 | PLSH-06 | — | N/A | unit | `npx vitest run src/ui/hud.test.ts` | ✅ | ✅ green |
+| PLSH-07 | 06-07, 06-08, 06-10, 06-14 | 4, 5, 6, 9 | PLSH-07 | — | N/A | unit | `npx vitest run src/game/ball-save.test.ts src/game/reactive-elements.test.ts` | ✅ | ✅ green |
+| PLSH-07 | 06-07, 06-08, 06-10, 06-14 | 4, 5, 6, 9 | PLSH-07 | — | N/A | integration | `npx vitest run src/game/reactive-table.test.ts` | ✅ | ✅ green |
+| PLSH-07 | 06-07, 06-08, 06-10, 06-14 | 4, 5, 6, 9 | PLSH-07 | — | N/A | soak | `npx vitest run src/harness/reactive-soak.test.ts` · `npm run soak` | ✅ | ✅ green |
+| PLSH-08 | 06-11, 06-14 | 7, 9 | PLSH-08 | T-6-* | Corrupt/hostile `localStorage` values parse to 0; storage throws never crash the game | unit | `npx vitest run src/game/high-score.test.ts` | ✅ | ✅ green |
+| PLSH-08 | 06-11, 06-14 | 7, 9 | PLSH-08 | — | N/A | unit | `npx vitest run src/ui/hud.test.ts` | ✅ | ✅ green |
+| D-23 | 06-14 | 9 | D-23 | — | N/A | integration | `npx vitest run src/sandbox/game.determinism.test.ts src/sandbox/presentation.determinism.test.ts` | ✅ | ✅ green |
+| D-24 | 06-02, 06-14 | 1, 9 | D-24 | — | N/A | static/unit | `npx vitest run src/render/asset-free.test.ts src/render/table-renderer.test.ts` | ✅ | ✅ green |
+| D-25 | 06-04 | 2 | D-25 | — | N/A | unit | `npx vitest run src/audio/recipes.test.ts src/app/cue-queue.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -68,15 +69,15 @@ Seeded from `06-RESEARCH.md` § Validation Architecture; task IDs are filled in 
 
 ## Wave 0 Requirements
 
-- [ ] `src/render/shake.test.ts` — PLSH-01
-- [ ] `src/render/particles.test.ts` — PLSH-02
-- [ ] `src/render/lamps.test.ts` — PLSH-04
-- [ ] `src/game/skill-shot.test.ts`, `src/sandbox/skill-shot-e2e.test.ts` — PLSH-05 + D-05 anchor
-- [ ] `src/game/bonus.test.ts` — PLSH-06 tally schedule
-- [ ] `src/game/ball-save.test.ts` — PLSH-07 rule
-- [ ] `src/game/high-score.test.ts` — PLSH-08
-- [ ] `game-session.test.ts` helper `finishBonus(rig)` + session options fixture (`ballSaveSteps: 0`) for legacy FSM cases
-- [ ] `ReactiveSoakWorld` option for always-armed `RuleHooks` (PLSH-07 soak stress)
+- [x] `src/render/shake.test.ts` — PLSH-01
+- [x] `src/render/particles.test.ts` — PLSH-02
+- [x] `src/render/lamps.test.ts` — PLSH-04
+- [x] `src/game/skill-shot.test.ts`, `src/sandbox/skill-shot-e2e.test.ts` — PLSH-05 + D-05 anchor
+- [x] `src/game/bonus.test.ts` — PLSH-06 tally schedule
+- [x] `src/game/ball-save.test.ts` — PLSH-07 rule
+- [x] `src/game/high-score.test.ts` — PLSH-08
+- [x] `game-session.test.ts` helper `finishBonus(rig)` + session options fixture (`ballSaveSteps: 0`) for legacy FSM cases
+- [x] `ReactiveSoakWorld` option for always-armed `RuleHooks` (PLSH-07 soak stress)
 
 Framework install: none (Vitest present).
 
@@ -97,11 +98,19 @@ Framework install: none (Vitest present).
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-11-23 — all PLSH-01..08 and D-23/24/25 rows automated and green; perceptual items remain manual-only (above) for `/gsd-verify-work 06`.
+
+## Validation Audit 2026-11-23
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
