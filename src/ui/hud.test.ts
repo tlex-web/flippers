@@ -250,7 +250,7 @@ describe("HudView status priority resolution (06-UI-SPEC rows 1, 5, 6, 7, 8)", (
   it("a skill step cleared to -1 (the ball was lost) shows nothing on the next ball", () => {
     const { view, src, status } = awarded();
     src.skillStep = -1;
-    src.step = 1020;
+    src.step = 50; // 50 < -1 + STATUS_TRANSIENT_STEPS: only `skillStep >= 0` hides SKILL SHOT
     view.update(src);
     expect(status.textContent).toBe("");
   });
