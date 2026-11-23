@@ -1,0 +1,1 @@
+No external API integration: the phase changes a game rule (tilted ball search), table spec data, tests, repo line-ending config and planning ledgers; the browser Keyboard Map API (integrated in 04-13) is only named in plan 06.2-05's threat model, where keyLabel's two guards merge with identical behavior.

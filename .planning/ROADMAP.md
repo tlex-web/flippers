@@ -20,6 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
 - [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
+- [ ] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage**
 
 ## Phase Details
 
@@ -299,3 +300,31 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 - [x] 06.1-05-PLAN.md — Phase gate plus records: 04 and 06 ledgers to open 0, IN-06 deferred (D-03), lost soft-lock finding noted plus backlog todo (D-02), 02 jam-lag doc note (D-04) [wave 4]
+
+### Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage (INSERTED)
+
+**Goal:** A tilted ball that comes to rest outside the plunger lane can no longer hang the game. A tilted-only ball search kicks it toward the playfield centre and, if it stays stuck, forfeits it so play continues (proven RED-then-GREEN on both real hinge pockets). All eight open 06.1 review findings are fixed (WR-01 subject to the user's look check), and the 06.1 ledger, the 04 lost-finding note and the soft-lock todo are closed before v1.0 closes.
+**Requirements**: TBD
+**Depends on:** Phase 06.1
+**Success Criteria** (what must be TRUE):
+
+  1. A tilted ball resting in either dead-flipper hinge pocket is searched free (a horizontal kick toward the centre) and drains as a tilt forfeit, then the next ball is served. With `ballSearchSteps: 0` the same ball stays stuck (RED control). The search never runs while playing, never touches the nudge count or tilt meter, never fires on a ball in the plunger lane, and never drains by position.
+  2. The inlane sensors reach the funnel walls again and the inlane arrows sit centred in their lanes, judged by the user on the live build (06.1 WR-01).
+  3. The sling-pinch proof can no longer pass blind (liveness check plus a walled-off RED control), and the kickback e2e asserts the unaided live outcome instead of a brute-forced cradle (06.1 WR-02, WR-03).
+  4. A plain `npx prettier --check .` passes on this Windows checkout through `.gitattributes` (`* text=auto eol=lf`), with no uncommitted user edit touched. The keyLabel guard, the test literals, segToSegDist and the limit wording are cleaned up (06.1 WR-04, IN-01..IN-04).
+  5. `npx vitest run`, `npx tsc --noEmit`, `npx eslint .`, `npm run soak` and `npm run build` are green, the 06.1 review ledger reads `open: 0`, and the soft-lock todo sits in `todos/completed/` with a resolution.
+
+**Plans:** 6 plans (3 waves)
+
+Plans:
+**Wave 1**
+- [ ] 06.2-01-PLAN.md — Line endings (IN-04): `.gitattributes` `* text=auto eol=lf`, guarded LF refresh of clean CRLF files in this checkout and the user's main tree (uncommitted edits untouched), plain prettier check green [wave 1]
+
+**Wave 2** *(blocked on Wave 1; four plans run in parallel)*
+- [ ] 06.2-02-PLAN.md — Tilted soft-lock: real-table hinge-pocket RED, then a tilted-only ball search in GameSession (240 still steps, kick toward the centre, forfeit after 2 kicks, `ballSearchSteps` off-switch), a `ballSearchSteps: 0` RED control, and spy-rig rules with mutation teeth [wave 2]
+- [ ] 06.2-03-PLAN.md — WR-01 inlane sensor end derived from the funnel line (case (f) RED first, arrow pins), IN-01 segToSegDist crossing fix, user look check (blocking) [wave 2]
+- [ ] 06.2-04-PLAN.md — WR-02 pinch sweep liveness plus walled-off inlane RED control; WR-03 kickback e2e asserts the unaided grace re-serve, then bonus [wave 2]
+- [ ] 06.2-05-PLAN.md — WR-04 single keyLabel guard, IN-02 escaped test literals, IN-03 raise/rest limit wording [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 06.2-06-PLAN.md — Phase gate plus records: full gate on the merged tree, main-tree LF re-check, 06.1 ledger to open 0, soft-lock todo completed, 04 lost-finding note resolved, STATE.md [wave 3]
