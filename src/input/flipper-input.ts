@@ -43,25 +43,30 @@
  *    virtual key, VK_SHIFT. The second Shift pressed while the other is held
  *    arrives as a keydown flagged `repeat` (the OS previous-state bit of the
  *    shared key), and the first Shift released while both are held sends NO
- *    keyup; only the final release fires, reporting `shiftKey` false. Two
- *    heals: (1) a repeat keydown for a Shift code that is not held while the
- *    other Shift is held counts as a press. G-04-21 extends it past a
- *    force-clear: the other Shift code also counts as a press once the Shift
- *    held across the clear has sent an ignored auto-repeat, a marker tracked
- *    until the next force-clear or any event that proves no Shift is down.
- *    The timed re-press (G-04-21 cradle): with both Shifts held across a
+ *    keyup; only the final release fires, reporting `shiftKey` false. Three
+ *    heals:
+ *    (1) The second-Shift press (G-04-17): a repeat keydown for a Shift code
+ *    that is not held while the other Shift is held counts as a press.
+ *    G-04-21 extends it past a force-clear: the other Shift code also counts
+ *    as a press once the Shift held across the clear has sent an ignored
+ *    auto-repeat, a marker tracked until the next force-clear or any event
+ *    that proves no Shift is down.
+ *    (2) The timed re-press (G-04-21 cradle): with both Shifts held across a
  *    clear, the Shift that auto-repeats can itself be re-pressed. Windows
  *    flags the re-press as a repeat, but the typematic stream stops when the
  *    key is released, so a repeat-flagged keydown of the marker's own code
  *    arriving more than SHIFT_REPEAT_GAP_MS (450 ms) after its last ignored
  *    auto-repeat counts as a fresh press. The time comes only from the
  *    event's `timeStamp`; an event without a finite `timeStamp` never counts
- *    this way; (2) a
- *    ShiftLeft/ShiftRight KEYUP (keyups only) reporting `shiftKey` strictly
- *    false drops BOTH Shift codes, because on Windows such a keyup only
- *    arrives once VK_SHIFT is fully up. Both are
- *    gated to Windows: noVNC ships the same Windows-gated drop-both heal, and
- *    Linux `shiftKey` on a one-of-two Shift release is unverified. The gate is
+ *    this way. At the slowest Windows repeat rate, a held Shift's own
+ *    auto-repeat can exceed SHIFT_REPEAT_GAP_MS and then counts as a press,
+ *    also for a single Shift held across a clear.
+ *    (3) A ShiftLeft/ShiftRight KEYUP (keyups only) reporting `shiftKey`
+ *    strictly false drops BOTH Shift codes, because on Windows such a keyup
+ *    only arrives once VK_SHIFT is fully up.
+ *    All three are gated to Windows: noVNC ships the same Windows-gated
+ *    drop-both heal, and Linux `shiftKey` on a one-of-two Shift release is
+ *    unverified. The gate is
  *    injected, never read here: main.ts passes `isWindowsPlatform(navigator)`
  *    as `windowsShiftHeal`, and the default is off so tests pick a path
  *    explicitly. Residual: on Windows, a bat whose Shift is released while the
@@ -75,10 +80,12 @@
  *    that key stays down, its own first auto-repeat after the typematic delay
  *    (about 500 ms by default) raises the bat late. So only a faster re-press
  *    released before that delay, or any faster re-press with the shortest
- *    Windows delay setting (about 250 ms), stays missed until the other Shift
- *    is re-pressed or every Shift is released. A second Shift missed before
- *    the held Shift's first OS auto-repeat is likewise taken on its own first
- *    auto-repeat once it is held past the typematic delay.
+ *    Windows delay setting (about 250 ms), stays missed until
+ *    that Shift is re-pressed after a pause longer than SHIFT_REPEAT_GAP_MS,
+ *    the other Shift is re-pressed, or every Shift is released. A second
+ *    Shift missed before the held Shift's first OS auto-repeat is likewise
+ *    taken on its own first auto-repeat once it is held past the typematic
+ *    delay.
  *
  * All edge logic lives in the directly-callable `handle*` methods so unit tests
  * drive synthetic events with no real DOM; `attach()`/`detach()` only wire those
@@ -350,11 +357,14 @@ export class FlipperInput {
    * prompt) took focus, and its keyup went to the dialog, never to the page.
    * The clear is strictly safe: window focus only follows a blur, and the blur
    * already cleared every key held before it. A key physically held across the
-   * focus regain needs a fresh press, the same as after a blur. On Windows, the
-   * other Shift still counts as a press once the held Shift's auto-repeat
-   * arrives (G-04-21). With both Shifts held, the auto-repeating one counts
-   * again once it is re-pressed after a pause longer than SHIFT_REPEAT_GAP_MS
-   * (G-04-21 cradle).
+   * focus regain needs a fresh press, the same as after a blur, except for the
+   * Windows Shift cases that follow. On Windows, the other Shift still counts
+   * as a press once the held Shift's auto-repeat arrives (G-04-21). With both
+   * Shifts held, the auto-repeating one counts again once it is re-pressed
+   * after a pause longer than SHIFT_REPEAT_GAP_MS (G-04-21 cradle). At the
+   * slowest Windows repeat rate, a held Shift's own auto-repeat can exceed
+   * SHIFT_REPEAT_GAP_MS and then counts as a press, also for a single Shift
+   * held across a clear.
    */
   handleFocus(): void {
     this.forceClear();
