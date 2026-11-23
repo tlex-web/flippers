@@ -280,6 +280,20 @@ function distToSegment(p: Vec2, s: Segment): number {
 }
 
 /**
+ * Distance between segments a and b: the min of the four endpoint-to-segment
+ * distances. Valid only for segments that do not cross (crossing segments are
+ * at distance 0, which this does not report).
+ */
+function segToSegDist(a: Segment, b: Segment): number {
+  return Math.min(
+    distToSegment(a.a, b),
+    distToSegment(a.b, b),
+    distToSegment(b.a, a),
+    distToSegment(b.b, a),
+  );
+}
+
+/**
  * The completed original layout (03-02 Task 2, D-03/D-05/D-06): inventory of
  * standard elements, the resting inverted-V, an unobstructed flipper sweep, and
  * seeded drain flow with swept containment. All on `TABLE_SPEC`.
@@ -382,6 +396,66 @@ describe("TABLE_SPEC layout", () => {
         sample();
       }
       expect(maxY - minY, `bat ${target} tip-y range`).toBeGreaterThanOrEqual(minRange);
+    }
+  });
+
+  it("(e) sling clearance: every slingshot stays >= 2*BALL_RADIUS_M + 0.05 from each bat over its simulated raise and return (rule (1), WR-03)", () => {
+    const minGap = 2 * BALL_RADIUS_M + 0.05;
+    // Pre-06.1 slings (HEAD 5a412cf), kept so this case keeps its teeth.
+    const oldLeftSling: readonly Vec2[] = [
+      { x: 0.86, y: 4.2 },
+      { x: 0.86, y: 4.95 },
+      { x: 1.16, y: 5.1 },
+    ];
+    const oldSlingSegments = resolve([
+      { id: 300, kind: "slingshot", path: oldLeftSling, loop: true },
+      { id: 301, kind: "slingshot", path: mirrorPath(oldLeftSling), loop: true },
+    ]).flatMap((el) => el.segments);
+
+    for (const target of [0, 1]) {
+      const world = makeTableWorld();
+      const slingSegments = world
+        .getElements()
+        .filter((el) => el.kind === "slingshot")
+        .flatMap((el) => el.segments);
+      expect(slingSegments.length).toBeGreaterThan(0);
+      let minNew = Infinity;
+      let minOld = Infinity;
+      const sample = (): void => {
+        const f = world.getFlippers().find((x) => x.id === target);
+        if (!f) throw new Error(`no flipper ${target}`);
+        // Capsule axis: hinge-circle center to tip-circle center, radius halfWidth.
+        const c = Math.cos(f.angle);
+        const s = Math.sin(f.angle);
+        const axis: Segment = {
+          a: { x: f.pivotX + f.tipRadius * c, y: f.pivotY + f.tipRadius * s },
+          b: {
+            x: f.pivotX + (f.length - f.tipRadius) * c,
+            y: f.pivotY + (f.length - f.tipRadius) * s,
+          },
+        };
+        for (const seg of slingSegments) {
+          minNew = Math.min(minNew, segToSegDist(axis, seg) - f.halfWidth);
+        }
+        for (const seg of oldSlingSegments) {
+          minOld = Math.min(minOld, segToSegDist(axis, seg) - f.halfWidth);
+        }
+      };
+      sample();
+      // 40 raise steps include the ~2.76 deg overshoot past the raise limit.
+      world.setFlipperMotor(target, 1);
+      for (let i = 0; i < 40; i++) {
+        world.step(FIXED_DT);
+        sample();
+      }
+      world.setFlipperMotor(target, -1);
+      for (let i = 0; i < 40; i++) {
+        world.step(FIXED_DT);
+        sample();
+      }
+      expect(minNew, `bat ${target}`).toBeGreaterThanOrEqual(minGap);
+      // Teeth: the pre-fix slings break rule (1) over the same sweep.
+      expect(minOld, `bat ${target} old slings`).toBeLessThan(minGap);
     }
   });
 
