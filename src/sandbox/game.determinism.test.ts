@@ -119,9 +119,15 @@ function press(device: Device, code: string, downAt: number, upAt: number): Scri
   ];
 }
 
-/** The fixed part of the timeline (fixed-step indices, 0-based). */
+/**
+ * The fixed part of the timeline (fixed-step indices, 0-based). Both bats are
+ * tapped while ball 1 settles in the shooter lane, clear of the playfield, so
+ * the flipper relay and both coils run without touching the anchor.
+ */
 const SCRIPT: readonly ScriptedKey[] = [
   ...press("game", "Enter", 0, 2),
+  ...press("flipper", "KeyZ", 20, 40),
+  ...press("flipper", "Slash", 50, 70),
   ...press("plunger", "Space", ANCHOR_PRESS_STEP, ANCHOR_RELEASE_STEP),
 ].sort((a, b) => a.step - b.step);
 
