@@ -3,8 +3,10 @@ import { describe, it, expect } from "vitest";
 import type { SaveKind, SaveLampPhase } from "../game/ball-save";
 import type { GameState } from "../game/game-session";
 import type { SkillPhase } from "../game/skill-shot";
+import { SKILL_SHOT_LANES } from "../game/tuning";
 import { PlanckWorld } from "../physics/planck-world";
 import { TABLE_SPEC } from "../table/spec";
+import { pathMidpoint } from "./effects";
 import { flashLevel } from "./flash";
 import {
   buildLampShapes,
@@ -591,6 +593,37 @@ describe("buildLampShapes (D-21 lamp table)", () => {
         .sort((p, q) => p - q);
       const rx = Array.from(r.xs).sort((p, q) => p - q);
       for (let i = 0; i < lx.length; i++) expect(rx[i]).toBeCloseTo(lx[i] ?? 0, 12);
+    }
+  });
+
+  it("every skill lane is a top rollover in TABLE_SPEC, left to right, and its chevron sits under its midpoint (06-REVIEW WR-03)", () => {
+    const xs: number[] = [];
+    SKILL_SHOT_LANES.forEach((id, i) => {
+      const el = elements.find((e) => e.id === id);
+      expect(el?.kind).toBe("rollover");
+      if (!el) return;
+      const m = pathMidpoint(el);
+      xs.push(m.x);
+      const s = shapes.find((x) => x.lamp === LAMP_SKILL_400 + i);
+      expect(s).toBeDefined();
+      expect(s?.cx).toBeCloseTo(m.x, 12);
+      expect(s?.cy ?? 0).toBeGreaterThan(m.y);
+    });
+    expect(xs).toEqual([...xs].sort((p, q) => p - q));
+  });
+
+  it("each inlane arrow sits on its lane sensor's midpoint x, above it (06-REVIEW WR-03)", () => {
+    for (const [lamp, id] of [
+      [LAMP_INLANE_500, 500],
+      [LAMP_INLANE_501, 501],
+    ] as const) {
+      const el = elements.find((e) => e.id === id);
+      expect(el?.kind).toBe("lane");
+      if (!el) continue;
+      const m = pathMidpoint(el);
+      const s = shapes.find((x) => x.lamp === lamp);
+      expect(s?.cx).toBeCloseTo(m.x, 12);
+      expect(s?.cy ?? Infinity).toBeLessThan(m.y);
     }
   });
 

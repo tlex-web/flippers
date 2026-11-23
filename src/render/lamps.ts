@@ -50,8 +50,9 @@
  */
 
 import type { GameSession } from "../game/game-session";
+import { SKILL_SHOT_LANES } from "../game/tuning";
 import type { ResolvedElement } from "../table/resolve";
-import { PLAYFIELD_CENTER_X } from "../table/spec";
+import { pathMidpoint } from "./effects";
 import { FLASH_TIMING, flashLevel } from "./flash";
 import {
   INLANE_LIT,
@@ -113,9 +114,12 @@ export const LAMP_CHASE_DWELL_STEPS = 18;
 const CHEVRON_W_M = 0.2;
 const CHEVRON_H_M = 0.12;
 const CHEVRON_ARM_M = 0.05;
-/** Chevron centers (m), just below lanes 400, 401 and 402. */
-const CHEVRON_Y_M = 1.32;
-const CHEVRON_XS_M: readonly number[] = [0.95, 1.45, 1.95];
+/**
+ * Chevron center offset (m): this far down-table of its skill lane's rollover
+ * midpoint (0.95 + 0.37 = 1.32 on the current table). Derived from the
+ * element, so a moved lane carries its chevron (06-REVIEW WR-03).
+ */
+const CHEVRON_DROP_M = 0.37;
 /** Chevron halo radius (m). */
 const CHEVRON_HALO_M = 0.16;
 
@@ -124,9 +128,11 @@ const ARROW_HEAD_W_M = 0.16;
 const ARROW_HEAD_H_M = 0.12;
 const ARROW_STEM_W_M = 0.05;
 const ARROW_STEM_H_M = 0.08;
-/** Left inlane arrow center (m); the right one is its mirror about x = 1.45. */
-const ARROW_CX_M = 0.585;
-const ARROW_CY_M = 4.72;
+/**
+ * Inlane arrow center offset (m): this far up-table of its inlane sensor's
+ * midpoint (4.95 - 0.23 = 4.72 on the current table), on the same x.
+ */
+const ARROW_RISE_M = 0.23;
 /** Arrow halo radius (m). */
 const ARROW_HALO_M = 0.14;
 
@@ -183,6 +189,15 @@ const ROLLOVER_LAMPS: readonly (readonly [number, number])[] = [
   [402, LAMP_ROLLOVER_402],
 ];
 
+/** Skill chevron lamps, in `SKILL_SHOT_LANES` order. */
+const SKILL_LAMPS: readonly number[] = [LAMP_SKILL_400, LAMP_SKILL_401, LAMP_SKILL_402];
+
+/** The inlane arrow lamp for each inlane (lane sensor) id. */
+const INLANE_LAMPS: readonly (readonly [number, number])[] = [
+  [500, LAMP_INLANE_500],
+  [501, LAMP_INLANE_501],
+];
+
 /** The attract ping-pong, as lamp indices: 500 400 401 402 501 402 401 400. */
 const CHASE_ORDER: readonly number[] = [
   LAMP_INLANE_500,
@@ -195,18 +210,10 @@ const CHASE_ORDER: readonly number[] = [
   LAMP_ROLLOVER_400,
 ];
 
-/** The chevron lamp under a skill lane, or -1. */
+/** The chevron lamp under a skill lane (by its `SKILL_SHOT_LANES` slot), or -1. */
 function skillLampOf(laneId: number): number {
-  switch (laneId) {
-    case 400:
-      return LAMP_SKILL_400;
-    case 401:
-      return LAMP_SKILL_401;
-    case 402:
-      return LAMP_SKILL_402;
-    default:
-      return -1;
-  }
+  const i = SKILL_SHOT_LANES.indexOf(laneId);
+  return i < 0 ? -1 : (SKILL_LAMPS[i] ?? -1);
 }
 
 /** A rollover lens: the sensor path as a round-capped stroke. */
@@ -335,9 +342,12 @@ function ringShape(el: ResolvedElement): LampShape | null {
 
 /**
  * The lamp shape table: the three rollover strokes from elements 400-402 (a
- * missing element has no shape), then the three skill chevrons, then the two
- * inlane arrows (the right one mirrored about the playfield center), then the
- * ball-save ring around the "post" element (none without one).
+ * missing element has no shape), then the three skill chevrons (each
+ * CHEVRON_DROP_M below its `SKILL_SHOT_LANES` rollover's midpoint), then the
+ * two inlane arrows (each ARROW_RISE_M above its lane sensor's midpoint), then
+ * the ball-save ring around the "post" element (none without one). Every lens
+ * is placed from its resolved element, never a copied coordinate (06-REVIEW
+ * WR-03), so a missing element has no lens.
  */
 export function buildLampShapes(elements: readonly ResolvedElement[]): readonly LampShape[] {
   const out: LampShape[] = [];
@@ -346,11 +356,19 @@ export function buildLampShapes(elements: readonly ResolvedElement[]): readonly 
     const s = el ? rolloverShape(el, lamp) : null;
     if (s) out.push(s);
   }
-  for (let i = 0; i < CHEVRON_XS_M.length; i++) {
-    out.push(chevronShape(CHEVRON_XS_M[i] ?? 0, CHEVRON_Y_M, LAMP_SKILL_400 + i));
+  for (let i = 0; i < SKILL_LAMPS.length && i < SKILL_SHOT_LANES.length; i++) {
+    const id = SKILL_SHOT_LANES[i];
+    const el = elements.find((e) => e.id === id && e.kind === "rollover");
+    if (!el) continue;
+    const m = pathMidpoint(el);
+    out.push(chevronShape(m.x, m.y + CHEVRON_DROP_M, SKILL_LAMPS[i] ?? LAMP_SKILL_400));
   }
-  out.push(arrowShape(ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_500));
-  out.push(arrowShape(2 * PLAYFIELD_CENTER_X - ARROW_CX_M, ARROW_CY_M, LAMP_INLANE_501));
+  for (const [id, lamp] of INLANE_LAMPS) {
+    const el = elements.find((e) => e.id === id && e.kind === "lane");
+    if (!el) continue;
+    const m = pathMidpoint(el);
+    out.push(arrowShape(m.x, m.y - ARROW_RISE_M, lamp));
+  }
   const post = elements.find((e) => e.kind === "post" && e.circle !== null);
   const ring = post ? ringShape(post) : null;
   if (ring) out.push(ring);
@@ -483,8 +501,10 @@ export class LampTracker {
   /** Inlane arrow targets: the session's per-ball flags (playing and tilted). */
   private updateInlanes(target: Uint8Array): void {
     const rules = this.rules;
-    if (rules.isInlaneScored(500)) target[LAMP_INLANE_500] = 1;
-    if (rules.isInlaneScored(501)) target[LAMP_INLANE_501] = 1;
+    for (let i = 0; i < INLANE_LAMPS.length; i++) {
+      const e = INLANE_LAMPS[i];
+      if (e && rules.isInlaneScored(e[0])) target[e[1]] = 1;
+    }
   }
 
   /** Chevron targets from the skill-shot getters (only while playing). */
