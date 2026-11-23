@@ -3,6 +3,14 @@ phase: 06
 review: 06-REVIEW.md
 titles: json
 findings:
+  - id: IN-01
+    severity: info
+    disposition: open
+    title: "The new HUD test \"a skill step cleared to -1 shows nothing\" passes without the guard it claims to pin"
+  - id: IN-02
+    severity: info
+    disposition: open
+    title: "`SaveKind` is still declared in `ball-save.ts`, which no longer uses it"
   - id: CR-01
     severity: critical
     disposition: fixed
@@ -11,14 +19,6 @@ findings:
     severity: warning
     disposition: fixed
     title: "A grace backstop shows BALL SAVED but sounds like a lost ball: drain cue and shake, no ballSave cue"
-  - id: IN-01
-    severity: info
-    disposition: fixed
-    title: "SKILL SHOT can still outlive the ball, the same defect WR-01 fixed for BALL SAVED"
-  - id: IN-02
-    severity: info
-    disposition: fixed
-    title: "The save lamp is off while the kickback grace still saves the ball"
   - id: IN-03
     severity: info
     disposition: fixed
@@ -47,23 +47,23 @@ findings:
     severity: warning
     disposition: fixed
     title: "Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`"
-open: 0
+open: 2
 total: 11
-recorded: 2026-11-23T11:02:09.394Z
+recorded: 2026-11-23T11:21:23.346Z
 ---
 
 # Phase 06: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | fixed | 06-REVIEW-FIX.md |
-| WR-01 | warning | fixed | 06-REVIEW-FIX.md |
-| IN-01 | info | fixed | 06-REVIEW-FIX.md |
-| IN-02 | info | fixed | 06-REVIEW-FIX.md |
-| IN-03 | info | fixed | 06-REVIEW-FIX.md |
-| IN-04 | info | fixed | 06-REVIEW-FIX.md |
-| IN-05 | info | fixed | 06-REVIEW-FIX.md |
-| IN-06 | info | fixed | 06-REVIEW-FIX.md |
+| IN-01 | info | open | - |
+| IN-02 | info | open | - |
+| CR-01 | critical | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| WR-01 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| IN-03 | info | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| IN-04 | info | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| IN-05 | info | fixed | 06-REVIEW-FIX.md (not in the current review) |
+| IN-06 | info | fixed | 06-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
 | WR-04 | warning | fixed | 06-REVIEW-FIX.md (not in the current review) |
