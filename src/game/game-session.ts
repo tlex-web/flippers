@@ -132,7 +132,7 @@ import {
 } from "../control/plunger-controller";
 import type { BallId, BallSpec, CollisionEvent, PhysicsWorld } from "../physics/types";
 import { PLUNGER_ZONE } from "../table/spec";
-import { BallSave, type SaveKind, type SaveLampPhase } from "./ball-save";
+import { BallSave, type SaveLampPhase } from "./ball-save";
 import { BonusCounters, BonusTally, bonusDurationSteps } from "./bonus";
 import { HighScore, type HighScoreSink } from "./high-score";
 import type { RuleHooks, RulesGate, SwitchKind } from "./reactive-elements";
@@ -154,6 +154,13 @@ export const BALLS_PER_GAME = 3;
 
 /** Game states. */
 export type GameState = "game-over" | "playing" | "tilted" | "bonus";
+
+/**
+ * How a save was spent: the center-post kickback or the drain backstop.
+ * Owned by `GameSession`, which records it in `lastSaveKind` and exposes it
+ * through `getLastSaveKind()`.
+ */
+export type SaveKind = "kickback" | "backstop";
 
 /** The world slice the session needs. */
 export type GameSessionWorld = Pick<

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import type { SaveKind, SaveLampPhase } from "../game/ball-save";
-import type { GameState } from "../game/game-session";
+import type { SaveLampPhase } from "../game/ball-save";
+import type { GameState, SaveKind } from "../game/game-session";
 import type { SkillPhase } from "../game/skill-shot";
 import { SKILL_SHOT_LANES } from "../game/tuning";
 import { PlanckWorld } from "../physics/planck-world";

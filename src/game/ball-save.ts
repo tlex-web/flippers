@@ -32,12 +32,6 @@ import { BALL_RADIUS_M } from "../physics/constants";
 import { CHUTE_X } from "../table/spec";
 import { BALL_SAVE_BLINK_STEPS, BALL_SAVE_STEPS } from "./tuning";
 
-/**
- * How a save was spent: the center-post kickback or the drain backstop
- * (recorded by `GameSession`, read through `getLastSaveKind()`).
- */
-export type SaveKind = "kickback" | "backstop";
-
 /** What the save lamp shows. */
 export type SaveLampPhase = "off" | "steady" | "blink";
 

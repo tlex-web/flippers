@@ -29,7 +29,7 @@
 
 import type { FxSink, ObserverFx } from "../app/cue-queue";
 import { deriveKickFace } from "../game/reactive-elements";
-import type { SaveKind } from "../game/ball-save";
+import type { SaveKind } from "../game/game-session";
 import type { NudgeDir } from "../game/tuning";
 import { FIXED_DT } from "../physics/constants";
 import { pathMidpoint, type ResolvedElement } from "../table/resolve";

@@ -20,7 +20,7 @@
  * Engine-agnostic and DOM-free: the only imports from the rules are types.
  */
 
-import type { SaveKind } from "../game/ball-save";
+import type { SaveKind } from "../game/game-session";
 import type { ReactiveFeedback } from "../game/reactive-elements";
 import type { NudgeDir } from "../game/tuning";
 import { BALL_RADIUS_M, ballMass } from "../physics/constants";

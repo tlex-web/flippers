@@ -2,10 +2,14 @@ import { describe, it, expect } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
-import type { SaveKind } from "../game/ball-save";
 import { BonusCounters, BonusTally } from "../game/bonus";
 import { SKILL_SHOT_MAX_POINTS, type NudgeDir } from "../game/tuning";
-import { GameSession, type GameState, type GameSessionWorld } from "../game/game-session";
+import {
+  GameSession,
+  type GameState,
+  type GameSessionWorld,
+  type SaveKind,
+} from "../game/game-session";
 import type { BallId, CollisionEvent } from "../physics/types";
 import {
   PresentationObserver,
