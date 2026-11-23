@@ -31,6 +31,7 @@ import {
   LAMP_SKILL_401,
   LAMP_SKILL_402,
   LampTracker,
+  SKILL_LAMPS,
   type LampLights,
   type LampRules,
 } from "./lamps";
@@ -597,6 +598,9 @@ describe("buildLampShapes (D-21 lamp table)", () => {
   });
 
   it("every skill lane is a top rollover in TABLE_SPEC, left to right, and its chevron sits under its midpoint (06-REVIEW WR-03)", () => {
+    // One chevron lamp per skill lane: a lane added without one fails here,
+    // not by a geometry coincidence (06-REVIEW IN-05).
+    expect(SKILL_SHOT_LANES.length).toBe(SKILL_LAMPS.length);
     const xs: number[] = [];
     SKILL_SHOT_LANES.forEach((id, i) => {
       const el = elements.find((e) => e.id === id);
@@ -604,7 +608,7 @@ describe("buildLampShapes (D-21 lamp table)", () => {
       if (!el) return;
       const m = pathMidpoint(el);
       xs.push(m.x);
-      const s = shapes.find((x) => x.lamp === LAMP_SKILL_400 + i);
+      const s = shapes.find((x) => x.lamp === SKILL_LAMPS[i]);
       expect(s).toBeDefined();
       expect(s?.cx).toBeCloseTo(m.x, 12);
       expect(s?.cy ?? 0).toBeGreaterThan(m.y);

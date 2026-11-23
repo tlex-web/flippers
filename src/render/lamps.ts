@@ -189,8 +189,11 @@ const ROLLOVER_LAMPS: readonly (readonly [number, number])[] = [
   [402, LAMP_ROLLOVER_402],
 ];
 
-/** Skill chevron lamps, in `SKILL_SHOT_LANES` order. */
-const SKILL_LAMPS: readonly number[] = [LAMP_SKILL_400, LAMP_SKILL_401, LAMP_SKILL_402];
+/**
+ * Skill chevron lamps, in `SKILL_SHOT_LANES` order: one per lane (the lamp
+ * tests pin the lengths equal, so a lane added without a chevron fails loudly).
+ */
+export const SKILL_LAMPS: readonly number[] = [LAMP_SKILL_400, LAMP_SKILL_401, LAMP_SKILL_402];
 
 /** The inlane arrow lamp for each inlane (lane sensor) id. */
 const INLANE_LAMPS: readonly (readonly [number, number])[] = [
@@ -356,12 +359,14 @@ export function buildLampShapes(elements: readonly ResolvedElement[]): readonly 
     const s = el ? rolloverShape(el, lamp) : null;
     if (s) out.push(s);
   }
-  for (let i = 0; i < SKILL_LAMPS.length && i < SKILL_SHOT_LANES.length; i++) {
+  for (let i = 0; i < SKILL_SHOT_LANES.length; i++) {
     const id = SKILL_SHOT_LANES[i];
+    const lamp = SKILL_LAMPS[i];
+    if (lamp === undefined) continue; // a lane with no chevron lamp has no lens
     const el = elements.find((e) => e.id === id && e.kind === "rollover");
     if (!el) continue;
     const m = pathMidpoint(el);
-    out.push(chevronShape(m.x, m.y + CHEVRON_DROP_M, SKILL_LAMPS[i] ?? LAMP_SKILL_400));
+    out.push(chevronShape(m.x, m.y + CHEVRON_DROP_M, lamp));
   }
   for (const [id, lamp] of INLANE_LAMPS) {
     const el = elements.find((e) => e.id === id && e.kind === "lane");
