@@ -17,10 +17,10 @@ vi.setConfig({ testTimeout: 30_000 });
  *
  *   1. Bounded green: with CCD on, kicks never let the ball escape a wall,
  *      enter a bumper or pass through a bat, and the run is non-vacuous
- *      (kicks > 0).
- *   2. CCD-off RED control: the same rules-wrapped world goes red on a
- *      real-table wall, so a green rules-live gate can fail.
- *   3. Deterministic replay of that failure from its logged seed.
+ *      (kicks > 0, and post kicks > 0 from the always-armed ball save, D-10).
+ *   2. CCD-off RED control: the same rules-wrapped world, save armed, goes red
+ *      on a real-table wall, so a green rules-live gate can fail.
+ *   3. Deterministic replay of that failure from its logged seed, save armed.
  *
  * The rules join the soak only through `SoakConfig.makeWorld`; soak.ts is
  * unchanged.
@@ -30,6 +30,7 @@ vi.setConfig({ testTimeout: 30_000 });
 function tallyingFactory(): {
   readonly makeWorld: (options: { readonly bullet: boolean }) => ReactiveSoakWorld;
   kicks(): number;
+  postKicks(): number;
 } {
   const worlds: ReactiveSoakWorld[] = [];
   return {
@@ -39,6 +40,7 @@ function tallyingFactory(): {
       return world;
     },
     kicks: () => worlds.reduce((sum, w) => sum + w.kicks, 0),
+    postKicks: () => worlds.reduce((sum, w) => sum + w.postKicks, 0),
   };
 }
 
@@ -78,6 +80,8 @@ describe("reactive soak — swept containment on TABLE_SPEC with every kick live
     expect(result.passed).toBe(true);
     expect(result.casesRun).toBe(8);
     expect(tally.kicks()).toBeGreaterThan(0);
+    // The always-armed ball save kicked off the center post too (D-10).
+    expect(tally.postKicks()).toBeGreaterThan(0);
   });
 
   it("(2) CCD-off RED control: the rules-wrapped world tunnels a real-table wall", () => {

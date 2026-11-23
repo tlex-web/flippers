@@ -13,6 +13,16 @@
  * slingshot contact kicks. Each `applyImpulse` the rules issue is counted, so
  * a soak can assert its green run is non-vacuous (kicks > 0).
  *
+ * The ball save joins the soak (plan 06-14, D-10): with `saveArmed` (the
+ * default) the rules get always-armed `RuleHooks` whose `trySave` returns true
+ * and counts a post kick, so every live above-center overlap of the center
+ * post kicks the ball back up the table (the 06-08 kickback). That is a
+ * stronger stress than the game's one save per ball: containment must hold
+ * under as many kickbacks as the soak's launches can provoke. `postKicks`
+ * counts them, so the gate can assert the save really ran (postKicks > 0).
+ * `onSwitch` does nothing (the soak scores nothing). `saveArmed: false` gives
+ * the Phase-4 wrapper back (no save hooks).
+ *
  * The `bullet` option passes straight through, so the CCD-off RED control
  * still works on this wrapper. No engine import: constructing `PlanckWorld` is
  * allowed here, as in soak.ts.
@@ -20,7 +30,7 @@
 
 import { CollisionRouter } from "../app/collision-router";
 import { ReactiveElements } from "../game/reactive-elements";
-import type { ReactiveWorld, RulesGate } from "../game/reactive-elements";
+import type { ReactiveWorld, RuleHooks, RulesGate } from "../game/reactive-elements";
 import { PlanckWorld } from "../physics/planck-world";
 import type {
   BallId,
@@ -52,8 +62,13 @@ export class ReactiveSoakWorld implements PhysicsWorld {
   private readonly router: CollisionRouter;
   private readonly rules: ReactiveElements;
   private kickCount = 0;
+  private postKickCount = 0;
 
-  constructor(options: { readonly bullet: boolean }) {
+  /**
+   * `bullet` passes through to the inner world (the CCD-off RED control);
+   * `saveArmed` (default true) arms the ball save on every post overlap.
+   */
+  constructor(options: { readonly bullet: boolean; readonly saveArmed?: boolean }) {
     const inner = new PlanckWorld({ bullet: options.bullet, table: TABLE_SPEC });
     this.inner = inner;
     this.router = new CollisionRouter(inner);
@@ -66,12 +81,29 @@ export class ReactiveSoakWorld implements PhysicsWorld {
         inner.applyImpulse(ballId, ix, iy);
       },
     };
-    this.rules = new ReactiveElements(slice, this.router, ALWAYS_LIVE);
+    // Always-armed save (D-10): every consulted post overlap spends a save and
+    // kicks. Built once; the hooks allocate nothing per call.
+    const hooks: RuleHooks | undefined =
+      options.saveArmed === false
+        ? undefined
+        : {
+            onSwitch: () => undefined,
+            trySave: () => {
+              this.postKickCount++;
+              return true;
+            },
+          };
+    this.rules = new ReactiveElements(slice, this.router, ALWAYS_LIVE, undefined, hooks);
   }
 
-  /** Kicks the rules have applied through this world since construction. */
+  /** Kicks the rules have applied through this world since construction (post kicks included). */
   get kicks(): number {
     return this.kickCount;
+  }
+
+  /** Center-post kickbacks the always-armed save has granted since construction. */
+  get postKicks(): number {
+    return this.postKickCount;
   }
 
   step(dtSeconds: number): void {

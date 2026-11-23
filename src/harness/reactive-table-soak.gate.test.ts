@@ -14,8 +14,11 @@ import type { SoakConfig } from "./soak";
  * With CCD on the ball must never escape a wall, enter a bumper, or pass
  * through a bat over >= 600 SIMULATED seconds at ~10x its real max speed, and
  * the kicks must actually fire (summed kicks > 0), so the green is never
- * vacuous. Excluded from `npm test`; runs under `npm run soak`. Env vars
- * override density for CI tuning; the defaults ARE the full gate.
+ * vacuous. The ball save is armed on every post overlap (the
+ * `ReactiveSoakWorld` default, plan 06-14, D-10), so center-post kickbacks
+ * join the stress, and they must fire too (summed postKicks > 0). Excluded
+ * from `npm test`; runs under `npm run soak`. Env vars override density for
+ * CI tuning; the defaults ARE the full gate.
  *
  * A red run means a kick or the table geometry lets the ball tunnel: fix the
  * rules or the spec, never the invariant or the speeds.
@@ -74,6 +77,7 @@ describe("reactive table soak gate — >=10-minute tunnel-proof soak with kicks 
 
       const result = runSoak(config);
       const kicks = worlds.reduce((sum, w) => sum + w.kicks, 0);
+      const postKicks = worlds.reduce((sum, w) => sum + w.postKicks, 0);
 
       for (const failure of result.failures) {
         console.error(describeFailure(failure));
@@ -84,6 +88,8 @@ describe("reactive table soak gate — >=10-minute tunnel-proof soak with kicks 
       expect(result.passed).toBe(true);
       expect(result.casesRun).toBe(cases);
       expect(kicks).toBeGreaterThan(0);
+      // The always-armed ball save kicked off the center post (D-10).
+      expect(postKicks).toBeGreaterThan(0);
     },
     900_000,
   );
