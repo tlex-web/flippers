@@ -62,20 +62,12 @@ function onSegment(a: Vec2, b: Vec2, c: Vec2): boolean {
 }
 
 /** Do segments p1-p2 and q1-q2 intersect (proper crossing or collinear touch)? */
-export function segmentsIntersect(
-  p1: Vec2,
-  p2: Vec2,
-  q1: Vec2,
-  q2: Vec2,
-): boolean {
+export function segmentsIntersect(p1: Vec2, p2: Vec2, q1: Vec2, q2: Vec2): boolean {
   const d1 = orient(q1, q2, p1);
   const d2 = orient(q1, q2, p2);
   const d3 = orient(p1, p2, q1);
   const d4 = orient(p1, p2, q2);
-  if (
-    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-  ) {
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
     return true;
   }
   if (d1 === 0 && onSegment(q1, q2, p1)) return true;
@@ -97,12 +89,7 @@ function pointSegmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
 }
 
 /** Shortest distance between segment p1-p2 and segment q1-q2 (0 if crossing). */
-function segmentSegmentDistance(
-  p1: Vec2,
-  p2: Vec2,
-  q1: Vec2,
-  q2: Vec2,
-): number {
+function segmentSegmentDistance(p1: Vec2, p2: Vec2, q1: Vec2, q2: Vec2): number {
   if (segmentsIntersect(p1, p2, q1, q2)) return 0;
   return Math.min(
     pointSegmentDistance(p1, q1, q2),
@@ -228,12 +215,7 @@ export function sweptEscapedForBall(
   next: BallState,
   walls: readonly Segment[],
 ): boolean {
-  return sweptEscaped(
-    { x: prev.x, y: prev.y },
-    { x: next.x, y: next.y },
-    next.radius,
-    walls,
-  );
+  return sweptEscaped({ x: prev.x, y: prev.y }, { x: next.x, y: next.y }, next.radius, walls);
 }
 
 /**

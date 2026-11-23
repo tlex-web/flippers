@@ -75,7 +75,10 @@ function makeRig(windowsShiftHeal = false): {
   // Side -> flipper-id mapping, established from the world exactly like main.ts:
   // the flipper with the smaller pivot x is the physical LEFT flipper. Recorded
   // explicitly so the mapping under test is unambiguous.
-  const byX = world.getFlippers().slice().sort((a, b) => a.pivotX - b.pivotX);
+  const byX = world
+    .getFlippers()
+    .slice()
+    .sort((a, b) => a.pivotX - b.pivotX);
   const left = byX[0];
   const right = byX[1];
   if (!left || !right) throw new Error("expected two flippers on the rig");
@@ -224,11 +227,7 @@ const MOVE_EPS_RAD = 0.01;
  * MOVE_EPS_RAD. Returns the number of fixed steps that took (1 = it moved on
  * the very first step), or -1 if it never moved within `maxSteps`.
  */
-function stepsUntilMoved(
-  rig: ReturnType<typeof makeRig>,
-  id: number,
-  maxSteps: number,
-): number {
+function stepsUntilMoved(rig: ReturnType<typeof makeRig>, id: number, maxSteps: number): number {
   const start = rig.angleOf(id);
   for (let i = 1; i <= maxSteps; i++) {
     rig.step();

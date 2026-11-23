@@ -178,10 +178,7 @@ function stepUntilSettled(world: PhysicsWorld, step: () => void): number {
  * tolerance. This is the energy-monotonic detector: it tolerates tiny numerical
  * noise but flags any real spontaneous gain (a ball speeding up on its own).
  */
-function firstMonotonicIncrease(
-  series: readonly number[],
-  absEps: number,
-): number {
+function firstMonotonicIncrease(series: readonly number[], absEps: number): number {
   for (let i = 1; i < series.length; i++) {
     const cur = series[i];
     const prev = series[i - 1];
@@ -310,17 +307,13 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
 
   it("the energy-monotonic detector rejects a synthetic speed-up (proof of teeth)", () => {
     // A genuinely non-increasing series passes...
-    expect(
-      firstMonotonicIncrease([0.5, 0.5, 0.4, 0.4, 0.1, 0.0], ENERGY_NOISE_EPS),
-    ).toBe(-1);
+    expect(firstMonotonicIncrease([0.5, 0.5, 0.4, 0.4, 0.1, 0.0], ENERGY_NOISE_EPS)).toBe(-1);
     // ...but a fabricated spontaneous speed-up (rising energy) is CAUGHT. Without
     // this, the monotonic assertion above could rubber-stamp a solver energy leak.
-    expect(
-      firstMonotonicIncrease([0.1, 0.2, 0.3], ENERGY_NOISE_EPS),
-    ).toBeGreaterThan(0);
+    expect(firstMonotonicIncrease([0.1, 0.2, 0.3], ENERGY_NOISE_EPS)).toBeGreaterThan(0);
     // Tiny machine-epsilon noise is tolerated (not mistaken for a real gain).
-    expect(
-      firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS),
-    ).toBe(-1);
+    expect(firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS)).toBe(
+      -1,
+    );
   });
 });

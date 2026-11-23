@@ -197,10 +197,7 @@ export const RECIPES: Readonly<Record<CueKind, CueRecipe>> = Object.freeze({
   /** Rollover chime: sine bell at 1320 Hz plus a 2.76x partial at -9 dB. */
   rollover: {
     peak: 0.55,
-    layers: [
-      note("sine", 1320, 0, CHIME_ENV),
-      note("sine", 1320 * BELL_PARTIAL, 0, CHIME_ENV, -9),
-    ],
+    layers: [note("sine", 1320, 0, CHIME_ENV), note("sine", 1320 * BELL_PARTIAL, 0, CHIME_ENV, -9)],
     maxSemitones: 0,
     jitterCents: 15,
     cap: 2,

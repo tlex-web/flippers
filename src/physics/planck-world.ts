@@ -56,11 +56,7 @@ import type {
   Vec2 as Vec2Value,
 } from "./types";
 import { resolve, type ResolvedElement } from "../table/resolve";
-import {
-  TABLE_SPEC,
-  type ElementKind,
-  type TableSpec,
-} from "../table/spec";
+import { TABLE_SPEC, type ElementKind, type TableSpec } from "../table/spec";
 
 // --- Solver tuning (Box2D defaults; crank up only if bounces feel mushy). ---
 const VELOCITY_ITERATIONS = 8;
@@ -98,10 +94,7 @@ const SUB_STEP_TRAVEL_LIMIT = 0.5 * BALL_RADIUS_M;
 
 /** Sub-step count for a given peak flipper angular speed ω (rad/s). */
 function subStepsFor(omega: number): number {
-  return Math.max(
-    1,
-    Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / SUB_STEP_TRAVEL_LIMIT),
-  );
+  return Math.max(1, Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / SUB_STEP_TRAVEL_LIMIT));
 }
 
 // Secondary cap (D-02): the D-01 count clamped to the bound derived from the
@@ -169,21 +162,13 @@ interface BodyTag {
 type PlanckBody = ReturnType<World["createDynamicBody"]>;
 
 function asTag(userData: unknown): BodyTag | null {
-  if (
-    typeof userData === "object" &&
-    userData !== null &&
-    "kind" in userData &&
-    "id" in userData
-  ) {
+  if (typeof userData === "object" && userData !== null && "kind" in userData && "id" in userData) {
     return userData as BodyTag;
   }
   return null;
 }
 
-function classifyContact(
-  a: BodyTag["kind"],
-  b: BodyTag["kind"],
-): CollisionEventType | null {
+function classifyContact(a: BodyTag["kind"], b: BodyTag["kind"]): CollisionEventType | null {
   // Direct comparisons — no per-contact `new Set`/array literal (this runs
   // inside `world.step()` on the 60fps path; steady-state zero allocation).
   // Coarse on purpose: any non-ball, non-flipper element reads as "ball-wall".
@@ -455,10 +440,7 @@ export class PlanckWorld implements PhysicsWorld {
       };
       if (el.circle) {
         const c = el.circle;
-        walls.createFixture(
-          new Circle(Vec2(c.center.x, c.center.y), c.radius),
-          fixtureOpts,
-        );
+        walls.createFixture(new Circle(Vec2(c.center.x, c.center.y), c.radius), fixtureOpts);
       } else {
         const v = el.vertices;
         const first = v[0];
@@ -567,15 +549,9 @@ export class PlanckWorld implements PhysicsWorld {
       fixtureOpts,
     );
     // Rounded tip (the fast, tunnel-prone end) at local x = CAP_TIP_X.
-    bat.createFixture(
-      new Circle(Vec2(CAP_TIP_X, 0), FLIPPER_TIP_RADIUS_M),
-      fixtureOpts,
-    );
+    bat.createFixture(new Circle(Vec2(CAP_TIP_X, 0), FLIPPER_TIP_RADIUS_M), fixtureOpts);
     // Rounded hinge end so a cradling ball cannot catch the pivot corner (D-07).
-    bat.createFixture(
-      new Circle(Vec2(CAP_BASE_X, 0), FLIPPER_TIP_RADIUS_M),
-      fixtureOpts,
-    );
+    bat.createFixture(new Circle(Vec2(CAP_BASE_X, 0), FLIPPER_TIP_RADIUS_M), fixtureOpts);
     const tag: BodyTag = { kind: "flipper", id };
     bat.setUserData(tag);
 
@@ -766,8 +742,7 @@ export class PlanckWorld implements PhysicsWorld {
     // contact points sync ONCE, after the last sub-step (below).
     const subDt = dtSeconds / subSteps;
     for (let i = 0; i < subSteps; i++) {
-      const stepDt =
-        i === subSteps - 1 ? dtSeconds - subDt * (subSteps - 1) : subDt;
+      const stepDt = i === subSteps - 1 ? dtSeconds - subDt * (subSteps - 1) : subDt;
       this.world.step(stepDt, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
     }
 
@@ -886,8 +861,7 @@ export class PlanckWorld implements PhysicsWorld {
         entry.joint.enableLimit(true);
         entry.lastDirection = sign;
       }
-      const speed =
-        sign > 0 ? FLIPPER_UP_SPEED : sign < 0 ? -FLIPPER_RETURN_SPEED : 0;
+      const speed = sign > 0 ? FLIPPER_UP_SPEED : sign < 0 ? -FLIPPER_RETURN_SPEED : 0;
       entry.joint.setMotorSpeed(speed * entry.raiseSign);
       entry.body.setAwake(true);
       return;

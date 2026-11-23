@@ -105,7 +105,8 @@ const SPAWN: BallSpec = { x: 3.15, y: 6.2 };
 /** First id the spy world hands out. */
 const FIRST_ID = 10;
 
-type Call = { readonly op: "add"; readonly spec: BallSpec } | { readonly op: "remove"; readonly id: BallId };
+type Call =
+  { readonly op: "add"; readonly spec: BallSpec } | { readonly op: "remove"; readonly id: BallId };
 
 interface Impulse {
   readonly id: BallId;

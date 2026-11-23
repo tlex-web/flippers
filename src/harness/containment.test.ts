@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-  flipperSweptTunnel,
-  sweptEscaped,
-  sweptEscapedForBall,
-} from "./containment";
+import { flipperSweptTunnel, sweptEscaped, sweptEscapedForBall } from "./containment";
 import type { BallState, Segment, Vec2 } from "../physics/types";
 
 /**
@@ -21,12 +17,7 @@ function seg(ax: number, ay: number, bx: number, by: number): Segment {
 
 // A 2 x 3 m box (outer boundary) plus one deliberately THIN interior wall at
 // y = 2.0 spanning x in [0.2, 0.8] — the same shape the Planck adapter builds.
-const OUTER: Segment[] = [
-  seg(0, 0, 2, 0),
-  seg(2, 0, 2, 3),
-  seg(2, 3, 0, 3),
-  seg(0, 3, 0, 0),
-];
+const OUTER: Segment[] = [seg(0, 0, 2, 0), seg(2, 0, 2, 3), seg(2, 3, 0, 3), seg(0, 3, 0, 0)];
 const THIN = seg(0.2, 2.0, 0.8, 2.0);
 const WALLS: readonly Segment[] = [...OUTER, THIN];
 
@@ -113,15 +104,11 @@ describe("flipperSweptTunnel — intra-step swept-sector flipper check", () => {
     // POST-step centerline ONLY (preAngle == postAngle == 0.6): the chord grazes
     // the rotated-away bat and its endpoint is NOT clear, so a post-only check
     // does not flag it — the exact false-negative the review calls out.
-    expect(
-      flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0.6, 0.6),
-    ).toBe(false);
+    expect(flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0.6, 0.6)).toBe(false);
 
     // Sweeping the bat across [0, 0.6] catches the pass-through at the mid-sweep
     // angle where the ball actually crossed the bat, both endpoints clear.
-    expect(
-      flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0, 0.6),
-    ).toBe(true);
+    expect(flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0, 0.6)).toBe(true);
   });
 
   it("flags a clean perpendicular pass-through with both endpoints clear", () => {
@@ -129,9 +116,7 @@ describe("flipperSweptTunnel — intra-step swept-sector flipper check", () => {
     // clear on both sides — a genuine fast tunnel.
     const prev: Vec2 = { x: 0.5, y: -0.5 };
     const next: Vec2 = { x: 0.5, y: 0.5 };
-    expect(
-      flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, -0.1, 0.1),
-    ).toBe(true);
+    expect(flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, -0.1, 0.1)).toBe(true);
   });
 
   it("does NOT flag a graze that ends touching the bat (whack, not a tunnel)", () => {
@@ -139,17 +124,13 @@ describe("flipperSweptTunnel — intra-step swept-sector flipper check", () => {
     // whacked/resting ball does), so it is not a clean pass-through.
     const prev: Vec2 = { x: 0.5, y: -0.4 };
     const next: Vec2 = { x: 0.5, y: 0.1 }; // ends 0.1 < 0.25 from the y=0 centerline
-    expect(
-      flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0, 0),
-    ).toBe(false);
+    expect(flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, 0, 0)).toBe(false);
   });
 
   it("does NOT flag a chord that never crosses the bat segment", () => {
     // Parallel to and clear of the bat — no crossing at any swept angle.
     const prev: Vec2 = { x: 0.2, y: 0.6 };
     const next: Vec2 = { x: 0.8, y: 0.6 };
-    expect(
-      flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, -0.2, 0.2),
-    ).toBe(false);
+    expect(flipperSweptTunnel(prev, next, R, PIVOT, LENGTH, HALF_WIDTH, -0.2, 0.2)).toBe(false);
   });
 });

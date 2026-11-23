@@ -215,7 +215,9 @@ describe("sensor contacts read the ball center, never a stale solid point (CR-02
     if (!hit || !centerAtBegin) throw new Error("no rollover hit");
     // Within one step's travel of the ball's center at the begin step, and
     // nowhere near the parked ball down at the plunger (y ≈ 6.2).
-    expect(Math.hypot(hit.point.x - centerAtBegin.x, hit.point.y - centerAtBegin.y)).toBeLessThan(0.05);
+    expect(Math.hypot(hit.point.x - centerAtBegin.x, hit.point.y - centerAtBegin.y)).toBeLessThan(
+      0.05,
+    );
     expect(hit.point.y).toBeLessThan(ROLLOVER_401_Y + BALL_RADIUS_M);
   });
 
@@ -229,7 +231,8 @@ describe("sensor contacts read the ball center, never a stale solid point (CR-02
     while (overlapCount < 0) {
       rig.step();
       const y = rig.fallingBall().y;
-      if (y + BALL_RADIUS_M < ROLLOVER_401_Y - 0.02) freeAirCount = rig.world.getContactPoints().length;
+      if (y + BALL_RADIUS_M < ROLLOVER_401_Y - 0.02)
+        freeAirCount = rig.world.getContactPoints().length;
       else if (Math.abs(y - ROLLOVER_401_Y) < BALL_RADIUS_M - 0.02) {
         overlapCount = rig.world.getContactPoints().length;
       }

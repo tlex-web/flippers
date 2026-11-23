@@ -398,7 +398,9 @@ describe("the starting window is bounded (05-REVIEW WR-01)", () => {
     expect(started).toBeGreaterThanOrEqual(Math.floor(STARTING_WINDOW_MS / frameMs));
     expect(started).toBeLessThanOrEqual(2 * framesPerWindow);
     expect(lastBuiltFrame).toBeLessThan(3 * framesPerWindow);
-    expect(fake.nodes.length - chain).toBeLessThanOrEqual(2 * framesPerWindow * MAX_NODES_PER_VOICE);
+    expect(fake.nodes.length - chain).toBeLessThanOrEqual(
+      2 * framesPerWindow * MAX_NODES_PER_VOICE,
+    );
     expect(engine.activeVoices()).toBe(0);
     expect(connected(fake, chain)).toBe(0);
     expect(fake.resumeCalls).toBe(1 + 60 * 30);

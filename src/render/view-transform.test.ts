@@ -3,7 +3,13 @@ import { describe, it, expect } from "vitest";
 import { PIXELS_PER_METER } from "../physics/constants";
 import { resolve } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
-import { computeView, tableBounds, VIEW_FILL, VIEW_PAD_CSS, type ViewTransform } from "./view-transform";
+import {
+  computeView,
+  tableBounds,
+  VIEW_FILL,
+  VIEW_PAD_CSS,
+  type ViewTransform,
+} from "./view-transform";
 
 /**
  * RND-02 backing-store sizing (research Finding 1, T-05-06): the CSS fit comes

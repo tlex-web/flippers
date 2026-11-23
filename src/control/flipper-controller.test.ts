@@ -32,9 +32,7 @@ class SpyWorld implements FlipperWorld {
   }[] = [];
 
   /** `restLimitAngle` defaults to the entry's initial angle (it starts at rest). */
-  constructor(
-    ids: readonly { id: number; angle: number; restLimitAngle?: number }[],
-  ) {
+  constructor(ids: readonly { id: number; angle: number; restLimitAngle?: number }[]) {
     for (const f of ids) {
       this.flippers.push({
         id: f.id,
@@ -96,7 +94,13 @@ function sweep(
 }
 
 /** Hold the angle constant for `n` updates so the FSM sees it as settled. */
-function hold(world: SpyWorld, ctrl: FlipperController, id: number, angle: number, n: number): void {
+function hold(
+  world: SpyWorld,
+  ctrl: FlipperController,
+  id: number,
+  angle: number,
+  n: number,
+): void {
   for (let i = 0; i < n; i++) {
     world.setAngle(id, angle);
     ctrl.update();

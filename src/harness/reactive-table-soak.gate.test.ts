@@ -50,47 +50,43 @@ function envNumber(name: string, fallback: number): number {
 }
 
 describe("reactive table soak gate — >=10-minute tunnel-proof soak with kicks live (CCD on)", () => {
-  it(
-    "runs >=600s of simulated sweep with every kick live and the ball never escapes",
-    () => {
-      const durationSeconds = envNumber("REACTIVE_SOAK_DURATION", DEFAULT_DURATION_SECONDS);
-      const cases = envNumber("REACTIVE_SOAK_CASES", DEFAULT_CASES);
-      const maxLaunchSpeed = envNumber("REACTIVE_SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
-      const seed = envNumber("REACTIVE_SOAK_SEED", DEFAULT_SEED);
+  it("runs >=600s of simulated sweep with every kick live and the ball never escapes", () => {
+    const durationSeconds = envNumber("REACTIVE_SOAK_DURATION", DEFAULT_DURATION_SECONDS);
+    const cases = envNumber("REACTIVE_SOAK_CASES", DEFAULT_CASES);
+    const maxLaunchSpeed = envNumber("REACTIVE_SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
+    const seed = envNumber("REACTIVE_SOAK_SEED", DEFAULT_SEED);
 
-      expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
 
-      const worlds: ReactiveSoakWorld[] = [];
-      const config: SoakConfig = {
-        originRegion: OPEN_FIELD_REGION,
-        makeWorld: (options) => {
-          const world = new ReactiveSoakWorld(options);
-          worlds.push(world);
-          return world;
-        },
-        seed,
-        durationSeconds,
-        maxLaunchSpeed,
-        cases,
-        bullet: true,
-      };
+    const worlds: ReactiveSoakWorld[] = [];
+    const config: SoakConfig = {
+      originRegion: OPEN_FIELD_REGION,
+      makeWorld: (options) => {
+        const world = new ReactiveSoakWorld(options);
+        worlds.push(world);
+        return world;
+      },
+      seed,
+      durationSeconds,
+      maxLaunchSpeed,
+      cases,
+      bullet: true,
+    };
 
-      const result = runSoak(config);
-      const kicks = worlds.reduce((sum, w) => sum + w.kicks, 0);
-      const postKicks = worlds.reduce((sum, w) => sum + w.postKicks, 0);
+    const result = runSoak(config);
+    const kicks = worlds.reduce((sum, w) => sum + w.kicks, 0);
+    const postKicks = worlds.reduce((sum, w) => sum + w.postKicks, 0);
 
-      for (const failure of result.failures) {
-        console.error(describeFailure(failure));
-      }
+    for (const failure of result.failures) {
+      console.error(describeFailure(failure));
+    }
 
-      expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
-      expect(result.failures).toEqual([]);
-      expect(result.passed).toBe(true);
-      expect(result.casesRun).toBe(cases);
-      expect(kicks).toBeGreaterThan(0);
-      // The always-armed ball save kicked off the center post (D-10).
-      expect(postKicks).toBeGreaterThan(0);
-    },
-    900_000,
-  );
+    expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(result.failures).toEqual([]);
+    expect(result.passed).toBe(true);
+    expect(result.casesRun).toBe(cases);
+    expect(kicks).toBeGreaterThan(0);
+    // The always-armed ball save kicked off the center post (D-10).
+    expect(postKicks).toBeGreaterThan(0);
+  }, 900_000);
 });

@@ -18,11 +18,7 @@ import {
   type FakeNode,
 } from "../audio/test/fake-audio-context";
 import { FlipperController } from "../control/flipper-controller";
-import {
-  ReactiveElements,
-  type ReactiveFeedback,
-  type RulesGate,
-} from "../game/reactive-elements";
+import { ReactiveElements, type ReactiveFeedback, type RulesGate } from "../game/reactive-elements";
 import { mulberry32 } from "../harness/prng";
 import { FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";

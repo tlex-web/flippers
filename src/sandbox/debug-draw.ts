@@ -17,12 +17,7 @@
  */
 
 import { BALL_RADIUS_M, PIXELS_PER_METER } from "../physics/constants";
-import type {
-  BallState,
-  FlipperState,
-  PhysicsWorld,
-  Vec2,
-} from "../physics/types";
+import type { BallState, FlipperState, PhysicsWorld, Vec2 } from "../physics/types";
 import type { ResolvedElement } from "../table/resolve";
 import { PLUNGER_REST, PLUNGER_ZONE, type ElementKind } from "../table/spec";
 
@@ -381,14 +376,7 @@ export class DebugRenderer {
     for (const b of balls) {
       const rpx = b.radius * PIXELS_PER_METER;
       if (rpx !== this.ballGradientRadiusPx || this.ballGradient === null) {
-        const g = ctx.createRadialGradient(
-          -rpx * 0.3,
-          -rpx * 0.3,
-          rpx * 0.1,
-          0,
-          0,
-          rpx,
-        );
+        const g = ctx.createRadialGradient(-rpx * 0.3, -rpx * 0.3, rpx * 0.1, 0, 0, rpx);
         g.addColorStop(0, COL_BALL_CORE);
         g.addColorStop(1, COL_BALL_EDGE);
         this.ballGradient = g;
@@ -446,12 +434,7 @@ export class DebugRenderer {
     ctx.fillStyle = COL_CONTACT;
     const s = 5;
     for (const p of points) {
-      ctx.fillRect(
-        p.x * PIXELS_PER_METER - s,
-        p.y * PIXELS_PER_METER - s,
-        s * 2,
-        s * 2,
-      );
+      ctx.fillRect(p.x * PIXELS_PER_METER - s, p.y * PIXELS_PER_METER - s, s * 2, s * 2);
     }
   }
 }

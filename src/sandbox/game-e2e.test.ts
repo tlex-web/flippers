@@ -184,7 +184,13 @@ function makeGame(
     controller.update();
 
     const pe = plungerInput.drainEdges();
-    plunger.applyEdges(pe.press, pe.release, pe.cancel, plungerInput.isHeld(), session.activeBallId);
+    plunger.applyEdges(
+      pe.press,
+      pe.release,
+      pe.cancel,
+      plungerInput.isHeld(),
+      session.activeBallId,
+    );
     plunger.update();
 
     const ge = gameInput.drainEdges();
@@ -284,7 +290,7 @@ function launchAndDrain(g: Game, holdSteps: number): { scoreBefore: number; scor
   g.plungerInput.handleKeyUp(SPACE);
 
   const id = g.session.activeBallId;
-  for (let steps = 0; steps < DRAIN_CAP_STEPS; ) {
+  for (let steps = 0; steps < DRAIN_CAP_STEPS;) {
     const scoreBefore = g.session.getScore();
     steps += g.frame(FRAME_120_HZ);
     if (g.drainedIds.includes(id)) return { scoreBefore, scoreAfter: g.session.getScore() };

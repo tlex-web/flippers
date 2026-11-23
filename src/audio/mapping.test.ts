@@ -1,12 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { mulberry32 } from "../harness/prng";
-import {
-  GAIN_FLOOR_DB,
-  playbackSemitones,
-  semitoneRatio,
-  strengthToGain,
-} from "./mapping";
+import { GAIN_FLOOR_DB, playbackSemitones, semitoneRatio, strengthToGain } from "./mapping";
 
 describe("strengthToGain (perceptual loudness, AUD-01)", () => {
   it("maps strength 0 to the -18 dB floor and strength 1 to unity", () => {

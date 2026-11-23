@@ -280,8 +280,7 @@ export class FlipperInput {
   private readonly onWindowKeyUp = (e: KeyboardEvent): void => this.handleKeyUp(e);
   private readonly onWindowBlur = (): void => this.handleBlur();
   private readonly onWindowFocus = (): void => this.handleFocus();
-  private readonly onVisibilityChange = (): void =>
-    this.handleVisibilityChange(document.hidden);
+  private readonly onVisibilityChange = (): void => this.handleVisibilityChange(document.hidden);
 
   constructor(options: FlipperInputOptions = {}) {
     this.windowsShiftHeal = options.windowsShiftHeal === true;

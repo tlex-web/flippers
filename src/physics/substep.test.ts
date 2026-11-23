@@ -36,10 +36,7 @@ import { PROOF_BOX_SPEC } from "../table/spec";
 // The D-01/D-02 law recomputed independently in the test so a regression in EITHER
 // the FLIPPER_MAX_ANGULAR_SPEED constant or the adapter's formula is caught here.
 function subStepsFor(omega: number): number {
-  return Math.max(
-    1,
-    Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / (0.5 * BALL_RADIUS_M)),
-  );
+  return Math.max(1, Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / (0.5 * BALL_RADIUS_M)));
 }
 
 /** Cap-derived bound on N (D-02). With the tuned constants this is 4. */

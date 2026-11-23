@@ -157,11 +157,21 @@ describe("table soak — bumpers are part of the swept invariant (03-REVIEW WR-0
     const band = BUMPER_RADIUS_M + r;
     // Straight through the disk between two clear endpoints.
     expect(
-      circleSweptEscaped({ x: center.x, y: center.y - 1 }, { x: center.x, y: center.y + 1 }, r, disk),
+      circleSweptEscaped(
+        { x: center.x, y: center.y - 1 },
+        { x: center.x, y: center.y + 1 },
+        r,
+        disk,
+      ),
     ).toBe(true);
     // Ends inside the band.
     expect(
-      circleSweptEscaped({ x: center.x, y: center.y - 1 }, { x: center.x, y: center.y - band + 0.01 }, r, disk),
+      circleSweptEscaped(
+        { x: center.x, y: center.y - 1 },
+        { x: center.x, y: center.y - band + 0.01 },
+        r,
+        disk,
+      ),
     ).toBe(true);
     // A chord that stays just outside the band (tangent-parallel, as after a bounce).
     expect(

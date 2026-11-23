@@ -29,12 +29,7 @@ import { PROOF_BOX_SPEC } from "../table/spec";
 import type { TableSpec } from "../table/spec";
 import { flipperSweptTunnel, sweptEscaped } from "./containment";
 import { mulberry32 } from "./prng";
-import type {
-  FlipperState,
-  PhysicsWorld,
-  Segment,
-  Vec2,
-} from "../physics/types";
+import type { FlipperState, PhysicsWorld, Segment, Vec2 } from "../physics/types";
 
 /** An axis-aligned spawn box for launch origins (meters). */
 export interface OriginRegion {
@@ -324,10 +319,7 @@ type OriginFilter = (x: number, y: number) => boolean;
  * every circle element's center (bumpers are circles, not segments, so the
  * boundary alone would let a ball spawn inside one).
  */
-function originClearanceFilter(
-  world: PhysicsWorld,
-  boundary: readonly Segment[],
-): OriginFilter {
+function originClearanceFilter(world: PhysicsWorld, boundary: readonly Segment[]): OriginFilter {
   const clearance = BALL_RADIUS_M + LAUNCH_MARGIN;
   const circles = world
     .getElements()
@@ -466,8 +458,7 @@ function makeCaseParams(
 
   const modePick = Math.floor(rng() * 3); // drawn always, to keep the stream stable
   const mode: LaunchMode =
-    config.forceMode ??
-    (modePick === 0 ? "thin-wall" : modePick === 1 ? "flipper" : "free");
+    config.forceMode ?? (modePick === 0 ? "thin-wall" : modePick === 1 ? "flipper" : "free");
 
   const flipperDir = rng() < 0.5 ? 1 : -1;
   const flipperPhaseSteps = Math.floor(rng() * MAX_FLIPPER_PHASE_STEPS);
@@ -485,11 +476,7 @@ function makeCaseParams(
 }
 
 /** Resolve a case's launch velocity: full-circle (free) or aimed-with-jitter. */
-function launchVelocity(
-  params: CaseParams,
-  thin: Vec2,
-  flipper: Vec2,
-): { vx: number; vy: number } {
+function launchVelocity(params: CaseParams, thin: Vec2, flipper: Vec2): { vx: number; vy: number } {
   if (params.mode === "free") {
     return {
       vx: Math.cos(params.angle) * params.speed,
@@ -636,9 +623,7 @@ function runCase(
     //   3. Solid circles (bumpers) — not in the boundary segments, so checked
     //      with the circle analogue of (1) (03-REVIEW WR-05). Suppressed with
     //      the boundary check under the flipper negative control.
-    const escapedBoundary = ignoreBoundary
-      ? false
-      : sweptEscaped(prev, next, effRadius, boundary);
+    const escapedBoundary = ignoreBoundary ? false : sweptEscaped(prev, next, effRadius, boundary);
     const escapedCircle =
       !ignoreBoundary && !escapedBoundary
         ? circleSweptEscaped(prev, next, effRadius, circles)
@@ -735,9 +720,7 @@ export function runSoak(config: SoakConfig): SoakResult {
           ? { bullet: options.bullet, table }
           : { bullet: options.bullet, subStepping: config.subStepping, table },
       ));
-  const caseSeeds = config.seeds
-    ? [...config.seeds]
-    : deriveSeeds(config.seed, config.cases);
+  const caseSeeds = config.seeds ? [...config.seeds] : deriveSeeds(config.seed, config.cases);
 
   const failures: SoakFailure[] = [];
   let casesRun = 0;

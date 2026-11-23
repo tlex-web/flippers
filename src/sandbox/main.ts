@@ -367,7 +367,9 @@ function main(): void {
     // The world box never changes; the view is recomputed from the display.
     const bounds = tableBounds(world.getElements());
     const applyView = (): void => {
-      tr.resize(computeView(bounds, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1));
+      tr.resize(
+        computeView(bounds, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1),
+      );
     };
     applyView();
     window.addEventListener("resize", applyView);

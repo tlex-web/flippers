@@ -112,10 +112,7 @@ function makeStepper(world: PhysicsWorld): (drive: () => void) => void {
  * than `absEps`, or -1 if the series is monotonically non-increasing within that
  * tolerance (the energy-monotonic detector; mirrors stability.test.ts).
  */
-function firstMonotonicIncrease(
-  series: readonly number[],
-  absEps: number,
-): number {
+function firstMonotonicIncrease(series: readonly number[], absEps: number): number {
   for (let i = 1; i < series.length; i++) {
     const cur = series[i];
     const prev = series[i - 1];
@@ -247,9 +244,7 @@ describe("FLIP-02 tip-vs-base — a tip hit out-launches a base hit per v = ω·
     // number is the pivot→ball distance the launch actually scales with).
     const launchRatio = tip.launch / base.launch;
     const radiusRatio = tip.radius / base.radius;
-    expect(Math.abs(launchRatio - radiusRatio) / radiusRatio).toBeLessThan(
-      VR_RATIO_TOL,
-    );
+    expect(Math.abs(launchRatio - radiusRatio) / radiusRatio).toBeLessThan(VR_RATIO_TOL);
 
     // Each launch is a substantial fraction of the ideal contact-point speed ω·r
     // (real momentum transfer, not incidental motion). The raise runs at the up
@@ -363,9 +358,9 @@ describe("FLIP-03 / D-09 cradle — a caught ball settles jitter-free, energy tr
     expect(firstMonotonicIncrease([0.1, 0.2, 0.3], ENERGY_NOISE_EPS)).toBeGreaterThan(0);
     // ...while tolerating a genuinely non-increasing series (with tiny noise).
     expect(firstMonotonicIncrease([0.5, 0.5, 0.4, 0.1, 0.0], ENERGY_NOISE_EPS)).toBe(-1);
-    expect(
-      firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS),
-    ).toBe(-1);
+    expect(firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS)).toBe(
+      -1,
+    );
 
     // Rest/jitter detector: if the flipper does NOT hold (released), the settled
     // ball does NOT stay put — it moves well past the rest threshold. So the green

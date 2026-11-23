@@ -38,37 +38,33 @@ function envNumber(name: string, fallback: number): number {
 }
 
 describe("table soak gate — >=10-minute tunnel-proof soak on TABLE_SPEC (CCD on)", () => {
-  it(
-    "runs >=600s of simulated sweep on the real table and the ball never escapes",
-    () => {
-      const durationSeconds = envNumber("TABLE_SOAK_DURATION", DEFAULT_DURATION_SECONDS);
-      const cases = envNumber("TABLE_SOAK_CASES", DEFAULT_CASES);
-      const maxLaunchSpeed = envNumber("TABLE_SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
-      const seed = envNumber("TABLE_SOAK_SEED", DEFAULT_SEED);
+  it("runs >=600s of simulated sweep on the real table and the ball never escapes", () => {
+    const durationSeconds = envNumber("TABLE_SOAK_DURATION", DEFAULT_DURATION_SECONDS);
+    const cases = envNumber("TABLE_SOAK_CASES", DEFAULT_CASES);
+    const maxLaunchSpeed = envNumber("TABLE_SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
+    const seed = envNumber("TABLE_SOAK_SEED", DEFAULT_SEED);
 
-      expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
 
-      const config: SoakConfig = {
-        table: TABLE_SPEC,
-        originRegion: OPEN_FIELD_REGION,
-        seed,
-        durationSeconds,
-        maxLaunchSpeed,
-        cases,
-        bullet: true,
-      };
+    const config: SoakConfig = {
+      table: TABLE_SPEC,
+      originRegion: OPEN_FIELD_REGION,
+      seed,
+      durationSeconds,
+      maxLaunchSpeed,
+      cases,
+      bullet: true,
+    };
 
-      const result = runSoak(config);
+    const result = runSoak(config);
 
-      for (const failure of result.failures) {
-        console.error(describeFailure(failure));
-      }
+    for (const failure of result.failures) {
+      console.error(describeFailure(failure));
+    }
 
-      expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
-      expect(result.failures).toEqual([]);
-      expect(result.passed).toBe(true);
-      expect(result.casesRun).toBe(cases);
-    },
-    900_000,
-  );
+    expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(result.failures).toEqual([]);
+    expect(result.passed).toBe(true);
+    expect(result.casesRun).toBe(cases);
+  }, 900_000);
 });
