@@ -1073,11 +1073,18 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     // Run to the kickback (the session's save counter), noting the chute exit.
     let step = 0;
     let exitStep = -1;
+    // Session step whose world step first put the ball clear of the chute: the
+    // save timer starts on the next tick (it reads the previous step's ball),
+    // so the original window's last backstopped step is this + BALL_SAVE_STEPS.
+    let exitSessionStep = -1;
     while (g.session.getSaveCount() === 0) {
       if (step >= DRAIN_CAP_STEPS) throw new Error("no kickback save");
       if (g.drainedIds.includes(first)) throw new Error(`ball ${first} drained unsaved`);
       step += g.frame(FRAME_120_HZ);
-      if (exitStep < 0 && ballById(g, first).x + BALL_RADIUS_M < CHUTE_X) exitStep = step;
+      if (exitStep < 0 && ballById(g, first).x + BALL_RADIUS_M < CHUTE_X) {
+        exitStep = step;
+        exitSessionStep = g.session.getStep();
+      }
     }
     expect(exitStep).toBeGreaterThan(0);
     expect(step - exitStep).toBeLessThan(BALL_SAVE_STEPS);
@@ -1091,14 +1098,19 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(ballById(g, first).vy).toBeLessThan(0);
     expect(g.session.getBall()).toBe(1);
 
-    // One save per ball: the kicked ball's next drain, past the kickback
-    // grace, is real. Precondition asserted so a tuning change that moves the
-    // drain inside the grace (a backstop re-serve, 06-REVIEW CR-01) fails loudly.
+    // One save per ball: the kicked ball's next drain, past both the kickback
+    // grace floor and the original save window, is real. Preconditions
+    // asserted so a tuning change that moves the drain inside the grace (a
+    // backstop re-serve, 06-REVIEW CR-01) fails loudly instead of silently
+    // testing nothing.
     while (!g.drainedIds.includes(first)) {
       if (step >= 2 * DRAIN_CAP_STEPS) throw new Error(`ball ${first} did not drain`);
       step += g.frame(FRAME_120_HZ);
     }
-    expect(g.session.getStep() - kickStep).toBeGreaterThan(KICKBACK_GRACE_STEPS);
+    const drainStep = g.session.getStep();
+    expect(drainStep - kickStep).toBeGreaterThan(KICKBACK_GRACE_STEPS);
+    expect(exitSessionStep).toBeGreaterThan(0);
+    expect(drainStep).toBeGreaterThan(exitSessionStep + BALL_SAVE_STEPS);
     expect(g.session.getState()).toBe("bonus");
     expect(g.session.getSaveCount()).toBe(1);
     expect(g.session.getBall()).toBe(1);

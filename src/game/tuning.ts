@@ -245,9 +245,11 @@ export const TILT_FORFEIT_HOLD_STEPS = 120;
 // no ball (the backstop re-serve) or the center-post kickback saves it (06-08).
 // One save per ball; every serve re-arms it, the backstop re-serve does not.
 // The kickback spends the save but does not always keep the ball in play (a
-// dead-center kick can fall straight back through the bat gap), so a drain of
-// the kicked ball within KICKBACK_GRACE_STEPS is still backstopped: the kick
-// can only improve on the guaranteed save, never make it worse (06-REVIEW CR-01).
+// dead-center kick can fall straight back through the bat gap, a kick-up can
+// come back down seconds later), so a drain of the kicked ball is still
+// backstopped through the rest of the original save window, and for at least
+// KICKBACK_GRACE_STEPS after the kick: the kick can only improve on the
+// guaranteed save, never make it worse (06-REVIEW CR-01).
 
 /** Fixed steps the save runs once started (840 steps = 7 s at 120 Hz, D-09). */
 export const BALL_SAVE_STEPS = 840;
@@ -259,10 +261,13 @@ export const BALL_SAVE_STEPS = 840;
 export const BALL_SAVE_BLINK_STEPS = 240;
 
 /**
- * Fixed steps after a center-post kickback during which a drain of the kicked
- * ball is still a backstop re-serve, counted once as the kickback (240 steps =
- * 2 s at 120 Hz, 06-REVIEW CR-01). The headless probe saw kicked balls drain 32
- * to 115 steps after the kick, so 2 s covers them with margin.
+ * Minimum fixed steps after a center-post kickback during which a drain of the
+ * kicked ball is still a backstop re-serve, counted once as the kickback (240
+ * steps = 2 s at 120 Hz, 06-REVIEW CR-01). The grace also runs through the rest
+ * of the original save window when that is longer, so this floor only matters
+ * for a kick late in the window. The headless probe saw kicked balls that fall
+ * straight back drain 32 to 115 steps after the kick, so 2 s covers them with
+ * margin.
  */
 export const KICKBACK_GRACE_STEPS = 240;
 

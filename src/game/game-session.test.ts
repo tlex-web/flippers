@@ -1281,15 +1281,77 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(g.session.getLastSaveStep()).toBe(-1);
   });
 
-  it("a kickback followed by a drain after the grace is a real drain", () => {
-    const r = makeRig();
-    startSaved(r);
-    expect(r.session.trySave(FIRST_ID)).toBe(true);
-    r.step();
-    r.tick(KICKBACK_GRACE_STEPS + 1);
-    r.step(drainOf(FIRST_ID));
-    expect(r.session.getState()).toBe("bonus");
-    expect(r.session.getSaveCount()).toBe(1);
+  it("a kickback late in the window keeps the KICKBACK_GRACE_STEPS floor: a drain on its last step is re-served, one step later it is real", () => {
+    // The timer starts on step 1 (remaining 840) and would time out on step
+    // 841; a kick on step 800 has 41 window steps left, under the 240 floor.
+    for (const [drainStep, saved] of [
+      [800 + KICKBACK_GRACE_STEPS, true],
+      [800 + KICKBACK_GRACE_STEPS + 1, false],
+    ] as const) {
+      const r = makeRig();
+      startSaved(r);
+      r.tick(799);
+      expect(r.session.getStep()).toBe(800);
+      expect(r.session.trySave(FIRST_ID)).toBe(true);
+      r.step();
+      r.tick(drainStep - 800);
+      r.step(drainOf(FIRST_ID));
+      expect(r.session.getState()).toBe(saved ? "playing" : "bonus");
+      expect(r.session.getBall()).toBe(1);
+      expect(r.session.getSaveCount()).toBe(1);
+    }
+  });
+
+  it("a kickback never makes a drain inside the original save window cost the ball: the grace runs to the window's end, past KICKBACK_GRACE_STEPS (06-REVIEW CR-01)", () => {
+    // Without a kick, the save started on step 1 backstops a drain through
+    // step BALL_SAVE_STEPS and times out on the step after (the parity case).
+    const lastWindowStep = BALL_SAVE_STEPS;
+    const plain = makeRig();
+    startSaved(plain);
+    plain.tick(lastWindowStep - 1);
+    plain.step(drainOf(FIRST_ID));
+    expect(plain.session.getState()).toBe("playing");
+    expect(plain.session.getSaveCount()).toBe(1);
+
+    // Kick at window step 100 (session step 101), then drain the kicked ball
+    // after the 240-step grace floor but inside the window, on the window's
+    // last step, and one step past it.
+    const kickStep = 101;
+    for (const [drainStep, saved] of [
+      [kickStep + 600, true],
+      [lastWindowStep, true],
+      [lastWindowStep + 1, false],
+    ] as const) {
+      expect(drainStep - kickStep).toBeGreaterThan(KICKBACK_GRACE_STEPS);
+      const r = makeRig();
+      startSaved(r);
+      r.tick(kickStep - 1);
+      expect(r.session.getStep()).toBe(kickStep);
+      expect(r.session.trySave(FIRST_ID)).toBe(true);
+      r.step();
+      r.tick(drainStep - kickStep);
+      r.step(drainOf(FIRST_ID));
+      expect(r.session.getBall()).toBe(1);
+      expect(r.session.getSaveCount()).toBe(1);
+      if (saved) {
+        // No ball lost: remove then add, same ball, still playing, counted
+        // once as the kickback.
+        expect(r.session.getState()).toBe("playing");
+        expect(r.calls).toEqual([
+          { op: "add", spec: SPAWN },
+          { op: "remove", id: FIRST_ID },
+          { op: "add", spec: SPAWN },
+        ]);
+        expect(r.session.getLastSaveKind()).toBe("kickback");
+        expect(r.session.getLastSaveStep()).toBe(drainStep);
+        // The grace is used up: the re-served ball's drain is real.
+        r.tick(1);
+        r.step(drainOf(r.session.activeBallId));
+        expect(r.session.getState()).toBe("bonus");
+      } else {
+        expect(r.session.getState()).toBe("bonus");
+      }
+    }
   });
 
   it("a tilt ends the kickback grace: the tilted drain is a forfeit, and the next ball's unstarted-save drain inside the old grace is real", () => {
