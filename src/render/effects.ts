@@ -27,12 +27,11 @@
  * construction. Particles stay on under reduced motion (D-18).
  */
 
-import type { FxSink } from "../app/cue-queue";
+import type { FxSink, ObserverFx } from "../app/cue-queue";
 import { deriveKickFace } from "../game/reactive-elements";
 import type { SaveKind } from "../game/ball-save";
 import type { NudgeDir } from "../game/tuning";
 import { FIXED_DT } from "../physics/constants";
-import type { ObserverFx } from "../sandbox/presentation-observer";
 import type { ResolvedElement } from "../table/resolve";
 import { maxElementId } from "./flash";
 import {

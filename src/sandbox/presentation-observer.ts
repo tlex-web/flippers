@@ -59,8 +59,7 @@
  * tuning constant and the pure `revealedRowCount` schedule).
  */
 
-import type { CueQueue, FlashSink } from "../app/cue-queue";
-import type { SaveKind } from "../game/ball-save";
+import type { CueQueue, FlashSink, ObserverFx } from "../app/cue-queue";
 import type { FlipperController } from "../control/flipper-controller";
 import type { PlungerController } from "../control/plunger-controller";
 import { revealedRowCount } from "../game/bonus";
@@ -91,19 +90,8 @@ export type ObserverPlunger = Pick<PlungerController, "getReleaseCount" | "getLa
 /** The flipper controller's read-only coil counters. */
 export type ObserverFlippers = Pick<FlipperController, "getCoilOnCount" | "getCoilOffCount">;
 
-/**
- * Where the observer's game events reach the presentation effects (06-09). The
- * render side implements it; scalar step-path writes only.
- */
-export interface ObserverFx {
-  onNudge(dir: NudgeDir): void;
-  onTilt(): void;
-  onDrain(): void;
-  /** A skill-shot award through rollover `laneId` (06-13). */
-  onSkillShot(laneId: number): void;
-  /** A ball save of `kind` (06-13). */
-  onSave(kind: SaveKind | "none"): void;
-}
+/** Where the observer's game events reach the effects (defined in app/cue-queue). */
+export type { ObserverFx };
 
 /** Element id for a cue that belongs to no table element. */
 const NO_ELEMENT = -1;

@@ -17,10 +17,12 @@
  * There is no wall or chute cue kind: walls flash but stay silent by
  * construction (D-03).
  *
- * Engine-agnostic and DOM-free: the only import from the rules is a type.
+ * Engine-agnostic and DOM-free: the only imports from the rules are types.
  */
 
+import type { SaveKind } from "../game/ball-save";
 import type { ReactiveFeedback } from "../game/reactive-elements";
+import type { NudgeDir } from "../game/tuning";
 import { BALL_RADIUS_M, ballMass } from "../physics/constants";
 
 /** Every presentation cue the game can emit. */
@@ -121,6 +123,22 @@ export interface FxSink {
     py: number,
   ): void;
   onSensor(kind: "rollover" | "lane", elementId: number, bank: boolean): void;
+}
+
+/**
+ * Where the presentation observer's game events reach the presentation
+ * effects (06-09). The render side implements it; scalar step-path writes
+ * only. Lives here beside `FxSink` so render never imports the sandbox
+ * composition layer (06-REVIEW IN-03).
+ */
+export interface ObserverFx {
+  onNudge(dir: NudgeDir): void;
+  onTilt(): void;
+  onDrain(): void;
+  /** A skill-shot award through rollover `laneId` (06-13). */
+  onSkillShot(laneId: number): void;
+  /** A ball save of `kind` (06-13). */
+  onSave(kind: SaveKind | "none"): void;
 }
 
 /** A pooled, mutable cue record. */
