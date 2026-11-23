@@ -5,19 +5,19 @@ titles: json
 findings:
   - id: CR-01
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "A kickback spends the ball save, and the ball still drains inside the save window, costing a ball"
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "\"BALL SAVED\" (and the live-region announcement) can outlive a lost ball and override the game-over prompt"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The same-step kickback+drain path plays the post flourish and save sparks for a ball that was removed and re-served"
   - id: WR-03
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Lamp geometry and skill-shot lanes are hard-coded copies of spec positions and ids"
   - id: WR-04
     severity: warning
@@ -25,43 +25,43 @@ findings:
     title: "Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: fixed
     title: "`parseBest` accepts hex, exponent and padded strings, contrary to its \"decimal integer string\" contract"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: fixed
     title: "Dead code left by Phase 6"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The render layer imports a type from the sandbox composition root"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: fixed
     title: "A backstop re-serve can reopen an unresolved skill shot, giving the same ball a second attempt"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: fixed
     title: "The lamp shape table is built twice"
-open: 10
+open: 1
 total: 10
-recorded: 2026-11-23T01:25:20.602Z
+recorded: 2026-11-23T10:05:07.510Z
 ---
 
 # Phase 06: Code Review Disposition
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-01 | critical | open | - |
-| WR-01 | warning | open | - |
-| WR-02 | warning | open | - |
-| WR-03 | warning | open | - |
+| CR-01 | critical | fixed | 06-REVIEW-FIX.md |
+| WR-01 | warning | fixed | 06-REVIEW-FIX.md |
+| WR-02 | warning | fixed | 06-REVIEW-FIX.md |
+| WR-03 | warning | fixed | 06-REVIEW-FIX.md |
 | WR-04 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
+| IN-01 | info | fixed | 06-REVIEW-FIX.md |
+| IN-02 | info | fixed | 06-REVIEW-FIX.md |
+| IN-03 | info | fixed | 06-REVIEW-FIX.md |
+| IN-04 | info | fixed | 06-REVIEW-FIX.md |
+| IN-05 | info | fixed | 06-REVIEW-FIX.md |
 
 Dispositions: `open` (recorded, not yet triaged), `fixed`, `skipped`, `deferred`.
 Set `deferred` by hand and put the reason in the Source cell; both are preserved. A `|` in the reason is kept as prose and escaped on the next run.
