@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.1"
 current_phase_name: "Address tech debt: bat/sling pinch (WR-03) + review hygiene"
-status: executing
-stopped_at: Completed 06.1-04-PLAN.md
-last_updated: "2026-11-23T13:38:55.641Z"
+status: verifying
+stopped_at: Completed 06.1-05-PLAN.md
+last_updated: "2026-11-23T13:45:20.991Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 06.1 execution started
-state_head: 656de9ddf040e9a8a1dfad86c863ebfd5c2f9870
+state_head: a2d3d7cbaee8a8b2437e8a9cbecef03114aee239
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 61
-  completed_plans: 60
+  completed_plans: 61
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-23)
 
 Phase: 06.1 (Address tech debt: bat/sling pinch (WR-03) + review hygiene) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-23 — Phase 06.1 execution started
 
 Progress: [██████████] 100%
@@ -123,6 +123,7 @@ Progress: [██████████] 100%
 | Phase 06.1 P03 | 8min | 3 tasks | 5 files |
 | Phase 06.1 P02 | 15min | 3 tasks | 7 files |
 | Phase 06.1 P04 | 3min | 2 tasks | 9 files |
+| Phase 06.1 P05 | 4min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -280,6 +281,8 @@ Recent decisions affecting current work:
 - [Phase 06.1]: 06.1-02: D-01 approved by the user - both slings and inlane sensors moved exactly 0.35 m up-table (INLANE_Y = 4.6); WR-03 pinch ratio 2.43/2.64 -> 1.00/1.00, bat-sling gap 0.115 -> 0.453 m
 - [Phase 06.1]: 06.1-02: kickback e2e kept alive by a searched right-bat cradle (Slash, +1 step after kick, released 30 steps past the save window); every original guard verbatim
 - [Phase 06.1]: 06.1-04: IN-02 closed by moving SaveKind to game-session.ts beside GameState (type-only imports, ball-save keeps SaveLampPhase); IN-01 closed by setting the cleared-skill-step HUD case to step 50, proven RED without skillStep >= 0 and GREEN restored
+- [Phase 06.1]: 06.1-05: 04 review ledger closed at open: 0 (11 fixed, IN-09 skipped per 04-UAT test 14, IN-06 deferred per D-03); 06 ledger open: 0 (IN-01 8f1b9ae, IN-02 f420427)
+- [Phase 06.1]: 06.1-05: lost 6590dce IN-04 soft-lock recorded as a 04-ledger prose note plus pending todo (backlog, D-02); 02 release jam-lag closed as documentation only (D-04)
 
 ### Pending Todos
 
@@ -318,6 +321,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T13:38:53.616Z
-Stopped at: Completed 06.1-04-PLAN.md
+Last session: 2026-11-23T13:45:18.961Z
+Stopped at: Completed 06.1-05-PLAN.md
 Resume file: None
