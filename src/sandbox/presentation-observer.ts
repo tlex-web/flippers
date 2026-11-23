@@ -30,7 +30,10 @@
  * - `"ballSave"`: once per `getSaveCount()` increment, kickback or backstop, at
  *   strength 1 on no element (06-10, D-10, D-25); a backstop save also raises
  *   the drain count on the same step, so it is heard as the drain growl, then
- *   the save sting;
+ *   the save sting. A backstop re-serve that adds no save (a drain inside a
+ *   kickback's grace, `getReserveCount()` up by more than `getSaveCount()`)
+ *   pushes the sting too, so the re-served ball never sounds lost (06-REVIEW
+ *   WR-01);
  * - `"bonusTick"`: once per increase of `revealedRowCount(rows, elapsed)`
  *   while in a non-forfeit `"bonus"` tally with rows > 0, so one tick per item
  *   row reveal (the first on the drain step, after the drain cue), none per
@@ -50,7 +53,8 @@
  * A backstop-saved drain (06-07) also raises the drain count, so it shakes too.
  * Every skill-shot count increment calls `fx.onSkillShot(getLastSkillLane())`
  * and every save-count increment `fx.onSave(getLastSaveKind())`, each after its
- * cue (06-13, D-19: the reward glint and the kickback sparks).
+ * cue (06-13, D-19: the reward glint and the kickback sparks). A grace
+ * re-serve's sting calls no effect: no save was spent, so no sparks.
  *
  * Read-only by construction (T-05-16): it holds only `Pick<>` getter slices of
  * the session, the plunger and the flipper controller, never a world handle, and writes only scalars
@@ -78,6 +82,7 @@ export type ObserverSession = Pick<
   | "getNudgeCount"
   | "getLastNudgeDir"
   | "getSaveCount"
+  | "getReserveCount"
   | "getLastSaveKind"
   | "getNewBestCount"
   | "getBonusTally"
@@ -118,6 +123,7 @@ export class PresentationObserver {
   private prevDrains: number;
   private prevNudges: number;
   private prevSaves: number;
+  private prevReserves: number;
   private prevNewBests: number;
   /** Bonus tally rows revealed at the previous observe (0 outside a tickable tally). */
   private prevRevealed: number;
@@ -148,6 +154,7 @@ export class PresentationObserver {
     this.prevDrains = session.getDrainCount();
     this.prevNudges = session.getNudgeCount();
     this.prevSaves = session.getSaveCount();
+    this.prevReserves = session.getReserveCount();
     this.prevNewBests = session.getNewBestCount();
     this.prevRevealed = this.revealedRows(this.prevState);
     this.flippers = flippers;
@@ -170,6 +177,7 @@ export class PresentationObserver {
     const drains = this.session.getDrainCount();
     const nudges = this.session.getNudgeCount();
     const saves = this.session.getSaveCount();
+    const reserves = this.session.getReserveCount();
     const newBests = this.session.getNewBestCount();
     const revealed = this.revealedRows(state);
     const prev = this.prevState;
@@ -234,6 +242,10 @@ export class PresentationObserver {
         if (this.fx) this.fx.onSave(kind);
       }
     }
+    // Re-serves beyond this step's new saves spent no save (a kickback's grace
+    // backstop): still a saved ball, so the sting, but no save sparks.
+    const graceReserves = reserves - this.prevReserves - (saves - this.prevSaves);
+    for (let n = 0; n < graceReserves; n++) this.cues.push("ballSave", NO_ELEMENT, 1);
 
     for (let n = this.prevRevealed; n < revealed; n++) this.cues.push("bonusTick", NO_ELEMENT, 1);
 
@@ -248,6 +260,7 @@ export class PresentationObserver {
     this.prevDrains = drains;
     this.prevNudges = nudges;
     this.prevSaves = saves;
+    this.prevReserves = reserves;
     this.prevNewBests = newBests;
     this.prevRevealed = revealed;
   }

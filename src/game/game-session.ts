@@ -276,6 +276,13 @@ export class GameSession implements RulesGate, RuleHooks {
   /** Saves since construction, kickback or backstop (presentation counter). */
   private saveCount = 0;
 
+  /**
+   * Backstop re-serves since construction, on every path, including a
+   * kickback's grace backstop that does not count as a second save
+   * (presentation counter, 06-REVIEW WR-01).
+   */
+  private reserveCount = 0;
+
   /** How the most recent save was spent ("none" before any). */
   private lastSaveKind: SaveKind | "none" = "none";
 
@@ -413,11 +420,14 @@ export class GameSession implements RulesGate, RuleHooks {
    * re-serve). A drain on the very step of the kickback means the kick never
    * reached a live ball, so the save is reported as the backstop it became and
    * the presentation plays no post flourish or kick sparks (06-REVIEW WR-02).
+   * Every path raises `reserveCount`, so the presentation can sound the save
+   * for a grace re-serve that adds no save (06-REVIEW WR-01).
    */
   private backstop(): void {
     this.world.removeBall(this.drained);
     this.drained = NO_BALL;
     this.drainCount++;
+    this.reserveCount++;
     if (this.inKickbackGrace()) {
       if (this.savedAtStep === this.step) this.lastSaveKind = "backstop";
       this.lastSaveStep = this.step;
@@ -628,6 +638,16 @@ export class GameSession implements RulesGate, RuleHooks {
   /** Saves since construction, kickback or backstop. */
   getSaveCount(): number {
     return this.saveCount;
+  }
+
+  /**
+   * Backstop re-serves since construction (the ball drained and came back on
+   * the plunger), counted on every path: a backstop that spends the save
+   * raises `getSaveCount()` on the same step, a kickback's grace backstop does
+   * not (06-REVIEW WR-01).
+   */
+  getReserveCount(): number {
+    return this.reserveCount;
   }
 
   /** How the most recent save was spent ("none" before any). */

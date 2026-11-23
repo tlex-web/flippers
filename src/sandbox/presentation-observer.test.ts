@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 
+import { CollisionRouter } from "../app/collision-router";
 import { CueQueue, type CueKind, type FlashSink } from "../app/cue-queue";
 import type { SaveKind } from "../game/ball-save";
 import { BonusCounters, BonusTally } from "../game/bonus";
 import { SKILL_SHOT_MAX_POINTS, type NudgeDir } from "../game/tuning";
-import type { GameState } from "../game/game-session";
+import { GameSession, type GameState, type GameSessionWorld } from "../game/game-session";
+import type { BallId, CollisionEvent } from "../physics/types";
 import {
   PresentationObserver,
   type ObserverFlippers,
@@ -33,6 +35,7 @@ class FakeSession implements ObserverSession {
   nudges = 0;
   lastNudgeDir: NudgeDir = "left";
   saves = 0;
+  reserves = 0;
   lastSaveKind: SaveKind | "none" = "none";
   newBests = 0;
   elapsed = 0;
@@ -66,6 +69,9 @@ class FakeSession implements ObserverSession {
   }
   getSaveCount(): number {
     return this.saves;
+  }
+  getReserveCount(): number {
+    return this.reserves;
   }
   getLastSaveKind(): SaveKind | "none" {
     return this.lastSaveKind;
@@ -836,9 +842,32 @@ describe("PresentationObserver: skill-shot and save effects (06-13, D-19)", () =
     const r = rig("playing", 1);
     r.session.drains = 1;
     r.session.saves = 1;
+    r.session.reserves = 1;
     r.session.lastSaveKind = "backstop";
     expect(step(r)).toEqual(["drain", "ballSave"]);
     expect(r.fx.calls).toEqual(["drain", "save:backstop"]);
+  });
+
+  it("a grace re-serve (drain and re-serve counts up, save count unchanged) pushes drain then ballSave and calls onDrain only, no save sparks (06-REVIEW WR-01)", () => {
+    const r = rig("playing", 1);
+    r.session.saves = 1;
+    r.session.lastSaveKind = "kickback";
+    step(r); // the kickback
+    r.fx.calls.length = 0;
+    r.session.drains = 1;
+    r.session.reserves = 1;
+    expect(step(r)).toEqual(["drain", "ballSave"]);
+    expect(r.fx.calls).toEqual(["drain"]);
+    expect(step(r)).toEqual([]);
+  });
+
+  it("a kickback and its grace re-serve on the same step push one ballSave, not two", () => {
+    const r = rig("playing", 1);
+    r.session.drains = 1;
+    r.session.saves = 1;
+    r.session.reserves = 1;
+    r.session.lastSaveKind = "backstop";
+    expect(step(r)).toEqual(["drain", "ballSave"]);
   });
 
   it("a step with no skill or save increment calls neither", () => {
@@ -868,5 +897,86 @@ describe("PresentationObserver: skill-shot and save effects (06-13, D-19)", () =
     );
     observer.observe();
     expect(fx.calls).toEqual([]);
+  });
+});
+
+describe("PresentationObserver over a real GameSession: the kickback grace re-serve (06-REVIEW WR-01)", () => {
+  it("a kickback, then a drain of the kicked ball 100 steps later, pushes ballSave on the kick and drain then ballSave on the re-serve", () => {
+    let nextId: BallId = 10;
+    const live = new Set<BallId>();
+    const world: GameSessionWorld = {
+      addBall: () => {
+        live.add(nextId);
+        return nextId++;
+      },
+      removeBall: (id) => {
+        live.delete(id);
+      },
+      // Every ball sits at x = 0, clear of the chute: the save timer starts at once.
+      getBalls: () => [...live].map((id) => ({ id, x: 0, y: 0, vx: 0, vy: 0, radius: 0.2, angle: 0 })),
+      applyImpulse: () => {},
+    };
+    let batch: CollisionEvent[] = [];
+    const router = new CollisionRouter({ drainEvents: () => batch });
+    const session = new GameSession(world, router, { x: 3.15, y: 6.2 }, { setEnabled: () => {} });
+    const cues = new CueQueue();
+    const fx = new SpyFx();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+      fx,
+    );
+    const kinds = (): CueKind[] => {
+      const out: CueKind[] = [];
+      for (let i = 0; i < cues.size; i++) {
+        const c = cues.at(i);
+        if (c) out.push(c.kind);
+      }
+      return out;
+    };
+    /** One fixed step: tick, dispatch `events` (calling `during` first), service, observe. */
+    const fixedStep = (events: CollisionEvent[] = [], during?: () => void): CueKind[] => {
+      cues.clear();
+      session.tick();
+      during?.();
+      batch = events;
+      router.dispatch();
+      batch = [];
+      session.service();
+      observer.observe();
+      return kinds();
+    };
+
+    session.onStart();
+    expect(fixedStep()).toEqual(["start"]); // the save timer starts
+    const kicked = session.activeBallId;
+    expect(
+      fixedStep([], () => {
+        expect(session.trySave(kicked)).toBe(true);
+      }),
+    ).toEqual(["ballSave"]);
+    expect(fx.calls).toEqual(["save:kickback"]);
+    for (let i = 0; i < 99; i++) expect(fixedStep()).toEqual([]);
+
+    fx.calls.length = 0;
+    const drain: CollisionEvent = {
+      type: "ball-wall",
+      ballId: kicked,
+      elementKind: "drain",
+      elementId: DRAIN,
+      point: { x: 0, y: 0 },
+      normalImpulse: 0,
+    };
+    expect(fixedStep([drain])).toEqual(["drain", "ballSave"]);
+    expect(fx.calls).toEqual(["drain"]); // the growl's shake, no second save's sparks
+    expect(session.getState()).toBe("playing");
+    expect(session.getBall()).toBe(1);
+    expect(session.getSaveCount()).toBe(1);
+    expect(session.getReserveCount()).toBe(1);
   });
 });
