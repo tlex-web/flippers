@@ -126,31 +126,27 @@ describe("BallSave window and lamp (D-09, D-10)", () => {
 });
 
 describe("BallSave one save per arm (D-09, T-6-13)", () => {
-  it("consume('backstop') succeeds once and records the kind; a second consume fails", () => {
+  it("consume() succeeds once; a second consume fails", () => {
     const s = started();
-    expect(s.consume("backstop")).toBe(true);
-    expect(s.getLastKind()).toBe("backstop");
+    expect(s.consume()).toBe(true);
     expect(s.canSave()).toBe(false);
     expect(s.lampPhase()).toBe("off");
-    expect(s.consume("backstop")).toBe(false);
-    expect(s.consume("kickback")).toBe(false);
-    expect(s.getLastKind()).toBe("backstop");
+    expect(s.consume()).toBe(false);
   });
 
   it("consume before the timer starts fails and changes nothing", () => {
     const s = new BallSave();
     s.arm();
-    expect(s.consume("kickback")).toBe(false);
-    expect(s.getLastKind()).toBe("none");
+    expect(s.consume()).toBe(false);
     expect(s.lampPhase()).toBe("steady");
     s.update(CLEAR_X);
-    expect(s.consume("kickback")).toBe(true);
+    expect(s.consume()).toBe(true);
   });
 
   it("arm() after a consume re-arms with a full, unstarted window", () => {
     const s = started();
     s.update(CLEAR_X);
-    s.consume("kickback");
+    s.consume();
     s.arm();
     expect(s.isStarted()).toBe(false);
     expect(s.getRemaining()).toBe(BALL_SAVE_STEPS);
@@ -163,7 +159,7 @@ describe("BallSave one save per arm (D-09, T-6-13)", () => {
     const s = started();
     s.disarm();
     expect(s.canSave()).toBe(false);
-    expect(s.consume("backstop")).toBe(false);
+    expect(s.consume()).toBe(false);
     expect(s.lampPhase()).toBe("off");
   });
 
@@ -173,6 +169,6 @@ describe("BallSave one save per arm (D-09, T-6-13)", () => {
     s.update(CLEAR_X);
     expect(s.canSave()).toBe(false);
     expect(s.lampPhase()).toBe("off");
-    expect(s.consume("backstop")).toBe(false);
+    expect(s.consume()).toBe(false);
   });
 });

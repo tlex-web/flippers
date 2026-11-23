@@ -15,8 +15,10 @@
  *   (research Pitfall 3). The starting call does not count down; every later
  *   call counts `remaining` down by one, and at 0 the save disarms (timed out).
  *   So the save can be used on exactly `steps` updates once started.
- * - `consume(kind)`: one save per arm. Succeeds only while `canSave()` (armed
- *   and started), then disarms and records the kind.
+ * - `consume()`: one save per arm. Succeeds only while `canSave()` (armed
+ *   and started), then disarms. How the save was spent (kickback or backstop)
+ *   is the session's to record, so there is one source for it (06-REVIEW
+ *   IN-03).
  * - `disarm()`: a tilt, the bonus state and game over.
  *
  * Lamp phase (D-10): steady while armed and waiting in the chute or with more
@@ -30,7 +32,10 @@ import { BALL_RADIUS_M } from "../physics/constants";
 import { CHUTE_X } from "../table/spec";
 import { BALL_SAVE_BLINK_STEPS, BALL_SAVE_STEPS } from "./tuning";
 
-/** How a save was spent: the center-post kickback or the drain backstop. */
+/**
+ * How a save was spent: the center-post kickback or the drain backstop
+ * (recorded by `GameSession`, read through `getLastSaveKind()`).
+ */
 export type SaveKind = "kickback" | "backstop";
 
 /** What the save lamp shows. */
@@ -41,7 +46,6 @@ export class BallSave {
   private armed = false;
   private started = false;
   private remaining = 0;
-  private lastKind: SaveKind | "none" = "none";
 
   /** `steps`: the window length once started (0 disables the save). */
   constructor(steps: number = BALL_SAVE_STEPS) {
@@ -84,13 +88,12 @@ export class BallSave {
   }
 
   /**
-   * Spend the save as `kind`. Returns false and changes nothing unless
-   * `canSave()`; otherwise disarms, records the kind and returns true.
+   * Spend the save. Returns false and changes nothing unless `canSave()`;
+   * otherwise disarms and returns true.
    */
-  consume(kind: SaveKind): boolean {
+  consume(): boolean {
     if (!this.canSave()) return false;
     this.armed = false;
-    this.lastKind = kind;
     return true;
   }
 
@@ -109,10 +112,5 @@ export class BallSave {
   /** Steps left in the window (the full window before it starts). */
   getRemaining(): number {
     return this.remaining;
-  }
-
-  /** How the most recent save was spent ("none" before any). */
-  getLastKind(): SaveKind | "none" {
-    return this.lastKind;
   }
 }

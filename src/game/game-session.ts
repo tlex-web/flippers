@@ -437,7 +437,7 @@ export class GameSession implements RulesGate, RuleHooks {
     if (this.inKickbackGrace()) {
       if (this.savedAtStep === this.step) this.lastSaveKind = "backstop";
       this.lastSaveStep = this.step;
-    } else if (this.save.consume("backstop")) {
+    } else if (this.save.consume()) {
       this.saveCount++;
       this.lastSaveKind = "backstop";
       this.lastSaveStep = this.step;
@@ -610,7 +610,7 @@ export class GameSession implements RulesGate, RuleHooks {
   trySave(ballId: BallId): boolean {
     if (this.state !== "playing" || ballId === NO_BALL || ballId !== this.active) return false;
     const remaining = this.save.getRemaining(); // read BEFORE consume
-    if (!this.save.consume("kickback")) return false;
+    if (!this.save.consume()) return false;
     this.saveCount++;
     this.lastSaveKind = "kickback";
     this.lastSaveStep = this.step;
