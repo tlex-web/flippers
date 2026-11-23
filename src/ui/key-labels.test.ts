@@ -89,6 +89,27 @@ describe("keyLabel", () => {
   it("keeps the raw value when its uppercase form is more than one character", () => {
     expect(keyLabel("ß")).toBe("ß");
   });
+
+  it("rejects a whitespace value (04-REVIEW IN-04)", () => {
+    expect(keyLabel(" ")).toBeNull();
+    expect(keyLabel("\t")).toBeNull();
+    expect(keyLabel(" ")).toBeNull();
+  });
+
+  it("rejects a control, format, lone-surrogate or private-use value (04-REVIEW IN-04)", () => {
+    expect(keyLabel("\u0007")).toBeNull();
+    expect(keyLabel("​")).toBeNull();
+    expect(keyLabel("\uD800")).toBeNull();
+    expect(keyLabel("")).toBeNull();
+  });
+
+  it("rejects a lone combining mark (04-REVIEW IN-04)", () => {
+    expect(keyLabel("́")).toBeNull();
+  });
+
+  it("keeps a printable astral letter, counted as one code point", () => {
+    expect(keyLabel("\u{1D538}")).toBe("\u{1D538}");
+  });
 });
 
 describe("applyKeyLabels", () => {
@@ -114,6 +135,16 @@ describe("applyKeyLabels", () => {
     expect(applyKeyLabels(caps, [reveal], partial)).toBe(false);
     expect(caps[0]?.textContent).toBe("Y");
     expect(caps[1]?.textContent).toBe("/");
+    expect(reveal.hidden).toBe(true);
+  });
+
+  it("keeps the markup cap and the note hidden when KeyZ maps to a blank label (04-REVIEW IN-04)", () => {
+    const caps = rowCaps();
+    const reveal = new FakeReveal();
+    const blank = new Map(GERMAN);
+    blank.set("KeyZ", " ");
+    expect(applyKeyLabels(caps, [reveal], blank)).toBe(false);
+    expect(texts(caps)).toEqual(["Z", "-", "X", "."]);
     expect(reveal.hidden).toBe(true);
   });
 
