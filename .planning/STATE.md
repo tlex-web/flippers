@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: "06.1"
 current_phase_name: "Address tech debt: bat/sling pinch (WR-03) + review hygiene"
 status: executing
-stopped_at: Completed 06.1-01-PLAN.md
-last_updated: "2026-11-23T13:07:30.630Z"
+stopped_at: Completed 06.1-03-PLAN.md
+last_updated: "2026-11-23T13:19:41.562Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 06.1 execution started
-state_head: 65c48ff7d8dc6ee9930dd09f0993c9f5842bd39a
+state_head: b680402423c51c3b2dd713c524af864986fc534f
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 61
-  completed_plans: 57
+  completed_plans: 58
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-23)
 ## Current Position
 
 Phase: 06.1 (Address tech debt: bat/sling pinch (WR-03) + review hygiene) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-11-23 — Phase 06.1 execution started
 
@@ -120,6 +120,7 @@ Progress: [██████████] 100%
 | Phase 06 P13 | 20min | 2 tasks | 8 files |
 | Phase 06 P14 | 10min | 3 tasks | 5 files |
 | Phase 06.1 P01 | 4min | 2 tasks | 29 files |
+| Phase 06.1 P03 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -272,6 +273,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Review WR-01 (round 2): every re-serve that spends no save still plays the save sting (getReserveCount), so a grace re-serve sounds drain then chime; BALL SAVED and SKILL SHOT show only while playing and clear at bonus entry
 - [Phase 06]: UAT 11/11 passed on 2026-11-23 (incl. CR-01 re-tests); verification passed 5/5 after regeneration; review open: 2 info (HUD test guard pinning, SaveKind location)
 - [Phase 06.1]: 06.1-01: Prettier scoped to source via .prettierignore (.planning/, .gsd/, .claude/, CLAUDE.md); use --end-of-line auto on this Windows checkout. Style commit e2b8514 touched 27 paths (reactive-elements.test.ts was EOL-only in the working tree, already clean in git).
+- [Phase 06.1]: keyLabel guard is /^[^\s\p{C}\p{M}]$/u after the one-code-point check; \p{M} closes the combining-mark gap the reviewer's /^\P{C}$/u left (IN-04)
+- [Phase 06.1]: IN-06 untouched per D-03: REST_ANGLE_TOL stays 0.1; only IN-07 dead moved stores and IN-08 wording changed in FlipperController
 
 ### Pending Todos
 
@@ -308,6 +311,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T13:07:25.612Z
-Stopped at: Completed 06.1-01-PLAN.md
+Last session: 2026-11-23T13:19:36.567Z
+Stopped at: Completed 06.1-03-PLAN.md
 Resume file: None

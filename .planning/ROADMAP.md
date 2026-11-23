@@ -284,7 +284,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A raised bat can no longer pinch the ball against a slingshot (WR-03: both slings and their inlane sensors move 0.35 m up-table, proven by a seeded every-step sweep with a RED control and approved by eye and feel), and the open Phase 4-6 review and format debt is fixed or explicitly dispositioned.
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 1/5 plans executed (4 waves)
+**Plans:** 2/5 plans executed (4 waves)
 
 Plans:
 **Wave 1**
@@ -292,7 +292,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1; both plans run in parallel)*
 - [ ] 06.1-02-PLAN.md — WR-03 fix (D-01): sling-pinch sweep RED then GREEN with an old-geometry RED control, slings and inlanes moved 0.35 m up-table, rule (1) clearance case, translated pins, kickback e2e re-authored, user look-and-feel checkpoint [wave 2]
-- [ ] 06.1-03-PLAN.md — 04 review hygiene: keyLabel rejects blank/control/mark labels (IN-04), flipper-input docs and C4b/C5b pins (IN-01..IN-03), FSM dead stores and wording (IN-07, IN-08; IN-06 untouched per D-03) [wave 2]
+- [x] 06.1-03-PLAN.md — 04 review hygiene: keyLabel rejects blank/control/mark labels (IN-04), flipper-input docs and C4b/C5b pins (IN-01..IN-03), FSM dead stores and wording (IN-07, IN-08; IN-06 untouched per D-03) [wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
 - [ ] 06.1-04-PLAN.md — 06 review hygiene: SaveKind moved to game-session.ts (IN-02), HUD skill-step test pins its guard with a recorded mutation (IN-01) [wave 3]
