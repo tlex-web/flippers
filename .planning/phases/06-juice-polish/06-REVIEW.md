@@ -1,174 +1,178 @@
 ---
 phase: 06-juice-polish
-reviewed: 2026-11-23T00:00:00Z
+reviewed: 2026-11-23T11:45:00Z
 depth: standard
-files_reviewed: 50
+files_reviewed: 20
 files_reviewed_list:
-  - index.html
-  - src/app/cue-queue.test.ts
   - src/app/cue-queue.ts
-  - src/audio/recipes.test.ts
-  - src/audio/recipes.ts
-  - src/control/plunger-controller.ts
-  - src/game/ball-save.test.ts
-  - src/game/ball-save.ts
   - src/game/bonus.test.ts
   - src/game/bonus.ts
   - src/game/game-session.test.ts
   - src/game/game-session.ts
   - src/game/high-score.test.ts
   - src/game/high-score.ts
-  - src/game/reactive-elements.test.ts
-  - src/game/reactive-elements.ts
-  - src/game/reactive-table.test.ts
-  - src/game/skill-shot.test.ts
-  - src/game/skill-shot.ts
   - src/game/tuning.ts
-  - src/harness/reactive-soak.test.ts
-  - src/harness/reactive-table-soak.gate.test.ts
-  - src/harness/reactive-world.ts
   - src/render/effects.ts
-  - src/render/flash.test.ts
-  - src/render/flash.ts
   - src/render/lamps.test.ts
   - src/render/lamps.ts
-  - src/render/palette.ts
-  - src/render/particles.test.ts
-  - src/render/particles.ts
-  - src/render/shake.test.ts
   - src/render/shake.ts
-  - src/render/sprites.ts
-  - src/render/static-layer.test.ts
   - src/render/static-layer.ts
-  - src/render/table-renderer.test.ts
   - src/render/table-renderer.ts
-  - src/sandbox/cue-pipeline.test.ts
-  - src/sandbox/debug-draw.ts
   - src/sandbox/game-e2e.test.ts
   - src/sandbox/game.determinism.test.ts
-  - src/sandbox/main.ts
-  - src/sandbox/presentation-observer.test.ts
   - src/sandbox/presentation-observer.ts
   - src/sandbox/presentation.determinism.test.ts
-  - src/sandbox/skill-shot-e2e.test.ts
-  - src/table/spec.ts
   - src/ui/hud.test.ts
   - src/ui/hud.ts
 findings:
   critical: 1
-  warning: 4
-  info: 5
-  total: 10
-  necessity: 1
+  warning: 1
+  info: 6
+  total: 8
+  necessity: 0
 status: issues_found
 ---
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-11-23
+**Reviewed:** 2026-11-23T11:45:00Z
 **Depth:** standard
-**Files Reviewed:** 50
+**Files Reviewed:** 20
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the Phase-6 changes (diff 710326a..HEAD): skill shot, bonus tally, ball save and center-post kickback, high score, lamps, shake, particles, shadows and the static bake, the HUD and bonus overlay, the new cues and recipes, and the main.ts wiring. `tsc --noEmit` passes. The pure modules are tidy: no per-frame allocation, everything runs on the step clock, storage access is guarded, and the DOM is written with text only.
+This is an incremental re-review of the fixes in 24b6c31..d64ad4c (diff base `60db3c4`). I read every changed hunk and the code around it. I traced the grace window through `trySave`, `service`, `backstop`, `onNudge` (tilt), bonus entry, `endBonus` (game over) and `onStart`. I also traced the presentation consumers that diff session counters: `PresentationObserver`, `LampTracker`, `EffectsTracker` and `HudView`.
 
-The main defect is in the ball save. The center-post kickback spends the one save per ball on a kick that does not reliably keep the ball in play. The backstop only covers a drain on the exact step of the kickback, so a ball that falls back and drains a few hundred milliseconds later costs the player a ball even though the 7 s save window was still running. I confirmed this with a headless probe against the real `PlanckWorld` + `TABLE_SPEC`, described in CR-01.
+Baseline: `npx vitest run` gives 60 files, 1280 passed. `npx tsc --noEmit` exits 0.
 
-The other findings: a transient HUD status that can outlive the ball it describes, a post flourish that plays for a save that never kicked, lamp geometry that duplicates the spec, and minor cleanups.
+What holds:
+- The grace state is cleared correctly. `savedAtStep` is reset on tilt, bonus entry, `onStart` and every backstop, so it cannot leak into another ball or game.
+- The same-step WR-02 path reports `"backstop"` before the observer and lamps read it.
+- A grace backstop does not raise `saveCount`, so it cannot replay the post flourish or the save sparks.
+- IN-04's `skill.disarm()` in `reServe()` is safe: `SkillShot.update` does nothing in phase `off`.
+- IN-01, IN-02, IN-03, IN-05 and WR-04 are correct.
+- The WR-03 lamp positions match the old constants: 0.95/1.45/1.95 at y 1.32, and 0.585/2.315 at y 4.72.
+
+What does not hold:
+- **The CR-01 fix is incomplete (CR-01 below).** A fixed 240-step grace does not deliver the invariant the fix writes into the code ("the kick can only improve on the guaranteed save, never make it worse"). A kicked ball that drains more than 2 s after the kick, but still inside the original 7 s save window, still costs the ball. I ran a probe on the live e2e kickback trajectory. The kicked ball drained 603 steps after the kick and 868 steps after the chute exit, which is only 28 steps past the 840-step window. Real trajectories therefore land in the gap the fix leaves open.
+- A grace backstop shows BALL SAVED but plays only the drain cue (WR-01).
+
+Necessity was assessed with `necessity-review.md`. No finding met its evidence rule.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: A kickback spends the ball save, and the ball still drains inside the save window, costing a ball
+### CR-01: The kickback grace is a fixed 2 s, so a kicked ball that drains later but still inside the save window costs a ball (CR-01 only partly fixed)
 
-**File:** `src/game/reactive-elements.ts:464-471`, `src/game/game-session.ts:361`, `src/game/game-session.ts:537-545`, `src/game/tuning.ts:244-265`
-**Issue:** The contract in `tuning.ts:244` says: "While it runs, a drain costs no ball (the backstop re-serve) or the center-post kickback saves it". The backstop is a guarantee. The kickback is not, yet it takes priority: `onPost` calls `trySave()`, which `consume("kickback")`s the save. The session then honors a backstop only when the drain lands on the same step (`this.savedAtStep === this.step`, line 361). Any later drain falls through to the bonus state, and the ball is gone.
+**File:** `src/game/game-session.ts:427-429` (also `:572-579`, `src/game/tuning.ts:247-250`, `:261-267`)
+**Issue:** `trySave()` consumes the save, so `save.canSave()` is false from the kick on. After that, only `inKickbackGrace()` (`step - savedAtStep <= KICKBACK_GRACE_STEPS`, 240) keeps the backstop alive. Without the kickback, a drain anywhere in the remaining window (`save.getRemaining()` at the kick, up to 840 steps) would have been backstopped.
 
-Probe (headless, scratch test using the real `PlanckWorld`, `CollisionRouter`, `ReactiveElements` and `TABLE_SPEC`, flippers dead, ball dropped on the mirror axis): every drop got its kickback (`vy` after the kick about -5.4 m/s, so the kick works as designed). But a dead-center drop came straight back down through the bat gap and hit the drain sensor 100 steps (0.83 s) after the kick, for `vy0` = 1, 3 and 6 m/s. With the bats held up, 8 of 12 drops at offsets 0 to 0.28 m drained 32 to 115 steps after the kick. In the game, each of those drains is a real drain: the save was already spent, `canSave()` is false, and `savedAtStep !== step`. The player loses the ball in the middle of the save window. On the screen they also saw "BALL SAVED", the save sting, the save sparks and the post flourish a moment earlier. `game-session.test.ts:1213` ("a kickback followed by a drain on a LATER step is a real drain") and the e2e test at `game-e2e.test.ts:1058` pin this behavior instead of catching it.
+Take a kick at window step `w` and a drain `d` steps later, where `240 < d <= 840 - w`:
+- With the kickback, the ball enters `"bonus"` and is lost.
+- Without the post, the ball would have drained right away and been re-served.
 
-**Fix:** Keep the backstop live for a short grace window after a kickback, so the kickback can only improve on the guaranteed save, never make it worse. Count it once, as the kickback (same rule as A4):
+So the post leaves the player worse off, which is the exact symptom of the original CR-01 ("the ball still drains inside the save window, costing a ball"). It also breaks the rule the fix documents in `tuning.ts:249-250`: "the kick can only improve on the guaranteed save, never make it worse".
+
+This is reachable on the real table. I probed `game-e2e.test.ts`' live kickback case:
+- chute exit (save start) at session step 235
+- kick at step 500, with about 575 window steps left
+- drain at step 1103, which is 603 steps after the kick and 868 after the start
+
+That drain missed the window by 28 steps. A kick-up that comes back any sooner lands in the hole: past the grace and inside the window. The e2e test only asserts `> KICKBACK_GRACE_STEPS`. It does not check the window, so the suite cannot catch this.
+
+The grace also over-covers in the other direction. A kick on the window's last step stays protected for 240 more steps, after the window has expired and while the save lamp reads `off` (see IN-02).
+
+**Fix:** Bound the grace by what the backstop would have covered, keeping the 2 s floor for the fall-straight-back case:
 ```ts
-// tuning.ts
-/** Steps after a kickback during which a drain of the same ball is still backstopped (2 s). */
-export const KICKBACK_GRACE_STEPS = 240;
+// field
+private graceEndsAt = -1;
 
-// game-session.ts service()
-const inKickbackGrace =
-  this.savedAtStep >= 0 && this.step - this.savedAtStep <= KICKBACK_GRACE_STEPS;
-if (this.state === "playing" && (this.save.canSave() || inKickbackGrace)) {
-  this.backstop();
-  return;
+trySave(ballId: BallId): boolean {
+  if (this.state !== "playing" || ballId === NO_BALL || ballId !== this.active) return false;
+  const remaining = this.save.getRemaining(); // read BEFORE consume
+  if (!this.save.consume("kickback")) return false;
+  ...
+  this.savedAtStep = this.step;
+  this.graceEndsAt = this.step + Math.max(KICKBACK_GRACE_STEPS, remaining);
+  return true;
 }
-// backstop(): count only when no kickback is in grace
-if (!inKickbackGrace && this.save.consume("backstop")) { ... }
-this.savedAtStep = -1;
+
+private inKickbackGrace(): boolean {
+  return this.savedAtStep >= 0 && this.step <= this.graceEndsAt;
+}
 ```
-Also clear `savedAtStep` on a tilt and when entering the bonus state. Add a test for a kickback followed by a drain within the grace window: the result should be a backstop re-serve with `saveCount` unchanged. Another option is to give the kick a lateral component toward a bat, so it does not return straight down the gap. The grace window is the simpler change and keeps the contract.
+Clear `graceEndsAt` wherever `savedAtStep` is cleared. Then add a session test: kick at window step 100, drain at kick + 600, and expect a re-serve. Add a matching e2e assertion as well: the kicked ball's real drain must lie past both the grace and the original window end.
+
+The other path is a rule decision: a kickback ends the save by design. In that case, drop the "never make it worse" wording from `tuning.ts:247-250`, `game-session.ts:105-108` and the CR-01 entry in `06-REVIEW-FIX.md`, because the code does not deliver it.
 
 ## Warnings
 
-### WR-01: "BALL SAVED" (and the live-region announcement) can outlive a lost ball and override the game-over prompt
+### WR-01: A grace backstop shows BALL SAVED but sounds like a lost ball: drain cue and shake, no ballSave cue
 
-**File:** `src/ui/hud.ts:296-298`, `src/ui/hud.ts:314-315`, `src/game/game-session.ts:314-327`
-**Issue:** `saveOn` is `getSaveCount() > 0 && now < getLastSaveStep() + 180`. That depends only on time, not on the ball or the state, and `onStart()` resets neither value. With the CR-01 flow (kickback at S, drain at S+32 in the probe, empty tally, 60-step hold), the next ball is served at S+92 and the status line reads "BALL SAVED" for the next 88 steps, right after a ball was lost. On the last ball, BALL SAVED (priority 5) beats the GAME OVER prompt (priority 6) for the same window. The status line is `role="status" aria-live="polite"`, so a screen reader announces "BALL SAVED" after the ball drained.
-**Fix:** Keep the transient only while the ball it belongs to is still in play. Record the ball number at the save (`lastSaveBall = this.ball`, cleared on serve, drain-to-bonus and `onStart()`), and require `state === "playing" && session.getBall() === lastSaveBall` for `saveOn`. Alternatively, have `GameSession` set `lastSaveStep = -1` when it enters the bonus state, and in `onStart()`.
+**File:** `src/game/game-session.ts:411-413` (consumer `src/sandbox/presentation-observer.ts:224-236`)
+**Issue:** On a grace backstop (`savedAtStep !== step`), `backstop()` raises `drainCount` and moves `lastSaveStep`, but leaves `saveCount` unchanged. The observer's sounds depend on the counters, not on `lastSaveStep`:
+- the drain counter fires the drain cue, the apron flash and `fx.onDrain()` (shake)
+- the `ballSave` cue fires only when the save counter goes up
 
-### WR-02: The same-step kickback+drain path plays the post flourish and save sparks for a ball that was removed and re-served
+So the player hears and feels the drain growl with no save chime. Meanwhile the HUD reads BALL SAVED, because `hud.ts:300-304` keys on `lastSaveStep`, and the ball reappears on the plunger.
 
-**File:** `src/game/game-session.ts:385-396`, `src/render/lamps.ts:533-537`, `src/render/effects.ts:291-312`
-**Issue:** When `trySave()` grants a kickback and the drain lands on the same step, `backstop()` removes the ball and re-serves it at the plunger. `lastSaveKind` stays `"kickback"`. `LampTracker.updateSave` then starts the post flourish, and `EffectsTracker.onSave("kickback")` throws 10 save sparks up off the post, but there is no ball there: it is sitting on the plunger. The observer also pushes the drain growl, the drain shake and the drain flash. The player sees a kick that did not happen. This project treats visual defects as bugs.
-**Fix:** In `backstop()`, when `savedAtStep === step`, set `lastSaveKind = "backstop"` (it still counts once). Or expose a `wasKicked` flag the presentation reads. The flourish and sparks should play only when the kick was actually applied to a live ball.
+A normal backstop plays growl then chime, as the observer doc at `presentation-observer.ts:30-33` describes. The grace path breaks that pairing at the moment the player most needs to be told the ball was not lost. The project treats perceptual mismatches as bugs.
 
-### WR-03: Lamp geometry and skill-shot lanes are hard-coded copies of spec positions and ids
+**Fix:** Give the presentation a re-serve signal that does not count as a second save. One option is a `getReserveCount()` counter, raised in `backstop()` on every path. The observer then pushes the `ballSave` cue (with no `fx.onSave` sparks) when the re-serve counter goes up and the save counter does not.
 
-**File:** `src/render/lamps.ts:113-131`, `src/game/tuning.ts:180`
-**Issue:** The chevron centers (`CHEVRON_XS_M = [0.95, 1.45, 1.95]`, `CHEVRON_Y_M = 1.32`) and the inlane arrow center (`ARROW_CX_M = 0.585`, `ARROW_CY_M = 4.72`) duplicate the rollover and inlane positions in `spec.ts:369-398` by hand. `SKILL_SHOT_LANES` and `skillLampOf` hard-code ids 400 to 402. The rollover lenses and the post ring are derived from the resolved elements, and spec.ts says it is the single origin of table geometry. If a lane moves, the chevrons and arrows silently stop lining up with what they light, and no test would notice.
-**Fix:** In `buildLampShapes`, derive the chevron x from each rollover element's midpoint (`pathMidpoint`) plus a fixed down-table offset, and the arrow x/y from each lane element's midpoint plus an offset. Derive `SKILL_SHOT_LANES` from `TABLE_SPEC` rollovers sorted by x, or at least assert at module load that every id exists as a rollover.
+A simpler alternative: in the grace path, set `lastSaveKind = "backstop"` and increment a separate `graceSaveCount` that the observer maps to the `ballSave` cue.
 
-### WR-04: Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`
-
-**File:** `src/render/shake.ts:142-143`
-**Category:** necessity
-**Issue:** `NUDGE_DIRS` is `Readonly<Record<NudgeDir, Vec2>>` (`tuning.ts:127`) and `dir: NudgeDir`, so the lookup is typed `Vec2` and always defined for every member of the union. The only caller is `EffectsTracker.onNudge`, which forwards `session.getLastNudgeDir()` (typed `NudgeDir`), so no untrusted data reaches it. `if (!d) return;` guards a state that cannot occur.
-**Fix:** Remove the guard; `const d = NUDGE_DIRS[dir];` is enough.
+Either way, add an observer test: kickback, then a drain 100 steps later, must produce `drain` then `ballSave` cues.
 
 ## Info
 
-### IN-01: `parseBest` accepts hex, exponent and padded strings, contrary to its "decimal integer string" contract
+### IN-01: SKILL SHOT can still outlive the ball, the same defect WR-01 fixed for BALL SAVED
 
-**File:** `src/game/high-score.ts:44-48`
-**Issue:** `Number(raw)` accepts `"0x10"` (16), `"1e3"` (1000), `"0b11"` and `" 42 "`, which all pass `isSafeInteger`. The header says the best is stored as a decimal integer string. This does no harm, but it is not the strict parse the doc claims.
-**Fix:** `if (raw === null || !/^(0|[1-9]\d*)$/.test(raw)) return 0;` before the `Number()`.
+**File:** `src/ui/hud.ts:297`, `:322-325`
+**Issue:** WR-01 tied `saveOn` to `state === "playing"` and the session clears `lastSaveStep` when a ball is lost. `skillOn` got neither treatment:
+- it is still `getSkillShotCount() > 0 && now < skillStep + STATUS_TRANSIENT_STEPS` (180)
+- it ranks above the `gameOver` prompt (`:322` before `:325`)
+- `lastSkillStep` is not cleared at bonus entry (`game-session.ts:385-386` clears only the save fields)
 
-### IN-02: Dead code left by Phase 6
+Here is a sequence that shows SKILL SHOT +N over GAME OVER for the rest of the 180-step window: a skill shot on ball 3, then a fast drain down the middle, then a flipper press that skips the tally (`BONUS_*` holds are skippable). The same sequence on ball 1 or 2 replays the previous ball's SKILL SHOT on the next serve. This needs a drain within about 1.5 s of the top lanes, so it is rare.
+**Fix:** Gate `skillOn` like `saveOn` (`state === "playing" && skillStep >= 0 && ...`), and set `lastSkillStep = -1` next to `lastSaveStep = -1` at bonus entry.
 
-**File:** `src/game/bonus.ts:122-125`, `src/render/table-renderer.ts:155-162`
-**Issue:** No production code calls `BonusTally.clearForfeit()`. `snapshot()` already clears the flag. The `LightState` interface in table-renderer.ts is exported with a doc comment saying the renderer no longer reads it, and debug-draw.ts has its own copy.
-**Fix:** Delete both.
+### IN-02: The save lamp is off while the kickback grace still saves the ball
 
-### IN-03: The render layer imports a type from the sandbox composition root
+**File:** `src/game/game-session.ts:622-625`
+**Issue:** `getSaveLampPhase()` reads `save.lampPhase()`, which is `"off"` once `trySave()` has consumed the save. During the grace, the ring around the post is dark, yet a drain is re-served. The player sees no save, gets a save, and (per WR-01) hears a drain. This is minor on its own. If CR-01 is fixed by extending the grace to the window end, though, the dark ring will cover several seconds of active protection.
+**Fix:** Return `"blink"` (or `"steady"`) while `inKickbackGrace()` is true and the state is `"playing"`. Alternatively, write down that the grace is deliberately invisible.
 
-**File:** `src/render/effects.ts:35`
-**Issue:** `EffectsTracker` implements `ObserverFx`, which is imported from `../sandbox/presentation-observer`. Render now depends on sandbox, the composition layer. `FxSink` was placed in `app/cue-queue.ts` for exactly this reason.
-**Fix:** Move `ObserverFx` next to `FxSink` in `src/app/cue-queue.ts`, or to a small `app/fx.ts`, and import it from there in both modules.
+### IN-03: The same-step path rewrites the session's save kind but not `BallSave`'s
 
-### IN-04: A backstop re-serve can reopen an unresolved skill shot, giving the same ball a second attempt
+**File:** `src/game/game-session.ts:412`
+**Issue:** WR-02 sets `this.lastSaveKind = "backstop"`, while `BallSave.lastKind`, set by `consume("kickback")`, still reads `"kickback"`. Today `BallSave.getLastKind()` has no production caller (grep finds only its definition), so nothing breaks. It is still a second, now-divergent source of the same fact.
+**Fix:** Either delete `BallSave.getLastKind()`/`lastKind`, or have the session own the kind entirely and document `BallSave`'s as "the kind passed to `consume`".
 
-**File:** `src/game/game-session.ts:760-762`, `src/game/skill-shot.ts:83-88`
-**Issue:** If the saved ball drained without touching a scoring switch, the skill shot is still `"frozen"`. `reServe()` puts a ball back to rest in `PLUNGER_ZONE` with the plunger idle, so `update(..., true)` reopens the rotation and the same ball gets a second skill shot. Research A3 says the skill shot "carries over"; it is unclear whether a second attempt was intended.
-**Fix:** If not intended, call `this.skill.disarm()` in `reServe()`. Either way, add a test that pins the chosen behavior.
+### IN-04: The test title still claims the skill phase carries over a backstop
 
-### IN-05: The lamp shape table is built twice
+**File:** `src/game/game-session.test.ts:1052`
+**Issue:** The title reads "a backstop is the same ball: bonus counts, inlane flags, the skill phase and the ball number carry over". Since IN-04 (`reServe()` now calls `skill.disarm()`), the skill phase is reset, not carried. The test only passes because it resolves the skill shot first. The title now contradicts the rule pinned by the new test at `:1073`.
+**Fix:** Rename it to "... bonus counts, inlane flags and the ball number carry over", or assert the disarm explicitly.
 
-**File:** `src/render/static-layer.ts:474`, `src/render/table-renderer.ts:331`
-**Issue:** `bakeStatic` calls `buildLampShapes(elements)` on every resize, while `TableRenderer` already holds the same table from its constructor. This is a harmless allocation at bake time, but it creates two sources for one table.
-**Fix:** Pass `this.lampShapes` into `bakeStatic`, as an optional parameter with the current call as the default.
+### IN-05: The chevron loop silently drops skill lanes beyond three, and the WR-03 test computes lamp indices by arithmetic
+
+**File:** `src/render/lamps.ts:359-365`, `src/render/lamps.test.ts:607`
+**Issue:** `SKILL_SHOT_LANES` is typed `readonly number[]` (`tuning.ts:180`), but `SKILL_LAMPS` holds 3 entries. The loop is bounded by both lengths, so adding a fourth lane would rotate onto a lane with no chevron, and nothing would complain. The `?? LAMP_SKILL_400` fallback at `:364` cannot fire, because the loop bound already guarantees the index. A wrong fallback lamp would be worse than none in any case.
+
+The WR-03 test is the intended guard, but it looks shapes up with `LAMP_SKILL_400 + i`. For `i = 3` that is `6 === LAMP_INLANE_500`, so the test would compare the inlane arrow against the fourth lane. It would only fail by coincidence on geometry, not with a clear "no chevron for lane" message.
+**Fix:** Add `expect(SKILL_SHOT_LANES.length).toBe(SKILL_LAMPS.length)`, or export `SKILL_LAMPS` and look shapes up by `SKILL_LAMPS[i]`. Typing `SKILL_SHOT_LANES` as a 3-tuple is another option. Drop the `??` fallback in favour of a `continue` on `undefined`.
+
+### IN-06: The lamp shape table now pulls in the effects runtime for one geometry helper
+
+**File:** `src/render/lamps.ts:55`
+**Issue:** `buildLampShapes` imports `pathMidpoint` as a value from `effects.ts`. That module value-imports `deriveKickFace` (game rules), `ParticlePool` and `ShakeTracker`. As a result, `static-layer.ts` → `lamps.ts` → `effects.ts` now loads the whole effects stack just to bake lenses. There is no cycle today, but a pure geometry helper sits in a stateful effects module. `table-renderer.ts:86` already does the same.
+**Fix:** Move `pathMidpoint` to a geometry module such as `render/sprites.ts` or `table/resolve.ts`, and import it from there in `effects.ts`, `lamps.ts` and `table-renderer.ts`.
 
 ---
 
-_Reviewed: 2026-11-23_
+_Reviewed: 2026-11-23T11:45:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
