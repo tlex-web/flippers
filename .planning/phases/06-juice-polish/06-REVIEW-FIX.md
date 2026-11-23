@@ -100,7 +100,7 @@ status: all_fixed
 **Commit:** 31819a1
 **Applied fix:** `bakeStatic` takes an optional `lampShapes` parameter, defaulting to `buildLampShapes(elements)`. `TableRenderer.resize()` passes `this.lampShapes`.
 
-### WR-04: Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick` (necessity)
+### WR-04: Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`
 
 **Files modified:** `src/render/shake.ts`
 **Commit:** d64ad4c
