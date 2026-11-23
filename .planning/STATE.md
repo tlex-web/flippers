@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.2"
-current_phase_name: "Address tech debt: ball-search soft-lock + 06.1 review triage"
-status: executing
-stopped_at: Phase 06.1 complete — all phases complete
-last_updated: "2026-11-23T19:53:44.072Z"
+status: completed
+stopped_at: Phase 06.2 complete — all phases complete
+last_updated: "2026-11-23T21:57:58.643Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 06.1 complete
-state_head: be48ce4abfa575dec546cc6c903b8b5628bb8993
+last_activity_desc: Phase 06.2 complete
+state_head: 0f3849ca218e6e7925f6ac486d04b01404a73d0e
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 67
-  completed_plans: 61
+  completed_plans: 67
+  percent: 75
 milestone_name: milestone
 ---
 
@@ -24,22 +24,22 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.2: ball-search soft-lock + 06.1 review triage (before v1.0 close)
+**Current focus:** v1.0 milestone close — one open todo (root-shot sling deflection) to plan first
 
 ## Current Position
 
-Phase: 06.2 (Address tech debt: ball-search soft-lock + 06.1 review triage) — READY TO EXECUTE
+Phase: 06.2
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-23 — Phase 06.1 complete
+Status: All phases complete
+Last activity: 2026-11-23 — Phase 06.2 complete
 
-Progress: [█████████░] 86%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 62
+- Total plans completed: 68
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -54,6 +54,7 @@ Progress: [█████████░] 86%
 | 05 | 8 | - | - |
 | 06 | 14 | - | - |
 | 06.1 | 5 | - | - |
+| 06.2 | 6 | - | - |
 
 **Recent Trend:**
 
@@ -125,6 +126,12 @@ Progress: [█████████░] 86%
 | Phase 06.1 P02 | 15min | 3 tasks | 7 files |
 | Phase 06.1 P04 | 3min | 2 tasks | 9 files |
 | Phase 06.1 P05 | 4min | 3 tasks | 5 files |
+| Phase 06.2 P01 | 5 min | 2 tasks | 1 files |
+| Phase 06.2 P02 | 11min | 2 tasks | 4 files |
+| Phase 06.2 P04 | 7min | 2 tasks | 2 files |
+| Phase 06.2 P05 | 3min | 2 tasks | 4 files |
+| Phase 06.2 P03 | 21 min | 3 tasks | 3 files |
+| Phase 06.2 P06 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -284,12 +291,25 @@ Recent decisions affecting current work:
 - [Phase 06.1]: 06.1-04: IN-02 closed by moving SaveKind to game-session.ts beside GameState (type-only imports, ball-save keeps SaveLampPhase); IN-01 closed by setting the cleared-skill-step HUD case to step 50, proven RED without skillStep >= 0 and GREEN restored
 - [Phase 06.1]: 06.1-05: 04 review ledger closed at open: 0 (11 fixed, IN-09 skipped per 04-UAT test 14, IN-06 deferred per D-03); 06 ledger open: 0 (IN-01 8f1b9ae, IN-02 f420427)
 - [Phase 06.1]: 06.1-05: lost 6590dce IN-04 soft-lock recorded as a 04-ledger prose note plus pending todo (backlog, D-02); 02 release jam-lag closed as documentation only (D-04)
+- [Phase 06.2]: 06.2-01: IN-04 line-ending refresh strips CRs from clean files only, then refreshes the stale index stat cache via path-scoped git add on blob-identical paths (status treats a cached-size mismatch as modified; update-index --refresh cannot clear it)
+- [Phase 06.2]: 06.2-02: tilted-only ball search (240 still steps outside PLUNGER_ZONE -> NUDGE_IMPULSE kick toward PLAYFIELD_CENTER_X, forfeit after 2 kicks via service() tilted path); ballSearchSteps 0 disables it and is the permanent RED control
+- [Phase 06.2]: 06.2-02: no ball-search cue this phase; getBallSearchCount() is the hook for a later coil sound
+- [Phase 06.2]: 06.2-04: pinch proof requires >80% live flips per bat and 0 missing-ball steps; a walled-off inlane (walls 190/191) is the permanent blind-probe RED control (WR-02)
+- [Phase 06.2]: 06.2-04: kickback e2e asserts the unaided outcome (drain 783 inside window end 1075, CR-01 grace re-serve, then bonus); the past-window rule stays pinned at rule level only (WR-03)
+- [Phase 06.2]: 06.2-05: keyLabel keeps one guard (typeof || !PRINTABLE.test); the anchored u-flag PRINTABLE class alone enforces one code point (WR-04)
+- [Phase 06.2]: 06.2-05: invisible-character test literals are written as \uXXXX escapes; write backslashes with node String.fromCharCode(92), since doubled backslashes in Bash command text arrive halved on Windows (IN-02)
+- [Phase 06.2]: 06.2-03: WR-01 fixed and kept - user approved the inlane line moved to the funnel wall and the centred arrows (blocking-human checkpoint)
+- [Phase 06.2]: 06.2-03: root-struck flipper shots deflecting off the sling lower face are out of scope (lane is a sensor; sling unchanged since fb4e81d); tracked as a separate todo
+- [Phase 06.2]: 06.2-03: segToSegDist returns 0 on a proper crossing (IN-01), so sling-clearance case (e) cannot pass on an overlap
+- [Phase 06.2]: 06.2-06: 06.1 review ledger closed at open 0 (all 8 rows fixed with 06.2 shas; WR-01 fixed per the user's approved reply at the 06.2-03 checkpoint)
+- [Phase 06.2]: 06.2-06: root-shot sling deflection todo stays pending as an open v1.0 item to plan before milestone close (gap plan or 06.3 insert); not part of the 06.1 ledger
 
 ### Pending Todos
 
-- [Dead-flipper hinge pocket soft-lock (backlog, D-02)](.planning/todos/pending/2026-11-23-dead-flipper-hinge-pocket-soft-lock.md)
+- [Root-struck flipper shots deflect off the slingshot's lower face (major, open)](.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md): user-observed at the 06.2-03 check, not a review finding and not resolved by 06.2. A v1.0 item to plan before the milestone closes (gap plan or 06.3 insert).
 
 (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planning/todos/completed/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md).)
+(The 2026-11-23 hinge-pocket soft-lock todo was closed by 06.2-02: [todo file](.planning/todos/completed/2026-11-23-dead-flipper-hinge-pocket-soft-lock.md).)
 
 ### Blockers/Concerns
 
@@ -301,7 +321,7 @@ Recent decisions affecting current work:
 - [Phase 2]: VALIDATION.md and SECURITY.md were never produced (the Nyquist validation and secure-phase audits did not run).
 - ~~[Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.~~ Resolved in 06.1: soak re-run green (06.1-01, 06.1-02, 06.1-05)
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
-- [Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.
+- ~~[Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.~~ Resolved in 06.2 (06.2-06: open 0)
 
 ### Quick Tasks Completed
 
@@ -324,6 +344,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T18:30:00Z
-Stopped at: Phase 06.1 complete (UAT 1/1 passed, verification passed). All v1.0 phases are complete; the milestone is ready for audit and close
+Last session: 2026-11-23T21:59:21.105Z
+Stopped at: Phase 06.2 complete (UAT 1/1 passed) — all v1.0 phases complete; root-shot sling todo open before milestone close
 Resume file: None

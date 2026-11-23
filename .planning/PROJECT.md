@@ -48,7 +48,8 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 
 <!-- Current scope. Building toward these. All hypotheses until shipped. -->
 
-- (none — every v1.0 requirement is validated; the milestone is ready to close)
+- (no open requirements — every v1.0 requirement is validated)
+- [ ] Root-struck flipper shots stop deflecting off the slingshot lower face (open todo 2026-11-23-root-shot-deflects-off-slingshot; plan before the milestone closes)
 
 ### Out of Scope
 
@@ -97,9 +98,10 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | One ball save per ball; a center-post kickback spends it but keeps the kicked ball protected until the save window would have ended (at least 2 s) | A kick can only improve on the guaranteed save, never cost a ball the plain backstop would have saved; the first fix (a fixed 2 s grace) still lost balls 2–7 s after a kick and was caught on re-review (edd8db7) | ✓ Phase 6 |
 | One skill shot per ball; a backstop re-serve disarms it | The re-served ball is the same ball, so it gets no second attempt (40295c0, UAT 8) | ✓ Phase 6 |
 | High score lives only in localStorage (`flippers.hiscore.v1`, canonical decimal string), every access silently guarded | No accounts or server in v1; blocked storage must never break play | ✓ Phase 6 |
-| Slings and inlane sensors move together 0.35 m up-table through one shared `INLANE_Y` (WR-03); no other offset without a new decision | Base and mid-bat inlane flips were firing the ball at up to 2.64× the no-sling speed. The ratio is 1.00 after the move and the bat clears the sling by 0.45 m. At 0.40 a ball gets trapped. The look and feel were approved at D-01. The wall-side inlane gap (review WR-01) was accepted at UAT | ✓ Phase 6.1 |
+| Slings and inlane sensors move together 0.35 m up-table through one shared `INLANE_Y` (WR-03); no other offset without a new decision | Base and mid-bat inlane flips were firing the ball at up to 2.64× the no-sling speed. The ratio is 1.00 after the move and the bat clears the sling by 0.45 m. At 0.40 a ball gets trapped. The look and feel were approved at D-01. The wall-side inlane gap (review WR-01) was closed in 06.2-03 by moving the inlane line to the funnel wall | ✓ Phase 6.1 |
 | Prettier is scoped to source by `.prettierignore` | `npm run format` was also rewriting 233 planning, agent and CLAUDE.md files; review ledgers must not be reformatted by tooling | ✓ Phase 6.1 |
-| The dead-flipper hinge-pocket soft-lock is backlogged, not fixed in v1.0 (D-02) | It is reachable only with dead flippers (TILT) and a ball resting in a narrow pocket, and a page reload recovers. A pending todo carries the reproduction | — Pending (backlog) |
+| The dead-flipper hinge-pocket soft-lock is backlogged, not fixed in v1.0 (D-02) | It is reachable only with dead flippers (TILT) and a ball resting in a narrow pocket, and a page reload recovers. A pending todo carries the reproduction | ✗ Superseded in Phase 6.2 by the tilted-only ball search below |
+| Ball search runs only while tilted: 2 s still outside the plunger zone → a silent horizontal nudge toward centre, forfeit after 2 kicks via the tilted drain path; no cue sound in v1.0 | Fixes the hinge-pocket soft-lock without touching live play; `ballSearchSteps: 0` disables it and is the permanent RED control; `getBallSearchCount()` is the hook for a later coil sound | ✓ Phase 6.2 (UAT: kick and give-up read acceptably) |
 
 ## Evolution
 
@@ -119,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-23 after Phase 6.1*
+*Last updated: 2026-11-23 after Phase 6.2*

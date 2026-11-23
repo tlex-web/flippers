@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Rendering & Audio** - Procedural Canvas rendering at stable 60fps and runtime-synthesized SFX (completed 2026-11-22)
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
 - [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
-- [ ] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage**
+- [x] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage** (completed 2026-11-23)
 
 ## Phase Details
 
@@ -314,7 +314,7 @@ Plans:
   4. A plain `npx prettier --check .` passes on this Windows checkout through `.gitattributes` (`* text=auto eol=lf`), with no uncommitted user edit touched. The keyLabel guard, the test literals, segToSegDist and the limit wording are cleaned up (06.1 WR-04, IN-01..IN-04).
   5. `npx vitest run`, `npx tsc --noEmit`, `npx eslint .`, `npm run soak` and `npm run build` are green, the 06.1 review ledger reads `open: 0`, and the soft-lock todo sits in `todos/completed/` with a resolution.
 
-**Plans:** 6/6 plans executed (3 waves)
+**Plans:** 6/6 plans complete (3 waves)
 
 Plans:
 **Wave 1**
