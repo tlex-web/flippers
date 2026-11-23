@@ -53,12 +53,23 @@ function codePoints(s: string): number {
 }
 
 /**
- * The cap label for a layout-map value: null unless `raw` is exactly one code
- * point; the uppercase form when that is also one code point ("y" -> "Y"),
- * else `raw` ("ß", whose uppercase is "SS").
+ * One printable code point: not whitespace, not Unicode category C (control,
+ * format, lone surrogate, private use, unassigned) and not category M
+ * (combining marks).
+ */
+const PRINTABLE = /^[^\s\p{C}\p{M}]$/u;
+
+/**
+ * The cap label for a layout-map value: null unless `raw` is exactly one
+ * printable code point; the uppercase form when that is also one code point
+ * ("y" -> "Y"), else `raw` ("ß", whose uppercase is "SS"). Whitespace, category
+ * C and category M values are rejected because they would draw a blank or
+ * garbled cap yet still count as resolved and reveal the layout-only note
+ * (04-REVIEW IN-04).
  */
 export function keyLabel(raw: string | undefined): string | null {
   if (typeof raw !== "string" || codePoints(raw) !== 1) return null;
+  if (!PRINTABLE.test(raw)) return null;
   const upper = raw.toUpperCase();
   return codePoints(upper) === 1 ? upper : raw;
 }
