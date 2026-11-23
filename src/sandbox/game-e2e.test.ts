@@ -9,7 +9,12 @@ import { ReactiveElements, type RuleHooks } from "../game/reactive-elements";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
-import { BALL_SAVE_STEPS, NUDGE_COOLDOWN_STEPS, NUDGE_IMPULSE } from "../game/tuning";
+import {
+  BALL_SAVE_STEPS,
+  KICKBACK_GRACE_STEPS,
+  NUDGE_COOLDOWN_STEPS,
+  NUDGE_IMPULSE,
+} from "../game/tuning";
 import {
   BALL_LINEAR_DAMPING,
   BALL_RADIUS_M,
@@ -1077,6 +1082,7 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(exitStep).toBeGreaterThan(0);
     expect(step - exitStep).toBeLessThan(BALL_SAVE_STEPS);
     expect(g.session.getLastSaveKind()).toBe("kickback");
+    const kickStep = g.session.getStep();
     // One step later (the kick lands in that step's service()), the same ball
     // is still in play and heading back up the table.
     step += g.frame(FRAME_120_HZ);
@@ -1085,11 +1091,14 @@ describe("ball save (PLSH-07): a launched ball that drains inside the window is 
     expect(ballById(g, first).vy).toBeLessThan(0);
     expect(g.session.getBall()).toBe(1);
 
-    // One save per ball: the kicked ball's next drain is real.
+    // One save per ball: the kicked ball's next drain, past the kickback
+    // grace, is real. Precondition asserted so a tuning change that moves the
+    // drain inside the grace (a backstop re-serve, 06-REVIEW CR-01) fails loudly.
     while (!g.drainedIds.includes(first)) {
       if (step >= 2 * DRAIN_CAP_STEPS) throw new Error(`ball ${first} did not drain`);
       step += g.frame(FRAME_120_HZ);
     }
+    expect(g.session.getStep() - kickStep).toBeGreaterThan(KICKBACK_GRACE_STEPS);
     expect(g.session.getState()).toBe("bonus");
     expect(g.session.getSaveCount()).toBe(1);
     expect(g.session.getBall()).toBe(1);

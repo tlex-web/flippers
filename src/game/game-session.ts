@@ -100,9 +100,12 @@
  * and the flippers on. That is the same ball (research A3): the bonus
  * counters, inlane flags, tilt meter and skill shot carry over and the save is
  * not re-armed, so it is one save per ball. `trySave(ballId)` spends the save
- * as a kickback (the 06-08 center post); a drain on the very step of a
- * kickback is kept as a backstop re-serve that counts once, as the kickback
- * (research A4). A tilt, the bonus state and game over disarm it.
+ * as a kickback (the 06-08 center post); a drain of the kicked ball on the
+ * step of the kickback or within `KICKBACK_GRACE_STEPS` after it is kept as a
+ * backstop re-serve that counts once, as the kickback (research A4, 06-REVIEW
+ * CR-01: the kick does not always keep the ball in play, and it must never
+ * leave the player worse off than the backstop). A tilt, the bonus state and
+ * game over disarm it and end the grace.
  *
  * High score (PLSH-08, D-15, research Open Question 3): the session submits
  * the final score to its `HighScoreSink` (`GameSessionOptions.highScore`,
@@ -132,6 +135,7 @@ import { SkillShot, type SkillPhase } from "./skill-shot";
 import { TiltMeter } from "./tilt-meter";
 import {
   BALL_SAVE_STEPS,
+  KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_DIRS,
   NUDGE_IMPULSE,
@@ -273,7 +277,10 @@ export class GameSession implements RulesGate, RuleHooks {
   /** `step` at the most recent save, -1 before any. */
   private lastSaveStep = -1;
 
-  /** `step` of a kickback spent by `trySave()`, -1 once used or before any. */
+  /**
+   * `step` of a kickback spent by `trySave()` (its backstop grace runs for
+   * `KICKBACK_GRACE_STEPS` after it), -1 once used, ended or before any.
+   */
   private savedAtStep = -1;
 
   /** The best score, submitted once per game at game over (PLSH-08). */
@@ -335,8 +342,9 @@ export class GameSession implements RulesGate, RuleHooks {
   /**
    * Call once per fixed step, right after `router.dispatch()`.
    *
-   * A drain recorded while playing with the ball save running, or on the step
-   * a kickback spent it, is a backstop save: the ball is removed and re-served
+   * A drain recorded while playing with the ball save running, or within the
+   * kickback grace (on the step a kickback spent the save or up to
+   * `KICKBACK_GRACE_STEPS` after it), is a backstop save: the ball is removed and re-served
    * to the plunger (`reServe()`), costing no ball. Otherwise, a drain recorded in this step's batch (while playing or tilted) removes the
    * ball and enters `"bonus"`: the counters are snapshotted into the tally (a
    * tilted ball is a forfeit with zero rows), the tally is timed to end at
@@ -358,7 +366,7 @@ export class GameSession implements RulesGate, RuleHooks {
       return;
     }
     if (this.drained === NO_BALL) return;
-    if (this.state === "playing" && (this.save.canSave() || this.savedAtStep === this.step)) {
+    if (this.state === "playing" && (this.save.canSave() || this.inKickbackGrace())) {
       this.backstop();
       return;
     }
@@ -366,6 +374,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.drained = NO_BALL;
     this.drainCount++;
     this.save.disarm();
+    this.savedAtStep = -1;
     if (this.state === "tilted") this.tally.markForfeit();
     else this.tally.snapshot(this.bonusCounters);
     this.active = NO_BALL;
@@ -380,19 +389,31 @@ export class GameSession implements RulesGate, RuleHooks {
   /**
    * The backstop save (D-08): remove the drained ball and re-serve the same
    * ball to the plunger. Spends the save as a backstop, unless a kickback
-   * already spent it on this very step (then it counts once, as the kickback).
+   * already spent it within the grace (then it counts once, as the kickback;
+   * `lastSaveStep` moves to this step so the HUD's BALL SAVED explains the
+   * re-serve).
    */
   private backstop(): void {
     this.world.removeBall(this.drained);
     this.drained = NO_BALL;
     this.drainCount++;
-    if (this.savedAtStep !== this.step && this.save.consume("backstop")) {
+    if (this.inKickbackGrace()) {
+      this.lastSaveStep = this.step;
+    } else if (this.save.consume("backstop")) {
       this.saveCount++;
       this.lastSaveKind = "backstop";
       this.lastSaveStep = this.step;
     }
     this.savedAtStep = -1;
     this.reServe();
+  }
+
+  /**
+   * Whether a kickback spent the save on this step or within
+   * `KICKBACK_GRACE_STEPS` before it (06-REVIEW CR-01).
+   */
+  private inKickbackGrace(): boolean {
+    return this.savedAtStep >= 0 && this.step - this.savedAtStep <= KICKBACK_GRACE_STEPS;
   }
 
   /**
@@ -458,6 +479,7 @@ export class GameSession implements RulesGate, RuleHooks {
       this.flippers.setEnabled(false);
       this.skill.disarm();
       this.save.disarm();
+      this.savedAtStep = -1;
     }
   }
 
@@ -531,8 +553,9 @@ export class GameSession implements RulesGate, RuleHooks {
    * Spend the ball save as a kickback (the 06-08 center post, through
    * `RuleHooks`). Returns true only while playing, for the active ball, with
    * the save timer running; otherwise returns false and changes nothing. A
-   * drain of the same ball on this step is then kept as a backstop re-serve
-   * that does not count again (research A4).
+   * drain of the same ball on this step or within `KICKBACK_GRACE_STEPS` after
+   * it is then kept as a backstop re-serve that does not count again (research
+   * A4, 06-REVIEW CR-01).
    */
   trySave(ballId: BallId): boolean {
     if (this.state !== "playing" || ballId === NO_BALL || ballId !== this.active) return false;

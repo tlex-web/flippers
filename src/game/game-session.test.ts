@@ -13,6 +13,7 @@ import { bonusDurationSteps } from "./bonus";
 import {
   BALL_SAVE_BLINK_STEPS,
   BALL_SAVE_STEPS,
+  KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_IMPULSE,
   TILT_FORFEIT_HOLD_STEPS,
@@ -1210,14 +1211,58 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(1);
   });
 
-  it("a kickback followed by a drain on a LATER step is a real drain", () => {
+  it("a kickback followed by a drain of the kicked ball within KICKBACK_GRACE_STEPS is a backstop re-serve that counts once (06-REVIEW CR-01)", () => {
+    const r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID)).toBe(true); // kickback on step 1
+    r.step();
+    r.tick(KICKBACK_GRACE_STEPS); // step 1 + grace: the last step of the grace
+    r.step(drainOf(FIRST_ID));
+    expect(r.calls).toEqual([
+      { op: "add", spec: SPAWN },
+      { op: "remove", id: FIRST_ID },
+      { op: "add", spec: SPAWN },
+    ]);
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.getBall()).toBe(1);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.getLastSaveKind()).toBe("kickback");
+    expect(r.session.getLastSaveStep()).toBe(1 + KICKBACK_GRACE_STEPS);
+
+    // The grace is used up: the re-served ball's drain is real.
+    r.tick(1);
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(1);
+  });
+
+  it("a kickback followed by a drain after the grace is a real drain", () => {
     const r = makeRig();
     startSaved(r);
     expect(r.session.trySave(FIRST_ID)).toBe(true);
     r.step();
-    r.tick(1);
+    r.tick(KICKBACK_GRACE_STEPS + 1);
     r.step(drainOf(FIRST_ID));
     expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getSaveCount()).toBe(1);
+  });
+
+  it("a tilt ends the kickback grace: the tilted drain is a forfeit, and the next ball's unstarted-save drain inside the old grace is real", () => {
+    const r = makeRig();
+    startSaved(r);
+    expect(r.session.trySave(FIRST_ID)).toBe(true); // kickback on step 1
+    nudgeTimes(r, 4);
+    expect(r.session.getState()).toBe("tilted");
+    r.step(drainOf(FIRST_ID));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.isBonusForfeit()).toBe(true);
+    finishBonus(r);
+    expect(r.session.getBall()).toBe(2);
+    expect(r.session.getStep()).toBeLessThanOrEqual(1 + KICKBACK_GRACE_STEPS);
+    r.setBallX(IN_CHUTE_X); // ball 2's save never starts
+    r.step(drainOf(r.session.activeBallId));
+    expect(r.session.getState()).toBe("bonus");
+    expect(r.session.getBall()).toBe(2);
     expect(r.session.getSaveCount()).toBe(1);
   });
 

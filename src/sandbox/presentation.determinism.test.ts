@@ -75,8 +75,8 @@ const STEP_MS = FIXED_DT * 1000;
 const FRAME_60_HZ = 1000 / 60;
 const FRAME_144_HZ = 1000 / 144;
 
-/** 30 simulated seconds, parked mid-step (see game.determinism.test.ts). */
-const EXPECTED_STEPS = 3600;
+/** 40 simulated seconds, parked mid-step (see game.determinism.test.ts). */
+const EXPECTED_STEPS = 4800;
 const TOTAL_MS = (EXPECTED_STEPS + 0.5) * STEP_MS;
 
 /** game.determinism.test.ts's script constants (D-05 anchor, skip, tilt). */

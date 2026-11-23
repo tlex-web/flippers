@@ -73,8 +73,13 @@ const FRAME_60_HZ = 1000 / 60;
 const FRAME_120_HZ = 1000 / 120;
 const FRAME_144_HZ = 1000 / 144;
 
-/** 30 simulated seconds: three balls, two tallies, a forfeit and game over fit inside. */
-const EXPECTED_STEPS = 3600;
+/**
+ * 40 simulated seconds: three balls, two tallies, a forfeit and game over fit
+ * inside. (30 s until the kickback grace, 06-REVIEW CR-01: a kicked ball that
+ * fell straight back is now re-served, so ball 3's tally was still running at
+ * 30 s.)
+ */
+const EXPECTED_STEPS = 4800;
 const TOTAL_MS = (EXPECTED_STEPS + 0.5) * STEP_MS;
 
 /** D-05: the anchor hold, in charging steps (06-01). */
