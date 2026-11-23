@@ -1,119 +1,112 @@
 ---
 phase: 06-juice-polish
-fixed_at: 2026-11-23T10:02:54Z
+fixed_at: 2026-11-23T11:00:11Z
 review_path: .planning/phases/06-juice-polish/06-REVIEW.md
 iteration: 1
-findings_in_scope: 10
-fixed: 10
+findings_in_scope: 8
+fixed: 8
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 6: Code Review Fix Report
 
-**Fixed at:** 2026-11-23T10:02:54Z
+**Fixed at:** 2026-11-23T11:00:11Z
 **Source review:** .planning/phases/06-juice-polish/06-REVIEW.md
-**Iteration:** 1
+**Iteration:** 1 (second fix round: the re-review of the first round's fixes)
 
 **Summary:**
-- Findings in scope: 10 (fix_scope: all, so the necessity finding WR-04 was included and done last)
-- Fixed: 10
+- Findings in scope: 8 (fix_scope: all; no necessity findings)
+- Fixed: 8
 - Skipped: 0
-
-## Verification
-
-- The per-fix checks (targeted `vitest run`, `tsc --noEmit`, eslint on touched files) ran in the isolated worktree `.claude/worktrees/rf-06-28633-*`. That worktree resolves `node_modules` from the main checkout's parent directory.
-- The final gates ran in BOTH places. First in the worktree, then again in the **main checkout** after the fast-forward to `d64ad4c`, so the main-checkout numbers can be reproduced from this tree:
-  - `npx vitest run`: 60 files, **1280 passed**, 0 failed (baseline before the fixes: 1264)
-  - `npx tsc --noEmit`: exit 0
-  - `npx eslint .`: exit 0 (checked in the worktree)
-- Not run: `npm run soak`, the 10-minute physics gate. Its harness (`src/harness/reactive-world.ts`) uses no `GameSession`, and no physics or reactive-element code changed.
-- Prettier `--check` warns on the touched files. It warned on them before these edits too: the repo files are CRLF and `.prettierrc` sets `endOfLine: lf`. CRLF was kept.
 
 ## Fixed Issues
 
-### CR-01: A kickback spends the ball save, and the ball still drains inside the save window, costing a ball
+### CR-01: The kickback grace is a fixed 2 s, so a kicked ball that drains later but still inside the save window costs a ball (CR-01 only partly fixed)
 
-**Files modified:** `src/game/tuning.ts`, `src/game/game-session.ts`, `src/game/game-session.test.ts`, `src/sandbox/game-e2e.test.ts`, `src/sandbox/game.determinism.test.ts`, `src/sandbox/presentation.determinism.test.ts`
-**Commit:** 24b6c31
-**Status:** fixed: requires human verification (logic change)
-**Applied fix:**
-- Added `KICKBACK_GRACE_STEPS = 240` (2 s). `service()` now backstops a drain when `save.canSave()` is true or `inKickbackGrace()` is true (`savedAtStep >= 0 && step - savedAtStep <= KICKBACK_GRACE_STEPS`).
-- A grace backstop does not count again. It moves `lastSaveStep` to the re-serve step so the HUD shows BALL SAVED for the re-serve.
-- `savedAtStep` is cleared on tilt, on bonus entry and on start.
-- The old test "kickback then LATER drain is real" was replaced by three tests: a re-serve at the last grace step with `saveCount` unchanged, a real drain after the grace, and a tilt or bonus ending the grace.
-- The live e2e kickback test now asserts that its drain lands past the grace. If tuning moves it inside the grace, the test fails loudly.
-- The two scripted determinism games now run 40 s instead of 30 s. The extra re-serve kept ball 3's tally running at 30 s, so the game had not reached game over. Following the file's own rule ("move script steps, never assertions"), only the length changed and every assertion is the same.
+**Files modified:** `src/game/game-session.ts`, `src/game/tuning.ts`, `src/game/game-session.test.ts`, `src/sandbox/game-e2e.test.ts`
+**Commit:** edd8db7
+**Status:** fixed: requires human verification (rule logic)
+**Applied fix:** `trySave()` reads `save.getRemaining()` before `consume()` and sets `graceEndsAt = step + max(KICKBACK_GRACE_STEPS, remaining - 1)`. `inKickbackGrace()` is now `savedAtStep >= 0 && step <= graceEndsAt`. A new `endGrace()` clears both fields everywhere `savedAtStep` was cleared (tilt, bonus entry, `onStart`, every backstop). The bound is `remaining - 1`, not the reviewer's `remaining`. With `remaining` left on the kick step, the next `remaining - 1` ticks keep the save running and the tick after that times it out. So the backstop would have covered drains through `step + remaining - 1`, and the grace now ends on exactly that step. This keeps the "never make it worse" contract without granting an extra step. The docs in `tuning.ts` and `game-session.ts` now describe the window-plus-floor rule, so the contract the code states is the contract it delivers.
+**Tests:**
+- A session case kicks at window step 100 (session step 101). It drains the kicked ball at kick + 600, which is past the 240-step grace but inside the window, and asserts the ball is re-served: remove then add, ball 1, playing, one save. It also drains on the window's last step (re-served) and one step past it (bonus).
+- A plain no-kick rig confirms the same last step is backstopped, so both paths match.
+- A late-kick case (step 800, 41 window steps left) pins the 240-step floor at kick + 240 (saved) and kick + 241 (lost). It replaces the old "drain after the grace is real" case, because that case kicked at step 1 and its drain now falls inside the window.
+- The e2e live kickback case now records the session step of the chute exit and asserts the kicked ball's real drain lies past both `kickStep + KICKBACK_GRACE_STEPS` and the original window's last step (measured: exit 235, kick 500, drain 1103 > 1075).
+- Mutation check: both a 240-only grace and an off-by-one `remaining` bound fail the new session test.
 
-### WR-01: "BALL SAVED" (and the live-region announcement) can outlive a lost ball and override the game-over prompt
+### WR-01: A grace backstop shows BALL SAVED but sounds like a lost ball: drain cue and shake, no ballSave cue
 
-**Files modified:** `src/ui/hud.ts`, `src/ui/hud.test.ts`, `src/game/game-session.ts`, `src/game/game-session.test.ts`
-**Commit:** c262aa1
-**Status:** fixed: requires human verification (logic change)
-**Applied fix:** Both of the review's options are applied. `GameSession` sets `lastSaveStep = -1` on bonus entry and in `onStart()`. The HUD's `saveOn` now also requires `state === "playing"` and `saveStep >= 0`. New tests cover: GAME OVER beating BALL SAVED inside the window, a cleared save step showing nothing, and the session clearing the step when a ball is lost.
+**Files modified:** `src/game/game-session.ts`, `src/sandbox/presentation-observer.ts`, `src/sandbox/presentation-observer.test.ts`
+**Commits:** a3a6ba6, b653ee4 (Prettier wrap of the new test line)
+**Applied fix:** `GameSession` now has a `reserveCount` presentation counter, read through `getReserveCount()`. `backstop()` raises it on every path. The observer adds `getReserveCount` to `ObserverSession` and snapshots it. After the save loop it pushes one `ballSave` cue for each re-serve that brought no new save that step: `(reserves delta) - (saves delta)`, when positive. It calls no `fx.onSave`, so no save sparks play. The step's cue counts work out as follows:
+- A normal backstop raises both counters, so it plays one sting.
+- A kick plus drain on the same step raises both, so it plays one sting.
+- A kick alone raises only the save count, so it plays one sting.
+- A grace backstop raises only the re-serve count, so it now plays drain, then sting.
 
-### WR-02: The same-step kickback+drain path plays the post flourish and save sparks for a ball that was removed and re-served
+The observer header docs are updated.
+**Tests:** The fake-session unit cases cover:
+- a grace re-serve, which pushes `drain` then `ballSave` and calls only `fx.onDrain`
+- a same-step kickback plus re-serve, which pushes one `ballSave`
+
+A real-`GameSession` case runs kickback, then a drain of the kicked ball 100 steps later. It asserts `["drain", "ballSave"]` and no second save sparks. Mutation check: disabling the new loop fails 2 tests.
+
+### IN-01: SKILL SHOT can still outlive the ball, the same defect WR-01 fixed for BALL SAVED
+
+**Files modified:** `src/ui/hud.ts`, `src/game/game-session.ts`, `src/ui/hud.test.ts`, `src/game/game-session.test.ts`
+**Commit:** 5d8c9e0
+**Applied fix:** `skillOn` is now gated like `saveOn`: `state === "playing" && count > 0 && skillStep >= 0 && now < skillStep + STATUS_TRANSIENT_STEPS`. The session sets `lastSkillStep = -1` at bonus entry, next to `lastSaveStep = -1`. The skill count and value are untouched because they are per game. The doc for `getLastSkillStep()` now says "of the ball in play". New tests cover three cases: a game over inside the skill window shows the GAME OVER prompt, a cleared skill step shows nothing, and the session clears `getLastSkillStep()` when a ball is lost.
+
+### IN-02: The save lamp is off while the kickback grace still saves the ball
 
 **Files modified:** `src/game/game-session.ts`, `src/game/game-session.test.ts`
-**Commit:** fd1c559
-**Status:** fixed: requires human verification (logic change)
-**Applied fix:** In `backstop()`, when `savedAtStep === step`, `lastSaveKind` becomes `"backstop"`. The save still counts once. `LampTracker` and `EffectsTracker` key on `"kickback"`, so the flourish and the sparks no longer fire for that case. The same-step test now expects `"backstop"`.
+**Commit:** dab5c3a
+**Applied fix:** While the state is playing and `inKickbackGrace()` is true, `getSaveLampPhase()` returns `"steady"` if more than `BALL_SAVE_BLINK_STEPS` grace steps follow this one, and `"blink"` otherwise.
+- A grace that runs to the window's end reads as the save would have, except that it starts blinking 1 fixed step (8 ms) sooner.
+- A late kick, where the 240-step floor governs, blinks from the kick with no steady blip, so the blink rhythm does not restart.
+- When the grace ends or is used, the lamp falls back to `BallSave` and reads `off`.
 
-### WR-03: Lamp geometry and skill-shot lanes are hard-coded copies of spec positions and ids
+The `trySave` test now expects `"steady"` right after the kick. A new test walks steady, then blink, then off for an early kick. It checks that a late kick blinks through the floor and that a grace re-serve turns the lamp off.
+
+### IN-03: The same-step path rewrites the session's save kind but not `BallSave`'s
+
+**Files modified:** `src/game/ball-save.ts`, `src/game/ball-save.test.ts`, `src/game/game-session.ts`
+**Commit:** 240e083
+**Applied fix:** Took the delete option. `BallSave.lastKind` and `getLastKind()` are removed, since they had no production caller, and `consume()` no longer takes a kind. `GameSession.getLastSaveKind()` is now the only source. `SaveKind` stays exported and its doc points at the session. The `BallSave` tests were updated to the argument-free `consume()`.
+
+### IN-04: The test title still claims the skill phase carries over a backstop
+
+**Files modified:** `src/game/game-session.test.ts`
+**Commit:** e57a1b6
+**Applied fix:** The test is renamed to "a backstop is the same ball: bonus counts, inlane flags and the ball number carry over". The disarm is already pinned by the dedicated IN-04 test.
+
+### IN-05: The chevron loop silently drops skill lanes beyond three, and the WR-03 test computes lamp indices by arithmetic
 
 **Files modified:** `src/render/lamps.ts`, `src/render/lamps.test.ts`
-**Commit:** b2d9349
-**Applied fix:**
-- Chevrons are placed at `CHEVRON_DROP_M` (0.37) below `pathMidpoint` of each `SKILL_SHOT_LANES` rollover.
-- Inlane arrows are placed at `ARROW_RISE_M` (0.23) above `pathMidpoint` of lane sensors 500 and 501, using a new `INLANE_LAMPS` table that `update()` also reads (an indexed loop, no allocation).
-- `skillLampOf` now maps by the `SKILL_SHOT_LANES` slot. Positions on the current table are unchanged; the existing geometry tests still pass.
-- For `SKILL_SHOT_LANES`, I added a test instead of deriving the list or asserting at module load. The test checks that every skill lane is a `TABLE_SPEC` rollover, in left-to-right order, with its chevron under its midpoint. A second test checks the arrows. Keeping the list explicit keeps the choice of skill lanes a rule decision.
+**Commit:** 1512bad
+**Applied fix:** `SKILL_LAMPS` is now exported. `buildLampShapes` loops over `SKILL_SHOT_LANES` and uses `continue` when `SKILL_LAMPS[i]` is undefined. The `?? LAMP_SKILL_400` fallback is gone. The WR-03 test asserts `SKILL_SHOT_LANES.length === SKILL_LAMPS.length` and looks chevrons up by `SKILL_LAMPS[i]` instead of `LAMP_SKILL_400 + i`.
 
-### IN-01: `parseBest` accepts hex, exponent and padded strings, contrary to its "decimal integer string" contract
+### IN-06: The lamp shape table now pulls in the effects runtime for one geometry helper
 
-**Files modified:** `src/game/high-score.ts`, `src/game/high-score.test.ts`
-**Commit:** 195a0bb
-**Applied fix:** `parseBest` now returns 0 unless `raw` matches `/^(0|[1-9]\d*)$/`, checked before `Number()`. Added cases: `0x10`, `1e3`, `0b11`, `0o7`, ` 42 `, `+42`, `007`, `42\n`.
+**Files modified:** `src/table/resolve.ts`, `src/render/effects.ts`, `src/render/lamps.ts`, `src/render/table-renderer.ts`, `src/render/lamps.test.ts`
+**Commit:** 6c9c759
+**Applied fix:** `pathMidpoint` moved, unchanged, into `table/resolve.ts`, which is pure geometry with only a constants import and type imports. `effects.ts`, `lamps.ts`, `table-renderer.ts` and the lamp tests import it from there. `lamps.ts` no longer imports `./effects`, so baking lenses through `static-layer` → `lamps` no longer loads the effects stack. `table-renderer.ts` keeps only a type import from `./effects`.
 
-### IN-02: Dead code left by Phase 6
+## Verification
 
-**Files modified:** `src/game/bonus.ts`, `src/game/bonus.test.ts`, `src/render/table-renderer.ts`
-**Commit:** 078f337
-**Applied fix:** Deleted `BonusTally.clearForfeit()` and its test lines. Deleted the unused exported `LightState` from table-renderer.ts; debug-draw.ts keeps its own copy.
+All gates ran in the main checkout, `C:\Users\aster\projects-source\flippers`, on branch `gsd/phase-03-table-plunger-event-bus`. No worktree was used, as the orchestrator instructed, so the results can be reproduced from this tree at HEAD `b653ee4`.
 
-### IN-03: The render layer imports a type from the sandbox composition root
-
-**Files modified:** `src/app/cue-queue.ts`, `src/render/effects.ts`, `src/sandbox/presentation-observer.ts`
-**Commit:** 01ed0ab
-**Applied fix:** `ObserverFx` moved next to `FxSink` in `app/cue-queue.ts`. effects.ts imports it from there. presentation-observer imports it and re-exports the type, so its test and other consumers did not change. Nothing in `src/render`, `src/app`, `src/game` or `src/ui` imports from `../sandbox` any more.
-
-### IN-04: A backstop re-serve can reopen an unresolved skill shot, giving the same ball a second attempt
-
-**Files modified:** `src/game/game-session.ts`, `src/game/game-session.test.ts`
-**Commit:** 40295c0
-**Status:** fixed: requires human verification (rule decision)
-**Applied fix:** I chose one skill shot per ball: `reServe()` calls `this.skill.disarm()`, and the docs were updated to match. A new test pins it: frozen skill shot, then backstop, then phase is `off`, the lit lane is -1, and a rollover awards nothing. If a second attempt was intended, revert this commit and flip the test.
-
-### IN-05: The lamp shape table is built twice
-
-**Files modified:** `src/render/static-layer.ts`, `src/render/table-renderer.ts`
-**Commit:** 31819a1
-**Applied fix:** `bakeStatic` takes an optional `lampShapes` parameter, defaulting to `buildLampShapes(elements)`. `TableRenderer.resize()` passes `this.lampShapes`.
-
-### WR-04: Impossible-state guard — `NUDGE_DIRS[dir]` undefined check in `ShakeTracker.kick`
-
-**Files modified:** `src/render/shake.ts`
-**Commit:** d64ad4c
-**Status:** fixed: requires human verification (necessity finding, code removed)
-**Applied fix:** Removed `if (!d) return;`. `tsc` still passes, since a `Record<NudgeDir, Vec2>` lookup on a `NudgeDir` key is typed `Vec2`.
-
-## Notes
-
-- Commits were made with plain `git commit`, one per finding, staging only that finding's files, not with `gsd_run query commit`. The unrelated working-tree changes (`.planning/config.json`, `.planning/research/.cache/`, `.planning/state.json`) were never staged.
-- Worktree cleanup finished: `gsd/phase-03-table-plunger-event-bus` was fast-forwarded to `d64ad4c`, the worktree was removed, the temp branch `gsd-reviewfix/06-28633` was deleted and the recovery sentinel was removed.
+- After each fix: the relevant `npx vitest run <files>`, `npx tsc --noEmit`, and `npx eslint` on the touched files all passed.
+- Final full run:
+  - `npx vitest run`: 60 files, 1288 passed (baseline 1280; +8 new tests)
+  - `npx tsc --noEmit`: exit 0
+  - `npx eslint .`: exit 0
+- Prettier: every file changed in this round matches the project style, apart from lines that already differed before this round in `game-session.test.ts` and `game-e2e.test.ts`. Those lines were left alone.
+- Pre-existing unrelated working-tree changes were never staged: `.planning/config.json`, `.planning/research/.cache/` and `.planning/state.json`.
 
 ---
 
-_Fixed: 2026-11-23T10:02:54Z_
+_Fixed: 2026-11-23T11:00:11Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
