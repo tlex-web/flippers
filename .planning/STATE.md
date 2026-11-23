@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: "06.1"
 current_phase_name: "Address tech debt: bat/sling pinch (WR-03) + review hygiene"
 status: executing
-stopped_at: Phase 06 complete — all phases complete
-last_updated: "2026-11-23T12:57:00.337Z"
+stopped_at: Completed 06.1-01-PLAN.md
+last_updated: "2026-11-23T13:07:30.630Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 06 complete
-state_head: 11af41d43edb2e7ff3fa8282280efa703db43097
+last_activity_desc: Phase 06.1 execution started
+state_head: 65c48ff7d8dc6ee9930dd09f0993c9f5842bd39a
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 61
-  completed_plans: 56
+  completed_plans: 57
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 complete — ready to close (`/gsd-complete-milestone`)
+**Current focus:** Phase 06.1 — Address tech debt: bat/sling pinch (WR-03) + review hygiene
 
 ## Current Position
 
-Phase: 06.1 (Address tech debt: bat/sling pinch (WR-03) + review hygiene) — READY TO EXECUTE
-Plan: Not started
+Phase: 06.1 (Address tech debt: bat/sling pinch (WR-03) + review hygiene) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-11-23 — Phase 06 complete
+Last activity: 2026-11-23 — Phase 06.1 execution started
 
 Progress: [██████████] 100%
 
@@ -119,6 +119,7 @@ Progress: [██████████] 100%
 | Phase 06 P12 | 16min | 2 tasks | 10 files |
 | Phase 06 P13 | 20min | 2 tasks | 8 files |
 | Phase 06 P14 | 10min | 3 tasks | 5 files |
+| Phase 06.1 P01 | 4min | 2 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -270,6 +271,7 @@ Recent decisions affecting current work:
 - [Phase 06]: Review IN-04: one skill shot per ball; reServe() disarms it (40295c0)
 - [Phase 06]: Review WR-01 (round 2): every re-serve that spends no save still plays the save sting (getReserveCount), so a grace re-serve sounds drain then chime; BALL SAVED and SKILL SHOT show only while playing and clear at bonus entry
 - [Phase 06]: UAT 11/11 passed on 2026-11-23 (incl. CR-01 re-tests); verification passed 5/5 after regeneration; review open: 2 info (HUD test guard pinning, SaveKind location)
+- [Phase 06.1]: 06.1-01: Prettier scoped to source via .prettierignore (.planning/, .gsd/, .claude/, CLAUDE.md); use --end-of-line auto on this Windows checkout. Style commit e2b8514 touched 27 paths (reactive-elements.test.ts was EOL-only in the working tree, already clean in git).
 
 ### Pending Todos
 
@@ -306,6 +308,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T11:30:00Z
-Stopped at: Phase 06 complete — milestone v1.0 ready to close
+Last session: 2026-11-23T13:07:25.612Z
+Stopped at: Completed 06.1-01-PLAN.md
 Resume file: None

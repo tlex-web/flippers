@@ -284,11 +284,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 **Goal:** A raised bat can no longer pinch the ball against a slingshot (WR-03: both slings and their inlane sensors move 0.35 m up-table, proven by a seeded every-step sweep with a RED control and approved by eye and feel), and the open Phase 4-6 review and format debt is fixed or explicitly dispositioned.
 **Requirements**: TBD
 **Depends on:** Phase 6
-**Plans:** 5 plans (4 waves)
+**Plans:** 1/5 plans executed (4 waves)
 
 Plans:
 **Wave 1**
-- [ ] 06.1-01-PLAN.md — Format hygiene: .prettierignore scopes Prettier to source, one formatting-only commit over src/ and index.html, 05 deferred rows closed [wave 1]
+- [x] 06.1-01-PLAN.md — Format hygiene: .prettierignore scopes Prettier to source, one formatting-only commit over src/ and index.html, 05 deferred rows closed [wave 1]
 
 **Wave 2** *(blocked on Wave 1; both plans run in parallel)*
 - [ ] 06.1-02-PLAN.md — WR-03 fix (D-01): sling-pinch sweep RED then GREEN with an old-geometry RED control, slings and inlanes moved 0.35 m up-table, rule (1) clearance case, translated pins, kickback e2e re-authored, user look-and-feel checkpoint [wave 2]
