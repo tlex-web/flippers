@@ -140,7 +140,6 @@ export class ShakeTracker {
    */
   kick(dir: NudgeDir): void {
     const d = NUDGE_DIRS[dir];
-    if (!d) return;
     this.kickStart = this.stepCount + 1;
     this.kickDx = -d.x;
     this.kickDy = -d.y;
