@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import type { BallId, CollisionEvent } from "../physics/types";
 import { GameSession, type GameSessionWorld } from "./game-session";
-import { HISCORE_KEY, HighScore, type StorageLike } from "./high-score";
+import { HISCORE_KEY, HighScore, parseBest, type StorageLike } from "./high-score";
 
 /**
  * High score contracts (plan 06-11, PLSH-08, D-15, D-16):
@@ -146,5 +146,159 @@ describe("HighScore tracer (plan 06-11 Task 1, PLSH-08)", () => {
     rig.session.tick();
     expect(storage.sets).toHaveLength(0);
     expect(rig.session.isNewBest()).toBe(false);
+  });
+});
+
+/** A storage whose getItem throws (a SecurityError on read). */
+class ThrowingReadStorage implements StorageLike {
+  sets = 0;
+  getItem(): string | null {
+    const err = new Error("The operation is insecure.");
+    err.name = "SecurityError";
+    throw err;
+  }
+  setItem(): void {
+    this.sets++;
+  }
+}
+
+/** A storage that reads fine but whose setItem throws a QuotaExceededError. */
+class QuotaStorage implements StorageLike {
+  setCalls = 0;
+  getItem(): string | null {
+    return null;
+  }
+  setItem(): void {
+    this.setCalls++;
+    const err = new Error("The quota has been exceeded.");
+    err.name = "QuotaExceededError";
+    throw err;
+  }
+}
+
+describe("parseBest hostile values (plan 06-11 Task 2, D-16, T-6-22)", () => {
+  it.each<[string | null, number]>([
+    [null, 0],
+    ["", 0],
+    ["abc", 0],
+    ["-5", 0],
+    ["-1", 0],
+    ["1.5", 0],
+    ["NaN", 0],
+    ["Infinity", 0],
+    ["9007199254740993", 0],
+    ["<img src=x onerror=alert(1)>", 0],
+    ["0", 0],
+    ["48250", 48250],
+    ["9007199254740991", Number.MAX_SAFE_INTEGER],
+  ])("parseBest(%j) is %d", (raw, expected) => {
+    expect(parseBest(raw)).toBe(expected);
+  });
+
+  it("a stored best of exactly MAX_SAFE_INTEGER is accepted and MAX_SAFE_INTEGER + 2 parses to 0", () => {
+    expect(parseBest(String(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
+    expect(parseBest("9007199254740993")).toBe(0);
+  });
+
+  it("a corrupt stored value gives a best of 0 through the constructor", () => {
+    const storage = new FakeStorage();
+    storage.map.set(HISCORE_KEY, "1.5");
+    expect(new HighScore(storage).getBest()).toBe(0);
+  });
+});
+
+describe("HighScore throwing and absent storage (plan 06-11 Task 2, D-16, T-6-23)", () => {
+  it("a getItem that throws gives getBest() 0 and the constructor does not throw", () => {
+    expect(() => new HighScore(new ThrowingReadStorage())).not.toThrow();
+    expect(new HighScore(new ThrowingReadStorage()).getBest()).toBe(0);
+  });
+
+  it("HighScore(null) keeps an in-memory best", () => {
+    const hs = new HighScore(null);
+    expect(hs.getBest()).toBe(0);
+    expect(hs.submit(1200)).toBe(true);
+    expect(hs.getBest()).toBe(1200);
+    expect(hs.submit(1100)).toBe(false);
+    expect(hs.getBest()).toBe(1200);
+  });
+
+  it("a QuotaExceededError on setItem: submit(5000) is true, the best is 5000, nothing throws or logs", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const storage = new QuotaStorage();
+      const hs = new HighScore(storage);
+      let result = false;
+      expect(() => {
+        result = hs.submit(5000);
+      }).not.toThrow();
+      expect(result).toBe(true);
+      expect(hs.getBest()).toBe(5000);
+      expect(storage.setCalls).toBe(1);
+      expect(error).toHaveBeenCalledTimes(0);
+      expect(warn).toHaveBeenCalledTimes(0);
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it("a throwing read still lets a later new best write through", () => {
+    const storage = new ThrowingReadStorage();
+    const hs = new HighScore(storage);
+    expect(hs.submit(10)).toBe(true);
+    expect(storage.sets).toBe(1);
+  });
+});
+
+describe("HighScore submit writes (plan 06-11 Task 2, D-16, T-6-24)", () => {
+  it("submit(best) returns false and writes nothing; submit(best + 1) writes once", () => {
+    const storage = new FakeStorage();
+    storage.map.set(HISCORE_KEY, "48250");
+    const hs = new HighScore(storage);
+    expect(hs.submit(48250)).toBe(false);
+    expect(storage.sets).toHaveLength(0);
+    expect(hs.submit(48251)).toBe(true);
+    expect(storage.sets).toEqual([[HISCORE_KEY, "48251"]]);
+  });
+
+  it.each([1.5, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2])(
+    "submit(%d) returns false with no write",
+    (score) => {
+      const storage = new FakeStorage();
+      const hs = new HighScore(storage);
+      expect(hs.submit(score)).toBe(false);
+      expect(storage.sets).toHaveLength(0);
+      expect(hs.getBest()).toBe(0);
+    },
+  );
+
+  it("over a whole session getItem runs once and every write is HISCORE_KEY with a decimal integer", () => {
+    const storage = new FakeStorage();
+    const rig = makeSessionRig(new HighScore(storage));
+    rig.playGame(1000);
+    rig.playGame(500);
+    rig.playGame(2500);
+    rig.playGame(2500);
+    expect(storage.getCount).toBe(1);
+    expect(storage.sets).toHaveLength(2);
+    for (const [key, value] of storage.sets) {
+      expect(key).toBe(HISCORE_KEY);
+      expect(value).toMatch(/^\d+$/);
+    }
+    expect([...storage.map.keys()]).toEqual([HISCORE_KEY]);
+    expect(storage.map.get(HISCORE_KEY)).toBe("2500");
+  });
+
+  it("a final score equal to the best is not a new best and best + 1 is", () => {
+    const storage = new FakeStorage();
+    const rig = makeSessionRig(new HighScore(storage));
+    rig.playGame(3000);
+    rig.playGame(3000);
+    expect(rig.session.isNewBest()).toBe(false);
+    expect(rig.session.getNewBestCount()).toBe(1);
+    rig.playGame(3001);
+    expect(rig.session.isNewBest()).toBe(true);
+    expect(rig.session.getNewBestCount()).toBe(2);
   });
 });

@@ -32,6 +32,7 @@ class FakeSession implements ObserverSession {
   nudges = 0;
   lastNudgeDir: NudgeDir = "left";
   saves = 0;
+  newBests = 0;
   elapsed = 0;
   readonly tally = new BonusTally();
   getState(): GameState {
@@ -63,6 +64,9 @@ class FakeSession implements ObserverSession {
   }
   getSaveCount(): number {
     return this.saves;
+  }
+  getNewBestCount(): number {
+    return this.newBests;
   }
   getBonusTally(): Readonly<BonusTally> {
     return this.tally;
@@ -742,5 +746,52 @@ describe("PresentationObserver: save sting (06-10, D-10, D-25)", () => {
     r.session.drain(2, 0, 0);
     r.session.saves = 1;
     expect(step(r)).toEqual(["drain", "ballSave", "bonusTick"]);
+  });
+});
+
+describe("PresentationObserver: high score fanfare (06-11, D-15, D-25)", () => {
+  it("a new-best increment on the game-over step pushes highScore after gameOver on no element at strength 1", () => {
+    const r = rig("bonus", 3);
+    step(r);
+    r.session.state = "game-over";
+    r.session.newBests = 1;
+    expect(step(r)).toEqual(["gameOver", "highScore"]);
+    const c = r.cues.at(1);
+    expect(c?.elementId).toBe(-1);
+    expect(c?.strength).toBe(1);
+  });
+
+  it("a game over with no new-best increment pushes gameOver only", () => {
+    const r = rig("bonus", 3);
+    r.session.newBests = 1;
+    step(r);
+    r.session.state = "game-over";
+    expect(step(r)).toEqual(["gameOver"]);
+  });
+
+  it("a held game-over after the fanfare pushes nothing", () => {
+    const r = rig("bonus", 3);
+    r.session.state = "game-over";
+    r.session.newBests = 1;
+    step(r);
+    expect(step(r)).toEqual([]);
+  });
+
+  it("construction with a new-best count of 2 pushes nothing on the first observe", () => {
+    const session = new FakeSession();
+    session.state = "game-over";
+    session.newBests = 2;
+    const cues = new CueQueue();
+    const observer = new PresentationObserver(
+      cues,
+      new SpyFlash(),
+      session,
+      new FakePlunger(),
+      DRAIN,
+      new FakeFlippers(),
+      FLIPPER_IDS,
+    );
+    observer.observe();
+    expect(cues.size).toBe(0);
   });
 });

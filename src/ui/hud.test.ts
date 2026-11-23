@@ -5,6 +5,7 @@ import type { GameState } from "../game/game-session";
 import { FIXED_DT } from "../physics/constants";
 import {
   ballText,
+  bestText,
   BonusView,
   COUNT_UP_SNAP,
   COUNT_UP_TAU_S,
@@ -15,6 +16,7 @@ import {
   MuteView,
   muteAnnouncement,
   muteText,
+  NEW_BEST_STATUS_STEPS,
   STATUS_TRANSIENT_STEPS,
   statusText,
   type AttrSink,
@@ -980,5 +982,121 @@ describe("HudView score count-up (plan 06-06 Task 2, D-14, PLSH-06)", () => {
       expect(Number.isInteger(parse(score.textContent))).toBe(true);
       expect(src.score).toBe(1234567);
     }
+  });
+});
+
+describe("HudView best line and NEW HIGH SCORE (plan 06-11 Task 2, 06-UI-SPEC row 4, PLSH-08)", () => {
+  /** A view with the best line and its attribute sinks over a settable source. */
+  function makeBestView(state: GameState, best: number) {
+    const score = new CountingSink();
+    const ball = new CountingSink();
+    const status = new CountingSink();
+    const bestLine = new CountingSink();
+    const bestAttr = new FakeAttrSink();
+    const view = new HudView(score, ball, status, bestLine, bestAttr);
+    const src = new FakeSource();
+    src.state = state;
+    src.best = best;
+    return { view, src, status, bestLine, bestAttr };
+  }
+
+  it("statusText(newHighScore) reads NEW HIGH SCORE and NEW_BEST_STATUS_STEPS is 360", () => {
+    expect(statusText("newHighScore", 0)).toBe("NEW HIGH SCORE");
+    expect(NEW_BEST_STATUS_STEPS).toBe(360);
+  });
+
+  it("game-over with a best of 48,250 writes HIGH SCORE 48,250", () => {
+    const { view, src, bestLine } = makeBestView("game-over", 48250);
+    view.update(src);
+    expect(bestLine.textContent).toBe("HIGH SCORE 48,250");
+  });
+
+  it("playing writes an empty best line", () => {
+    const { view, src, bestLine } = makeBestView("game-over", 48250);
+    view.update(src);
+    src.state = "playing";
+    src.ball = 1;
+    src.played = true;
+    view.update(src);
+    expect(bestLine.textContent).toBe("");
+  });
+
+  it("a best of 0 in game-over writes an empty line, never HIGH SCORE 0", () => {
+    const { view, src, bestLine } = makeBestView("game-over", 0);
+    view.update(src);
+    expect(bestLine.textContent).toBe("");
+  });
+
+  it.each<[number, string]>([
+    [99_999_999, "HIGH SCORE 99,999,999"],
+    [123_456_789, "HIGH SCORE 123,456,789"],
+  ])("a best of %d formats with separators as %s", (best, text) => {
+    const { view, src, bestLine } = makeBestView("game-over", best);
+    view.update(src);
+    expect(bestLine.textContent).toBe(text);
+  });
+
+  it("an 8-digit best line (21 characters) is shorter than the 23-character game-over prompt", () => {
+    expect(bestText("game-over", 99_999_999)).toHaveLength(21);
+    expect(statusText("gameOver", 0)).toHaveLength(23);
+  });
+
+  it("a new best sets data-new=true and the next playing state removes it", () => {
+    const { view, src, bestAttr } = makeBestView("playing", 1000);
+    src.ball = 3;
+    src.played = true;
+    view.update(src);
+    expect(bestAttr.attrs.has("data-new")).toBe(false);
+    src.state = "game-over";
+    src.best = 5000;
+    src.newBest = true;
+    src.gameOverStep = 900;
+    src.step = 900;
+    view.update(src);
+    expect(bestAttr.attrs.get("data-new")).toBe("true");
+    src.state = "playing";
+    src.newBest = false;
+    src.ball = 1;
+    src.step = 1200;
+    view.update(src);
+    expect(bestAttr.attrs.has("data-new")).toBe(false);
+  });
+
+  it("a game over that is not a new best leaves data-new unset", () => {
+    const { view, src, bestAttr } = makeBestView("game-over", 5000);
+    src.played = true;
+    view.update(src);
+    expect(bestAttr.attrs.has("data-new")).toBe(false);
+  });
+
+  it("NEW HIGH SCORE shows from getGameOverStep() through +359 and the game-over prompt from +360", () => {
+    const { view, src, status } = makeBestView("game-over", 5000);
+    src.played = true;
+    src.newBest = true;
+    src.gameOverStep = 900;
+    src.step = 900;
+    view.update(src);
+    expect(status.textContent).toBe("NEW HIGH SCORE");
+    src.step = 900 + NEW_BEST_STATUS_STEPS - 1;
+    view.update(src);
+    expect(status.textContent).toBe("NEW HIGH SCORE");
+    src.step = 900 + NEW_BEST_STATUS_STEPS;
+    view.update(src);
+    expect(status.textContent).toBe("GAME OVER · PRESS ENTER");
+  });
+
+  it("the best line is written once per change, not per update", () => {
+    const { view, src, bestLine } = makeBestView("game-over", 48250);
+    view.update(src);
+    const writes = bestLine.writes;
+    for (let s = 1; s < 50; s++) {
+      src.step = s;
+      view.update(src);
+    }
+    expect(bestLine.writes).toBe(writes);
+    src.best = 50000;
+    view.update(src);
+    expect(bestLine.writes).toBe(writes + 1);
+    expect(bestLine.textContent).toBe("HIGH SCORE 50,000");
   });
 });
