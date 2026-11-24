@@ -23,6 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage** (completed 2026-11-23)
 - [x] **Phase 06.3: Fix slingshot deflection on flipper-root shots** (completed 2026-11-24)
 - [x] **Phase 06.4: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording** (completed 2026-11-24)
+- [ ] **Phase 06.4.1: Address tech debt: bar-mode control hints, HUD status min-width, favicon**
 
 ## Phase Details
 
@@ -363,3 +364,20 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 - [x] 06.4-04-PLAN.md — Phase gate on the merged tree plus a blocking human UAT at 1440x900, 768x1024 and 375x812 [wave 2]
+
+### Phase 06.4.1: Address tech debt: bar-mode control hints, HUD status min-width, favicon (INSERTED)
+
+**Goal:** A shared link works on a narrow window. In the narrow-viewport HUD bar, the player sees how to launch and flip (Space, ← →) whenever no status is showing, without changing the bar's constant height. The side panel keeps its 16 px clearance from the table in every HUD state, including GAME OVER (06.4 WR-02). The tab shows a procedural SVG favicon and the clean-boot `/favicon.ico` 404 is gone, with the RND-01 asset gate amended to admit exactly that one inline icon. Render/DOM-only: `src/table`, `src/physics`, `src/game` and the lockfile stay byte-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3.
+**Requirements**: TBD
+**Depends on:** Phase 06.4
+**Plans:** 3 plans (3 waves)
+
+Plans:
+**Wave 1**
+- [ ] 06.4.1-01-PLAN.md — Bar-mode control hint (static `.hud-hint` sharing the status cell, shown only while the status is empty, bar height unchanged), 06.4 WR-02 status reserve tied to statusText, 06.4 IN-03 Mute row by class [wave 1]
+
+**Wave 2** *(blocked on Wave 1: shares index.html)*
+- [ ] 06.4.1-02-PLAN.md — Procedural SVG data-URI favicon in head; RND-01 gate carve-out for exactly one validated, palette-only icon, with negative tests [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 06.4.1-03-PLAN.md — Phase gate on the merged tree, blocking human UAT at six viewports with the A1 (hint scope) and icon-motif questions, then close 06.4 WR-02 and IN-03 [wave 3]
