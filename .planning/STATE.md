@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.4"
 current_phase_name: "Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording"
-status: executing
-stopped_at: Completed 06.4-03-PLAN.md
-last_updated: "2026-11-24T17:12:15.448Z"
+status: verifying
+stopped_at: Completed 06.4-04-PLAN.md
+last_updated: "2026-11-24T17:38:23.536Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.4 execution started
-state_head: 4239a5b191f1afa164952037a75772279c9d02a0
+state_head: 19f07b4ea0947620391a8efe4610bc00354d7285
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 74
-  completed_plans: 73
+  completed_plans: 74
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 Phase: 06.4 (Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-24 — Phase 06.4 execution started
 
 Progress: [██████████] 100%
@@ -139,6 +139,7 @@ Progress: [██████████] 100%
 | Phase 06.4 P01 | 10 min | 2 tasks | 5 files |
 | Phase 06.4 P02 | 4min | 2 tasks | 3 files |
 | Phase 06.4 P03 | 3 min | 2 tasks | 4 files |
+| Phase 06.4 P04 | 21min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -320,6 +321,7 @@ Recent decisions affecting current work:
 - [Phase 06.4]: 06.4-01: bar mode hides the keyboard list except Mute, the Windows note and #hud-diag; ball/best share one cell with min-height so the bar never changes height
 - [Phase 06.4]: 06.4-02: sling rim SLING_RIM #7d82a8 at 0.015 m on every segment != el.kickFace, between body fill and amber rubber; contrast 5.35 vs BG_BOTTOM, 3.62 vs SLING_BODY, below the rubber's 11.43
 - [Phase 06.4]: 06.4-03: D-13 is defined by first sling contact (user ruling A): own first contact fails, an uncontacted flip must clear within 60 steps, an opposite first contact is a cross shot under the cap; root-shot titles/docs and 06.3 D-13 now say so, no assertion changed
+- [Phase 06.4]: 06.4-04: user approved the narrow-viewport HUD bar and the sling rim on the live build at 1440x900, 768x1024 and 375x812 (verbatim "approved"); A3, A4, the full-width bar and A5 (rim #7d82a8, 0.015 m) kept as built, nothing tuned
 
 ### Pending Todos
 
@@ -365,6 +367,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T17:12:06.297Z
-Stopped at: Completed 06.4-03-PLAN.md
+Last session: 2026-11-24T17:38:18.212Z
+Stopped at: Completed 06.4-04-PLAN.md
 Resume file: None

@@ -353,7 +353,7 @@ Plans:
 **Goal:** The HUD never covers the playfield. Wide windows keep today's top-left panel. Wherever that panel would reach the fitted table (768x1024, 375x812, square windows), a measured switch turns it into a constant-height 3-row bar above the table, and the table is fitted under it. Both slingshots show a visible slate rim on their passive faces under the amber kick face. The change is render-only: geometry, physics and feel are untouched. 06.3's D-13 text, the root-shot test titles and the ledgers state the own-sling gate by first sling contact (user ruling A). Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3.
 **Requirements**: TBD
 **Depends on:** Phase 06.3
-**Plans:** 3/4 plans executed (2 waves)
+**Plans:** 4/4 plans executed (2 waves)
 
 Plans:
 **Wave 1**
@@ -362,4 +362,4 @@ Plans:
 - [x] 06.4-03-PLAN.md — D-13 wording: first-contact text in 06.3-CONTEXT, root-shot header, FlipResult doc and titles; IN-01 fixed, CR-01 follow-up closed [wave 1]
 
 **Wave 2** *(blocked on Wave 1)*
-- [ ] 06.4-04-PLAN.md — Phase gate on the merged tree plus a blocking human UAT at 1440x900, 768x1024 and 375x812 [wave 2]
+- [x] 06.4-04-PLAN.md — Phase gate on the merged tree plus a blocking human UAT at 1440x900, 768x1024 and 375x812 [wave 2]
