@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.3"
 current_phase_name: Fix slingshot deflection on flipper-root shots
-status: Not planned yet
-stopped_at: Phase 06.3 context gathered
-last_updated: "2026-11-24T01:14:03.138Z"
-last_activity: 2026-11-23
-last_activity_desc: Phase 06.2 complete
-state_head: b93ff49e99b5ef72667f7f06487cf0fd501c3ede
+status: executing
+stopped_at: Completed 06.3-01-PLAN.md
+last_updated: "2026-11-24T01:25:12.910Z"
+last_activity: 2026-11-24
+last_activity_desc: Phase 06.3 execution started
+state_head: 45160eaca10c1a0400890ef8fbf631592a5f0fd8
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 70
-  completed_plans: 67
+  completed_plans: 68
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-23)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** v1.0 milestone close — one open todo (root-shot sling deflection) to plan first
+**Current focus:** Phase 06.3 — Fix slingshot deflection on flipper-root shots
 
 ## Current Position
 
-Phase: 06.3 (Fix slingshot deflection on flipper-root shots) — READY TO EXECUTE
-Plan: Not started
-Status: Not planned yet
-Last activity: 2026-11-23 — Phase 06.2 complete
+Phase: 06.3 (Fix slingshot deflection on flipper-root shots) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-11-24 — Phase 06.3 execution started
 
 Progress: [████████░░] 75%
 
@@ -132,6 +132,7 @@ Progress: [████████░░] 75%
 | Phase 06.2 P05 | 3min | 2 tasks | 4 files |
 | Phase 06.2 P03 | 21 min | 3 tasks | 3 files |
 | Phase 06.2 P06 | 6min | 2 tasks | 3 files |
+| Phase 06.3 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -303,6 +304,8 @@ Recent decisions affecting current work:
 - [Phase 06.2]: 06.2-03: segToSegDist returns 0 on a proper crossing (IN-01), so sling-clearance case (e) cannot pass on an overlap
 - [Phase 06.2]: 06.2-06: 06.1 review ledger closed at open 0 (all 8 rows fixed with 06.2 shas; WR-01 fixed per the user's approved reply at the 06.2-03 checkpoint)
 - [Phase 06.2]: 06.2-06: root-shot sling deflection todo stays pending as an open v1.0 item to plan before milestone close (gap plan or 06.3 insert); not part of the 06.1 ledger
+- [Phase 06.3]: 06.3-01: kickFace is required on every slingshot; resolve() fails loudly without it and the longest-segment fallback is deleted (D-09)
+- [Phase 06.3]: 06.3-01: SLING_KICK_FACE = 2 (closing segment corner to top, the hypotenuse) serves both slings because mirrorPath keeps path order
 
 ### Pending Todos
 
@@ -345,6 +348,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T00:27:54.769Z
-Stopped at: Phase 06.3 context gathered
-Resume file: .planning/phases/06.3-fix-slingshot-deflection-on-flipper-root-shots/06.3-CONTEXT.md
+Last session: 2026-11-24T01:25:10.205Z
+Stopped at: Completed 06.3-01-PLAN.md
+Resume file: None

@@ -335,11 +335,11 @@ Plans:
 **Goal:** Both slingshots are trimmed (lower-right corner slid up along the kick face, kick speed and direction unchanged, kick face named explicitly) so flips from mid-bat to the tip (0.25 m ≤ d ≤ 0.45 m from the hinge) reach the upper field without first touching their own bat's sling, on both bats at every flip timing. Today 61 such flips hit their own sling first. The corner is t = 0.28, at (0.944, 4.102). Cross shots that graze the opposite sling are reported as a metric, capped at the measured 30 contacts with at most 2 knocked back down (D-13/D-14). The root strip (d < 0.25 m) stays blocked by the sling's inlane corner. That is a measured, reported known limit, deferred to a bat-to-ball rescale. The fix keeps rule (1) bat clearance over the full sweep, keeps the sling lift at or below 0.35 m, and keeps the sling-pinch proof GREEN. Source: `.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md`; decisions in `06.3-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.2
-**Plans:** 3 plans (3 waves)
+**Plans:** 1/3 plans executed (3 waves)
 
 Plans:
 **Wave 1**
-- [ ] 06.3-01-PLAN.md — Explicit sling kick face (D-09): `kickFace` carried TABLE_SPEC → resolve() → deriveKickFace, longest rule deleted, trimmed-fixture guard RED first, fail-loud resolve validation [wave 1]
+- [x] 06.3-01-PLAN.md — Explicit sling kick face (D-09): `kickFace` carried TABLE_SPEC → resolve() → deriveKickFace, longest rule deleted, trimmed-fixture guard RED first, fail-loud resolve validation [wave 1]
 
 **Wave 2** *(blocked on Wave 1)*
 - [ ] 06.3-02-PLAN.md — Trim both slings to t = 0.28 (D-14): own-sling root-shot gate RED then GREEN with opposite-sling cap, corner bracket check, pre-trim RED, no-sling and walled-off controls, root-strip metric, face pins re-pinned [wave 2]
