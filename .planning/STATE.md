@@ -338,7 +338,7 @@ Recent decisions affecting current work:
 - ~~[Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.~~ Resolved in 06.1: soak re-run green (06.1-01, 06.1-02, 06.1-05)
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
 - ~~[Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.~~ Resolved in 06.2 (06.2-06: open 0)
-- [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 7 open info rows (IN-01..IN-07). IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.
+- [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 6 open info rows (IN-02..IN-07); IN-01 fixed in 06.4-03. IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. ~~CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.~~ Done in 06.4-03.
 
 ### Quick Tasks Completed
 
