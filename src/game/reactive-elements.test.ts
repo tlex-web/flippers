@@ -307,6 +307,13 @@ function tableElement(id: number): ResolvedElement {
   return el;
 }
 
+/**
+ * A strike on the trimmed sling-300 face (06.3 D-14): the face midpoint
+ * (0.902, 3.976) pushed 0.0095 m out along the normal, the manifold offset
+ * measured for the pre-trim point; impulse unchanged.
+ */
+const FACE_STRIKE = { impulse: 0.0393, x: 0.911, y: 3.973 };
+
 /** Sling 300 trimmed to t = 0.28 (06.3 D-14): its 0.266 m hypotenuse is shorter than the 0.75 m inlane edge and the 0.505 m lower face. */
 const TRIMMED_LEFT_SLING: readonly Vec2[] = [
   { x: 0.86, y: 3.85 },
@@ -329,7 +336,7 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
     if (!f) throw new Error("no face");
     // The hypotenuse, in whichever direction the loop closes it.
     const ends = [`${f.ax},${f.ay}`, `${f.bx},${f.by}`].sort();
-    expect(ends).toEqual(["0.86,3.85", "1.16,4.75"]);
+    expect(ends).toEqual(["0.86,3.85", "0.944,4.102"]);
     expect(f.nx).toBeCloseTo(0.9487, 3);
     expect(f.ny).toBeCloseTo(-0.3162, 3);
   });
@@ -339,7 +346,7 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
     if (!f) throw new Error("no face");
     expect(f.nx).toBeCloseTo(-0.9487, 3);
     expect(f.ny).toBeCloseTo(-0.3162, 3);
-    expect(Math.hypot(f.ax - f.bx, f.ay - f.by)).toBeCloseTo(Math.hypot(0.3, 0.9), 9);
+    expect(Math.hypot(f.ax - f.bx, f.ay - f.by)).toBeCloseTo(0.28 * Math.hypot(0.3, 0.9), 9);
   });
 
   it("the kick face is the named hypotenuse even where it is not the longest segment: sling 300 nx > 0, ny < 0, never the inlane edge; sling 301 mirrors it (06.3 D-09)", () => {
@@ -380,7 +387,7 @@ describe("ReactiveElements slingshot filter (ELEM-02)", () => {
   it("a rolling contact on the face (0.0015) never kicks or scores", () => {
     const rig = makeRig(TABLE_SPEC);
     rig.world.addBall(0, 1.15, 4.07);
-    rig.step([ev("slingshot", 300, 0.0015, 0, 0.963, 4.129)]);
+    rig.step([ev("slingshot", 300, 0.0015, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     expect(rig.gate.awards).toHaveLength(0);
     expect(rig.world.impulses).toHaveLength(0);
   });
@@ -388,7 +395,7 @@ describe("ReactiveElements slingshot filter (ELEM-02)", () => {
   it("a face strike (0.0393) scores SLING_POINTS and kicks once along the face normal", () => {
     const rig = makeRig(TABLE_SPEC);
     rig.world.addBall(0, 1.15, 4.07);
-    rig.step([ev("slingshot", 300, 0.0393, 0, 0.963, 4.129)]);
+    rig.step([ev("slingshot", 300, 0.0393, 0, FACE_STRIKE.x, FACE_STRIKE.y)]);
     expect(rig.gate.awards).toEqual([SLING_POINTS]);
     expect(rig.world.impulses).toHaveLength(1);
     const call = rig.world.impulses[0];
@@ -498,9 +505,6 @@ function loggedRig(spec: TableSpec = SPEC): Rig & { log: LogEntry[]; feedback: S
 function hooks(log: readonly LogEntry[]): LogEntry[] {
   return log.filter((e) => e[0] !== "award");
 }
-
-/** The real-table sling-300 face strike (see the ELEM-02 cases). */
-const FACE_STRIKE = { impulse: 0.0393, x: 0.963, y: 4.129 };
 
 describe("ReactiveElements presentation feedback (Phase 5, AUD-01/RND-03)", () => {
   it("a registered bumper hit logs the award, then onKick with the raw normalImpulse", () => {

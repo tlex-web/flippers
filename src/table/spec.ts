@@ -283,16 +283,21 @@ const INLANE_Y = 4.6;
 
 /**
  * Left slingshot: a closed triangle above the left bat. Its vertical face
- * (x = 0.86) bounds the inlane. Its lower face clears the raised bat by
- * ≈ 0.453 m over the whole sweep, limit overshoot included (rule (1), WR-03;
- * moved up-table 0.35 m in phase 06.1). The passage from its lower-left corner
- * to the funnel wall is ≈ 0.65 m. Do not move it further: Δ 0.40 traps a
- * dead-flipper ball near the left hinge.
+ * (x = 0.86) bounds the inlane. Its kick face is the hypotenuse, segment 2
+ * from the lower-right corner back to the top vertex, named by
+ * SLING_KICK_FACE. Phase 06.3 slid the lower-right corner up that hypotenuse
+ * from (1.16, 4.75) to t = 0.28, so flips from mid-bat to the tip clear their
+ * own sling (D-13, D-14); the kick normal is unchanged and the face is
+ * 0.266 m. Its lower face clears the raised bat by ≈ 0.632 m over the whole
+ * sweep, limit overshoot included (rule (1), WR-03; moved up-table 0.35 m in
+ * phase 06.1). The passage from its lower-left corner to the funnel wall is
+ * ≈ 0.65 m. Do not move it further: Δ 0.40 traps a dead-flipper ball near the
+ * left hinge.
  */
 const LEFT_SLING: readonly Vec2[] = [
   { x: 0.86, y: 3.85 },
   { x: 0.86, y: INLANE_Y },
-  { x: 1.16, y: 4.75 },
+  { x: 0.944, y: 4.102 }, // t = 0.28 up the pre-trim hypotenuse (06.3 D-14)
 ];
 
 /**
