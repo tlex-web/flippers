@@ -38,6 +38,8 @@ export const BUMPER_RING = "#ff9ecf";
 export const SLING_BODY = "#2b2d42";
 /** Slingshot rubber on the kicking face. */
 export const SLING_RUBBER = "#ffb703";
+/** Slingshot rim on the passive (non-kick) faces: SLING_BODY's slate hue, lightened (06.4). */
+export const SLING_RIM = "#7d82a8";
 /** Top rollover insert, unlit. */
 export const ROLLOVER_UNLIT = "#2d4a14";
 /** Top rollover insert, lit. */
@@ -122,3 +124,5 @@ export const WALL_GLOW_LINE_M = 0.05;
 export const SENSOR_LINE_M = 0.012;
 /** Rubber: bumper rings, sling faces, rollover inserts. */
 export const RUBBER_LINE_M = 0.03;
+/** Slingshot passive-face rim (half of RUBBER_LINE_M, 06.4). */
+export const SLING_RIM_LINE_M = 0.015;

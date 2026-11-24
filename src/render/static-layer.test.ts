@@ -9,6 +9,11 @@ import {
   LIGHT_POOL,
   LIGHT_POOL_FADE,
   ROLLOVER_UNLIT,
+  RUBBER_LINE_M,
+  SLING_BODY,
+  SLING_RIM,
+  SLING_RIM_LINE_M,
+  SLING_RUBBER,
   VIGNETTE_CLEAR,
   VIGNETTE_EDGE,
 } from "./palette";
@@ -543,5 +548,84 @@ describe("bakeStatic unlit lenses (D-21)", () => {
     }
     expect(rec.ctx.globalAlpha).toBe(1);
     expect(rec.ctx.globalCompositeOperation).toBe("source-over");
+  });
+});
+
+/** The [ax, ay, bx, by] quads of every segment of `el` other than its kick face, in segment order. */
+function passiveQuads(el: ResolvedElement): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [];
+  el.segments.forEach((s, i) => {
+    if (i !== el.kickFace) out.push([s.a.x, s.a.y, s.b.x, s.b.y]);
+  });
+  return out;
+}
+
+/** Every SLING_RIM stroke of the bake. */
+function slingRims(rec: Recorder): DrawCall[] {
+  return draws(rec).filter(
+    (d) => d.call.name === "stroke" && d.state.props.get("strokeStyle") === SLING_RIM,
+  );
+}
+
+/** The SLING_RIM stroke whose path is exactly `el`'s passive faces. */
+function rimOf(rec: Recorder, el: ResolvedElement): DrawCall | undefined {
+  const want = passiveQuads(el);
+  return slingRims(rec).find((d) => {
+    const got = segmentsOf(d.state.path);
+    return got.length === want.length && got.every((q, i) => q.every((v, j) => v === want[i]?.[j]));
+  });
+}
+
+describe("bakeStatic slingshot rim (06.4; ELEM-02, RND-01)", () => {
+  it("strokes exactly one SLING_RIM path per slingshot", () => {
+    const slings = ofKind("slingshot");
+    expect(slings.length).toBe(2);
+    const { rec } = bake();
+    expect(slingRims(rec).length).toBe(2);
+    for (const el of slings) {
+      expect(rimOf(rec, el), `element ${el.id}`).toBeDefined();
+    }
+  });
+
+  it("draws each rim after its SLING_BODY fill, at SLING_RIM_LINE_M in world space, over every non-kick face only", () => {
+    const { rec } = bake();
+    for (const el of ofKind("slingshot")) {
+      const body = drawsOf(rec, el, "fill").filter(
+        (d) => d.state.props.get("fillStyle") === SLING_BODY,
+      );
+      expect(body.length, `element ${el.id}`).toBe(1);
+      const rim = rimOf(rec, el);
+      expect(rim, `element ${el.id}`).toBeDefined();
+      const fill = body[0];
+      if (!rim || !fill) return;
+      expect(rim.index, `element ${el.id}`).toBeGreaterThan(fill.index);
+      expect(rim.state.props.get("lineWidth"), `element ${el.id}`).toBe(SLING_RIM_LINE_M);
+      expect([...rim.state.transform], `element ${el.id}`).toEqual([...WORLD]);
+      const quads = segmentsOf(rim.state.path);
+      expect(quads, `element ${el.id}`).toEqual(passiveQuads(el));
+      expect(quads.length, `element ${el.id}`).toBe(el.segments.length - 1);
+      const kick = el.kickFace === null ? undefined : el.segments[el.kickFace];
+      expect(kick, `element ${el.id}`).toBeDefined();
+      if (!kick) return;
+      for (const q of quads) {
+        expect(q, `element ${el.id}`).not.toEqual([kick.a.x, kick.a.y, kick.b.x, kick.b.y]);
+      }
+    }
+  });
+
+  it("draws the amber kick-face rubber right after each rim (rim under rubber)", () => {
+    const { rec } = bake();
+    const all = draws(rec);
+    for (const el of ofKind("slingshot")) {
+      const rim = rimOf(rec, el);
+      expect(rim, `element ${el.id}`).toBeDefined();
+      if (!rim) return;
+      const next = all[all.findIndex((d) => d.index === rim.index) + 1];
+      expect(next, `element ${el.id}`).toBeDefined();
+      if (!next) return;
+      expect(next.call.name, `element ${el.id}`).toBe("stroke");
+      expect(next.state.props.get("strokeStyle"), `element ${el.id}`).toBe(SLING_RUBBER);
+      expect(next.state.props.get("lineWidth"), `element ${el.id}`).toBe(RUBBER_LINE_M);
+    }
   });
 });
