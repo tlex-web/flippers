@@ -177,10 +177,29 @@ const ICON_FORBIDDEN: readonly { readonly name: string; readonly re: RegExp }[] 
 ];
 
 /**
+ * The only elements the favicon SVG may use (case-sensitive, as SVG is).
+ * 06.4.1-REVIEW WR-02: ICON_FORBIDDEN is a denylist, so any element nobody
+ * listed got in by default, e.g. SMIL `<set>` and `<animate>`, which repaint
+ * through `to`/`values` that the paint check never reads. This allowlist is
+ * the backstop: static shapes and grouping only, nothing that animates,
+ * filters, fetches or holds text.
+ */
+const ICON_ELEMENTS: ReadonlySet<string> = new Set([
+  "svg",
+  "rect",
+  "circle",
+  "ellipse",
+  "path",
+  "g",
+]);
+
+/**
  * Throws unless `svg` is a static, palette-colored drawing: it starts with the
  * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
  * token and no http beyond that xmlns, every fill, stroke and stop-color value
- * is none or a palette.ts hex, and every `#hex` in it is a palette.ts hex.
+ * is none or a palette.ts hex, every `#hex` in it is a palette.ts hex, and
+ * every `<` opens or closes an ICON_ELEMENTS element. The element check runs
+ * last so the more specific checks above name their own faults.
  *
  * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
  * the browser reads the SVG, so a reference could spell out any token below
@@ -209,6 +228,14 @@ function validateIconSvg(svg: string): void {
   for (const m of svg.matchAll(/#[0-9a-f]+/gi)) {
     if (!PALETTE_HEX.has(m[0].toLowerCase())) {
       throw new Error(`icon SVG color ${m[0]} is not a palette.ts hex`);
+    }
+  }
+  // Everything after `<` up to whitespace, `/` or `>`: comments, CDATA, doctype
+  // and processing instructions are rejected too, not skipped.
+  for (const m of svg.matchAll(/<\/?([^\s/>]*)/g)) {
+    const name = m[1] ?? "";
+    if (!ICON_ELEMENTS.has(name)) {
+      throw new Error(`icon SVG element <${name}> is not allowed`);
     }
   }
 }
@@ -371,6 +398,14 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     expect(stripProceduralIcon(iconLink(GOOD_SVG)).includes("<link")).toBe(false);
   });
 
+  it("admits every allowlisted element with palette paint", () => {
+    const svg = withElement(
+      "<g><ellipse cx='16' cy='16' rx='3' ry='2' fill='#4cc9f0'/>" +
+        "<path d='M0 0h1v1z' stroke='#f72585'/></g>",
+    );
+    expect(() => stripProceduralIcon(iconLink(svg))).not.toThrow();
+  });
+
   it("the real index.html still passes the payload validation", () => {
     expect(() => stripProceduralIcon(indexHtml)).not.toThrow();
   });
@@ -404,6 +439,21 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       withElement("<rect width='1' height='1' filter='&#x75;rl(&#x23;f)'/>"),
       "XML character or entity references",
     ],
+    // 06.4.1-REVIEW WR-02: SMIL repaints off-palette without a fill= or #hex.
+    ["SMIL <set>", withElement("<set attributeName='fill' to='red'/>"), "element <set>"],
+    [
+      "SMIL <animate>",
+      withElement("<animate attributeName='stroke' values='red;lime' dur='1s'/>"),
+      "element <animate>",
+    ],
+    [
+      "SMIL <animateTransform>",
+      withElement("<animateTransform attributeName='transform' type='rotate' to='360'/>"),
+      "element <animateTransform>",
+    ],
+    ["a filter primitive", withElement("<feFlood flood-color='red'/>"), "element <feFlood>"],
+    ["a comment", withElement("<!-- note -->"), "element <!--"],
+    ["an uppercase tag", withElement("<RECT width='1' height='1'/>"), "element <RECT>"],
   ])("rejects an icon SVG with %s", (_name, svg, rule) => {
     expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
   });
