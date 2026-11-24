@@ -428,7 +428,7 @@ describe("asset-free tree (RND-01)", () => {
 });
 
 describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
-  it("index.html carries exactly one procedural SVG icon link, and stripping it leaves no icon", () => {
+  it("index.html carries exactly one procedural SVG icon link, it validates, and stripping it leaves no icon", () => {
     const stripped = stripProceduralIcon(indexHtml);
     expect(stripped.includes('rel="icon"')).toBe(false);
   });
@@ -464,10 +464,6 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
         "<path d='M0 0h1v1z' stroke='#f72585'/></g>",
     );
     expect(() => stripProceduralIcon(iconLink(svg))).not.toThrow();
-  });
-
-  it("the real index.html still passes the payload validation", () => {
-    expect(() => stripProceduralIcon(indexHtml)).not.toThrow();
   });
 
   it.each<readonly [string, string, string]>([
