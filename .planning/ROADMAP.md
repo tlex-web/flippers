@@ -335,7 +335,7 @@ Plans:
 **Goal:** Both slingshots are trimmed (lower-right corner slid up along the kick face, kick speed and direction unchanged, kick face named explicitly) so flips from mid-bat to the tip (0.25 m ≤ d ≤ 0.45 m from the hinge) reach the upper field without first touching their own bat's sling, on both bats at every flip timing. Today 61 such flips hit their own sling first. The corner is t = 0.28, at (0.944, 4.102). Cross shots that graze the opposite sling are reported as a metric, capped at the measured 30 contacts with at most 2 knocked back down (D-13/D-14). The root strip (d < 0.25 m) stays blocked by the sling's inlane corner. That is a measured, reported known limit, deferred to a bat-to-ball rescale. The fix keeps rule (1) bat clearance over the full sweep, keeps the sling lift at or below 0.35 m, and keeps the sling-pinch proof GREEN. Source: `.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md`; decisions in `06.3-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.2
-**Plans:** 2/3 plans executed (3 waves)
+**Plans:** 3/3 plans executed (3 waves)
 
 Plans:
 **Wave 1**
@@ -345,4 +345,4 @@ Plans:
 - [x] 06.3-02-PLAN.md — Trim both slings to t = 0.28 (D-14): own-sling root-shot gate RED then GREEN with opposite-sling cap, corner bracket check, pre-trim RED, no-sling and walled-off controls, root-strip metric, face pins re-pinned [wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 06.3-03-PLAN.md — Phase gate on the merged tree, D-12 look-and-feel checkpoint (blocking), root-shot todo completed, backlog and D-05 notes corrected [wave 3]
+- [x] 06.3-03-PLAN.md — Phase gate on the merged tree, D-12 look-and-feel checkpoint (blocking), root-shot todo completed, backlog and D-05 notes corrected [wave 3]
