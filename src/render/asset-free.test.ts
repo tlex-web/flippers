@@ -178,13 +178,21 @@ const ICON_FORBIDDEN: readonly { readonly name: string; readonly re: RegExp }[] 
 
 /**
  * Throws unless `svg` is a static, palette-colored drawing: it starts with the
- * SVG xmlns, holds no ICON_FORBIDDEN token and no http beyond that xmlns, every
- * fill, stroke and stop-color value is none or a palette.ts hex, and every
- * `#hex` in it is a palette.ts hex.
+ * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
+ * token and no http beyond that xmlns, every fill, stroke and stop-color value
+ * is none or a palette.ts hex, and every `#hex` in it is a palette.ts hex.
+ *
+ * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
+ * the browser reads the SVG, so a reference could spell out any token below
+ * while the text checks see something else. The favicon needs none, so any `&`
+ * is rejected outright rather than decoded.
  */
 function validateIconSvg(svg: string): void {
   if (!svg.startsWith(SVG_PREFIX)) {
     throw new Error(`icon SVG must start with ${SVG_PREFIX}`);
+  }
+  if (svg.includes("&")) {
+    throw new Error("icon SVG must not contain XML character or entity references");
   }
   for (const f of ICON_FORBIDDEN) {
     if (f.re.test(svg)) throw new Error(`icon SVG contains forbidden ${f.name}`);
@@ -217,8 +225,14 @@ const PROCEDURAL_ICON =
 
 /**
  * `html` with its one procedural icon link removed, so the unchanged PATTERNS
- * scan the rest. Throws unless exactly one such link is present and its
- * decoded SVG passes validateIconSvg.
+ * scan the rest. Throws unless exactly one such link is present, its raw href
+ * holds no HTML character reference, and its decoded SVG passes
+ * validateIconSvg.
+ *
+ * 06.4.1-REVIEW WR-01: the browser's HTML tokenizer decodes character
+ * references in the attribute value before it reads the data: URL, so `&lt;`,
+ * `&#x68;` and the like would let the validator check different text from what
+ * the browser renders. A literal `&` is rejected rather than decoded.
  */
 function stripProceduralIcon(html: string): string {
   const matches = [...html.matchAll(PROCEDURAL_ICON)];
@@ -228,7 +242,11 @@ function stripProceduralIcon(html: string): string {
       `expected exactly one procedural SVG icon link in index.html, found ${matches.length}`,
     );
   }
-  validateIconSvg(decodeURIComponent(m[1] ?? ""));
+  const raw = m[1] ?? "";
+  if (raw.includes("&")) {
+    throw new Error("icon href must not contain HTML character references");
+  }
+  validateIconSvg(decodeURIComponent(raw));
   return html.slice(0, m.index) + html.slice(m.index + m[0].length);
 }
 
@@ -381,8 +399,25 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     ["off-palette stroke", withAttr("stroke='#123456'"), "paint stroke=#123456"],
     ["off-palette stop-color", withElement("<stop stop-color='#abcdef'/>"), "paint stop-color"],
     ["off-palette hex in text", withElement("<text>#ff0000</text>"), "color #ff0000"],
+    [
+      "an XML character reference spelling url(",
+      withElement("<rect width='1' height='1' filter='&#x75;rl(&#x23;f)'/>"),
+      "XML character or entity references",
+    ],
   ])("rejects an icon SVG with %s", (_name, svg, rule) => {
     expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
+  });
+
+  // 06.4.1-REVIEW WR-01: built by hand, because iconLink() would percent-encode
+  // the `&` and so test the XML layer instead of the HTML attribute layer.
+  it.each<readonly [string, string]>([
+    ["an <image> fetch", "&lt;image &#x68;ref=&apos;&#x68;ttps://evil.example/x.png&apos;/&gt;"],
+    ["a <script> element", "&lt;script&gt;alert(1)&lt;/script&gt;"],
+  ])("rejects an icon href hiding %s behind HTML character references", (_name, payload) => {
+    const href = `data:image/svg+xml,${GOOD_SVG.replace("</svg>", `${payload}</svg>`)}`;
+    const link = `<link rel="icon" type="image/svg+xml" href="${href}" />`;
+    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
+    expect(() => stripProceduralIcon(link)).toThrow("HTML character references");
   });
 
   it("two procedural icon links throw with the count", () => {
