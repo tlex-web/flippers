@@ -12,6 +12,12 @@ import * as palette from "./palette";
  * every full suite, and there must be no `public/` directory (Vite copies it
  * into the build verbatim, bypassing every source scan).
  *
+ * One icon is allowed (06.4.1): index.html may carry exactly one
+ * `<link rel="icon" type="image/svg+xml">` whose href is an inline SVG data URI
+ * drawn only from palette.ts colors. The gate validates that one link's decoded
+ * SVG and strips the link before scanning with the unchanged patterns, so every
+ * other icon link, icon file and `data:` URI still fails.
+ *
  * The sources are read through Vite's raw imports (the project has no Node
  * typings, and this is the same idiom key-labels.test.ts uses for index.html).
  * Test files and test/ directories are excluded, which is why the patterns and
@@ -144,6 +150,61 @@ const PALETTE_HEX: ReadonlySet<string> = new Set(
     .map((v) => v.toLowerCase()),
 );
 
+/** The SVG namespace, the one http string the favicon payload may hold. */
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** The start every favicon payload must have (an SVG loaded as an image needs its xmlns). */
+const SVG_PREFIX = `<svg xmlns='${SVG_NS}'`;
+
+/**
+ * Tokens the decoded favicon SVG may not contain (case-insensitive): anything
+ * that fetches (url(, href, <image, <use, @import), runs script (<script,
+ * <foreignObject, javascript:, on* event attributes) or styles outside the
+ * paint attributes (<style, a style attribute). Not global, so .test is safe.
+ */
+const ICON_FORBIDDEN: readonly { readonly name: string; readonly re: RegExp }[] = [
+  { name: "url(", re: /url\(/i },
+  { name: "href", re: /href/i },
+  { name: "<image", re: /<image/i },
+  { name: "<use", re: /<use/i },
+  { name: "<script", re: /<script/i },
+  { name: "<style", re: /<style/i },
+  { name: "<foreignObject", re: /<foreignobject/i },
+  { name: "@import", re: /@import/i },
+  { name: "javascript:", re: /javascript:/i },
+  { name: "style attribute", re: /\sstyle\s*=/i },
+  { name: "event attribute", re: /\son[a-z]+\s*=/i },
+];
+
+/**
+ * Throws unless `svg` is a static, palette-colored drawing: it starts with the
+ * SVG xmlns, holds no ICON_FORBIDDEN token and no http beyond that xmlns, every
+ * fill, stroke and stop-color value is none or a palette.ts hex, and every
+ * `#hex` in it is a palette.ts hex.
+ */
+function validateIconSvg(svg: string): void {
+  if (!svg.startsWith(SVG_PREFIX)) {
+    throw new Error(`icon SVG must start with ${SVG_PREFIX}`);
+  }
+  for (const f of ICON_FORBIDDEN) {
+    if (f.re.test(svg)) throw new Error(`icon SVG contains forbidden ${f.name}`);
+  }
+  if (/http/i.test(svg.replace(`xmlns='${SVG_NS}'`, ""))) {
+    throw new Error("icon SVG references http outside its xmlns");
+  }
+  for (const m of svg.matchAll(/\b(fill|stroke|stop-color)\s*=\s*(['"])(.*?)\2/gi)) {
+    const value = (m[3] ?? "").trim().toLowerCase();
+    if (value !== "none" && !PALETTE_HEX.has(value)) {
+      throw new Error(`icon SVG paint ${m[1]}=${m[3]} is not none or a palette.ts hex`);
+    }
+  }
+  for (const m of svg.matchAll(/#[0-9a-f]+/gi)) {
+    if (!PALETTE_HEX.has(m[0].toLowerCase())) {
+      throw new Error(`icon SVG color ${m[0]} is not a palette.ts hex`);
+    }
+  }
+}
+
 /**
  * The one procedural favicon index.html may carry (06.4.1): an icon link of
  * exactly this shape, attributes in this order, whose href is an inline SVG
@@ -156,7 +217,8 @@ const PROCEDURAL_ICON =
 
 /**
  * `html` with its one procedural icon link removed, so the unchanged PATTERNS
- * scan the rest. Throws unless exactly one such link is present.
+ * scan the rest. Throws unless exactly one such link is present and its
+ * decoded SVG passes validateIconSvg.
  */
 function stripProceduralIcon(html: string): string {
   const matches = [...html.matchAll(PROCEDURAL_ICON)];
@@ -166,11 +228,9 @@ function stripProceduralIcon(html: string): string {
       `expected exactly one procedural SVG icon link in index.html, found ${matches.length}`,
     );
   }
+  validateIconSvg(decodeURIComponent(m[1] ?? ""));
   return html.slice(0, m.index) + html.slice(m.index + m[0].length);
 }
-
-/** The SVG namespace, the one http string the favicon payload may hold. */
-const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** The real favicon payload, decoded: BG_BOTTOM rounded square, WALL ring, BUMPER_CAP disc. */
 const GOOD_SVG =
