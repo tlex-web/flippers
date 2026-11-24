@@ -44,6 +44,7 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
   - Rewards: a rotating skill shot (5k–25k, one attempt per ball), count-up score and end-of-ball bonus tally, a 7 s ball save with a center-post kickback, and a localStorage high score with a NEW HIGH SCORE fanfare.
   - PLSH-01..08 verified 5/5; UAT 11/11 passed; two code-review fix rounds closed (CR-01 kickback grace) with 0 critical and 0 warning findings left.
 - [x] Flips from mid-bat to the tip clear their own slingshot: **Validated in Phase 6.3.** Both slings trimmed to t = 0.28 (corner (0.944, 4.102)) with the kick face named explicitly; own-sling failures for 0.25 m ≤ d ≤ 0.45 m went from 61 to 0 of 94 on a seeded gate with RED, no-sling and walled-off controls; cross-shot grazes capped at 30 (2 knocked down); look and feel approved at D-12 ("approved A"). Known limit: the root strip (d < 0.25 m) clears 10/139 (118/139 with no slings), deferred to the bat-to-ball rescale backlog todo.
+- [x] The HUD never covers the playfield and the sling's passive faces are visible: **Validated in Phase 6.4.** A measured switch keeps the top-left side panel where it clears the fitted table and otherwise turns the HUD into a constant-height 3-row bar above it (768x1024, 375x812, square windows), with the table fitted under the bar. Both slings carry a slate rim (#7d82a8, 0.015 m) on their passive faces under the amber kick face (lower face 1.48:1 → 5.35:1). Render-only: table, physics and game byte-identical to 41275c6. D-13 and the root-shot titles now state the first-contact gate. Approved at a three-viewport UAT ("approved"); verification 9/9; UI review 21/24.
 
 ### Active
 
@@ -104,6 +105,8 @@ The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpe
 | Ball search runs only while tilted: 2 s still outside the plunger zone → a silent horizontal nudge toward centre, forfeit after 2 kicks via the tilted drain path; no cue sound in v1.0 | Fixes the hinge-pocket soft-lock without touching live play; `ballSearchSteps: 0` disables it and is the permanent RED control; `getBallSearchCount()` is the hook for a later coil sound | ✓ Phase 6.2 (UAT: kick and give-up read acceptably) |
 | Each slingshot names its kick face in `TABLE_SPEC` (`kickFace` segment index → `resolve()` → `deriveKickFace`); `resolve()` throws on a missing or invalid index; the longest-segment rule is removed (D-09) | Trimming the sling shrinks the hypotenuse below the inlane edge, so the longest rule would have moved the kick, rubber, flash and sparks onto the inlane wall | ✓ Phase 6.3 |
 | Slings trimmed to t = 0.28 along the old hypotenuse, corner (0.944, 4.102), mirrored; own-sling contact is classified by the first sling touched (D-13/D-14, ruling A); the root strip stays a reported limit for a later bat-to-ball rescale (D-03) | Clears every mid-bat-to-tip flip off its own sling (61 → 0 of 94) without touching kick speed, direction, rule (1) clearance or the pinch proof; t = 0.30 still grazes once. Under a literal never-touches rule no bracketed corner passes, so the user chose first-contact at D-12 | ✓ Phase 6.3 (D-12 "approved A") |
+| The HUD side/bar choice is measured (`sideHudClears` on the fitted canvas vs the side panel's measured right edge, `heightUnderBar` for the fit), never a width media query; bar mode hides the controls list except Mute, the Windows note and the dev readout | A breakpoint guesses where the panel collides; measuring keeps 1024x768 on the side panel and puts 1080x1080 on the bar, and a fixed bar height means M/Enter never move the table | ✓ Phase 6.4 (UAT "approved") |
+| Slings get a SLING_RIM stroke on every non-kick segment, drawn between the body fill and the amber rubber | Root-strip shots bounce off the lower face, so it must be visible; the kick face stays the brightest sling edge and the change is render-only | ✓ Phase 6.4 (UAT "approved") |
 
 ## Evolution
 
@@ -123,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-24 after Phase 6.3*
+*Last updated: 2026-11-24 after Phase 6.4*

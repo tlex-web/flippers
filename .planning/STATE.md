@@ -10,10 +10,10 @@ last_activity_desc: Phase 06.4 complete
 state_head: 2c4d97e988ab3b65236ddd18ab62460a5397ee17
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 10
   total_plans: 74
   completed_plans: 74
-  percent: 60
+  percent: 100
 milestone_name: milestone
 ---
 
@@ -24,7 +24,7 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.4 — Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording
+**Current focus:** Milestone v1.0 — all 10 phases complete (06.4 closed 2026-11-24); next: re-audit and complete the milestone
 
 ## Current Position
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: All phases complete
 Last activity: 2026-11-24 — Phase 06.4 complete
 
-Progress: [██████░░░░] 60%
+Progress: [██████████] 100% (10/10 phases, 74/74 plans)
 
 ## Performance Metrics
 
@@ -344,6 +344,8 @@ Recent decisions affecting current work:
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
 - ~~[Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.~~ Resolved in 06.2 (06.2-06: open 0)
 - [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 6 open info rows (IN-02..IN-07); IN-01 fixed in 06.4-03. IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. ~~CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.~~ Done in 06.4-03.
+- [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 2 warning, 6 info). WR-02 is the one that touches the goal: `#hud` is measured at boot with an empty status line, and the reviewer estimates the GAME OVER prompt can widen the side panel 10–30 px into the 16 px gap near vw 1080–1110 at vh 900 (font-metric estimate, unmeasured). WR-01: the boot-call guard in `apply-view.test.ts` can't fail (the dpr handler's `applyView();` also matches). Disposition them before the milestone closes.
+- [Phase 06.4]: 06.4-UI-REVIEW.md (21/24) follow-ups, none blocking: bar mode hides the Space/flipper-key hints (approved as A3 at UAT), 11 px labels, `/favicon.ico` 404.
 
 ### Quick Tasks Completed
 
@@ -369,5 +371,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-11-24T17:38:18.212Z
-Stopped at: Phase 06.4 complete — all phases complete
+Stopped at: Phase 06.4 complete — all v1.0 phases complete; ready to re-audit and complete milestone v1.0
 Resume file: None
