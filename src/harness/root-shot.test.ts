@@ -29,14 +29,13 @@ vi.setConfig({ testTimeout: 30_000 });
  * `Math.random` and no environment switch: every scenario is a fixed placement
  * or a fixed inlane drop and a fixed flip step (research Pitfall 3).
  *
- * Gate: every kept flip, with its contact point d in [D_MIN, D_MAX] along the
- * bat from the pivot, must never touch its own sling (bat 0: 300, bat 1: 301)
- * before its centre reaches y <= CLEAR_Y going up, and must reach that line
- * within WINDOW_STEPS steps. All flips, not a ratio. A flip whose first sling
- * contact is the OPPOSITE sling is a cross shot: those are counted, printed and
- * capped at the measured ceiling (MAX_OPP_CONTACTS contacts, MAX_OPP_DOWN
- * knocked back down); exceeding the cap fails the gate. The band is never
- * narrowed to dodge them (D-07, D-13).
+ * Gate: no kept flip, with its contact point d in [D_MIN, D_MAX] along the bat from the pivot, may
+ * have its own sling (bat 0: 300, bat 1: 301) as its FIRST sling contact before its centre reaches
+ * y <= CLEAR_Y going up, and a flip with no sling contact must reach that line within WINDOW_STEPS
+ * steps. All flips, not a ratio. A flip whose first sling contact is the OPPOSITE sling is a cross
+ * shot, even if it later strikes its own sling: those are counted, printed and capped at the
+ * measured ceiling (MAX_OPP_CONTACTS contacts, MAX_OPP_DOWN knocked back down); exceeding the cap
+ * fails the gate. The band is never narrowed to dodge them (D-07, D-13).
  *
  * Teeth: the pre-trim sling, rebuilt locally, must fail the own-sling gate, so
  * the gate can see a deflection at all. A liveness floor (MIN_KEPT_INLANE kept
@@ -150,8 +149,9 @@ interface FlipResult {
   /**
    * The ball's first sling contact of the window, before clearing, was its own
    * sling. Classified by the FIRST sling contact, as the research probe did
-   * (D-13): a cross shot that meets the opposite sling first is governed by
-   * the cross-shot cap, even if it later ricochets into its own sling.
+   * (D-13 as amended at 06.4; user ruling A, 06.3-REVIEW CR-01): a cross shot
+   * that meets the opposite sling first is governed by the cross-shot cap,
+   * even if it later ricochets into its own sling.
    */
   readonly ownTouched: boolean;
   /** The first sling contact of the window, or null. */
@@ -353,8 +353,8 @@ function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
   };
 }
 
-describe("root and mid-bat shots clear their own sling (06.3 D-04/D-13; FLIP-02, ELEM-02, TBL-01)", () => {
-  it(`every kept flip off either bat (d in [${D_MIN}, ${D_MAX}]) clears its own sling and reaches y <= ${CLEAR_Y} going up within ${WINDOW_STEPS} steps; opposite-sling grazes stay within ${MAX_OPP_CONTACTS} (${MAX_OPP_DOWN} knocked down)`, () => {
+describe(`mid-bat-to-tip shots (d in [${D_MIN}, ${D_MAX}]) never meet their own sling first (06.3 D-04/D-13; FLIP-02, ELEM-02, TBL-01)`, () => {
+  it(`no kept flip off either bat (d in [${D_MIN}, ${D_MAX}]) has its own sling as its first sling contact, an uncontacted flip reaches y <= ${CLEAR_Y} going up within ${WINDOW_STEPS} steps, and opposite-sling first contacts stay within ${MAX_OPP_CONTACTS} (${MAX_OPP_DOWN} knocked down)`, () => {
     const r = evaluate(TABLE_SPEC, { rest: true });
     console.info(`[root-shot] TABLE_SPEC ${r.summary}`);
     expect(r.failures, `${r.summary}\n${r.failures.join("\n")}`).toEqual([]);
