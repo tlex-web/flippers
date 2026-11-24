@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06.4.1
 current_phase_name: "Address tech debt: bar-mode control hints, HUD status min-width, favicon"
 status: executing
-stopped_at: Completed 06.4.1-01-PLAN.md
-last_updated: "2026-11-24T19:18:09.237Z"
+stopped_at: Completed 06.4.1-02-PLAN.md
+last_updated: "2026-11-24T19:53:20.634Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.4.1 execution started
-state_head: 48ff6f13d85244e7f9b5f5f8f2d55ee9e5efea82
+state_head: 82788e780e4efe6d0a5758a3e7f766d4afcd94e6
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 77
-  completed_plans: 75
+  completed_plans: 76
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 ## Current Position
 
 Phase: 06.4.1 (Address tech debt: bar-mode control hints, HUD status min-width, favicon) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 06.4.1 execution started
 
@@ -142,6 +142,7 @@ Progress: [██████████] 100% (10/10 phases, 74/74 plans)
 | Phase 06.4 P03 | 3 min | 2 tasks | 4 files |
 | Phase 06.4 P04 | 21min | 2 tasks | 1 files |
 | Phase 06.4.1 P01 | 9 min | 2 tasks | 4 files |
+| Phase 06.4.1 P02 | 30min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -327,6 +328,8 @@ Recent decisions affecting current work:
 - [Phase 06.4.1]: Bar-mode hint is static markup sharing the status cell, hidden by visibility under .hud-status:not(:empty); no JS change
 - [Phase 06.4.1]: 06.4 WR-02 fixed in CSS: base .hud-status min-width calc(23 * (1ch + 0.12em)); side/bar threshold at vh 900 moves to about vw 1109-1148
 - [Phase 06.4.1]: 06.4 IN-03: the bar keeps the Mute row by .hud-controls-mute, not by position
+- [Phase 06.4.1]: 06.4.1-02: favicon is one inline SVG data URI in head (bumper motif: BUMPER_CAP disc, WALL ring, BG_BOTTOM square); no icon file, no public/
+- [Phase 06.4.1]: 06.4.1-02: RND-01 gate admits exactly one <link rel=icon type=image/svg+xml> data URI after validateIconSvg (xmlns prefix, ICON_FORBIDDEN, no http beyond xmlns, palette-only paint and hex); icon link and data: URI patterns kept
 
 ### Pending Todos
 
@@ -375,6 +378,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T19:17:59.372Z
-Stopped at: Completed 06.4.1-01-PLAN.md
+Last session: 2026-11-24T19:53:14.934Z
+Stopped at: Completed 06.4.1-02-PLAN.md
 Resume file: None
