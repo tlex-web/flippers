@@ -5,6 +5,10 @@ import { resolve } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
 import {
   computeView,
+  heightUnderBar,
+  HUD_BAR_GAP_CSS,
+  HUD_SIDE_GAP_CSS,
+  sideHudClears,
   tableBounds,
   VIEW_FILL,
   VIEW_PAD_CSS,
@@ -96,5 +100,36 @@ describe("computeView (RND-02)", () => {
     const two = computeView(bounds, 1280, 684, 2);
     expect(Math.abs(two.backingW - one.backingW * 2)).toBeLessThanOrEqual(1);
     expect(Math.abs(two.backingH - one.backingH * 2)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("narrow-viewport HUD layout (06.4; GAME-01, RND-02)", () => {
+  /** Side panel right edge (CSS px): 16 px inset + 268 px panel (06.2-UI-REVIEW). */
+  const PANEL_RIGHT = 284;
+
+  /** The layout applyView would pick for a vw x vh viewport at dpr 1. */
+  function layoutAt(vw: number, vh: number): "side" | "bar" {
+    return sideHudClears(computeView(bounds, vw, vh, 1), vw, PANEL_RIGHT) ? "side" : "bar";
+  }
+
+  it("keeps the side panel at 1920x1080, 1440x900 and 1024x768", () => {
+    expect(layoutAt(1920, 1080), "1920x1080").toBe("side");
+    expect(layoutAt(1440, 900), "1440x900").toBe("side");
+    expect(layoutAt(1024, 768), "1024x768").toBe("side");
+  });
+
+  it("switches to the top bar at 1080x1080, 768x1024 and 375x812", () => {
+    expect(layoutAt(1080, 1080), "1080x1080").toBe("bar");
+    expect(layoutAt(768, 1024), "768x1024").toBe("bar");
+    expect(layoutAt(375, 812), "375x812").toBe("bar");
+  });
+
+  it("leaves the viewport height minus the bar and its gap under the bar", () => {
+    expect(heightUnderBar(812, 102)).toBe(702);
+  });
+
+  it("uses a 16 px side gap and an 8 px bar gap", () => {
+    expect(HUD_SIDE_GAP_CSS).toBe(16);
+    expect(HUD_BAR_GAP_CSS).toBe(8);
   });
 });
