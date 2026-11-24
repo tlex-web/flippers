@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06.4.1
 current_phase_name: "Address tech debt: bar-mode control hints, HUD status min-width, favicon"
 status: executing
-stopped_at: Phase 06.4 complete — all phases complete
-last_updated: "2026-11-24T18:55:09.305Z"
+stopped_at: Completed 06.4.1-01-PLAN.md
+last_updated: "2026-11-24T19:18:09.237Z"
 last_activity: 2026-11-24
-last_activity_desc: Phase 06.4 complete
-state_head: 28efff0f8a5433c1a02b09c8cccdb3557fb4f34a
+last_activity_desc: Phase 06.4.1 execution started
+state_head: 48ff6f13d85244e7f9b5f5f8f2d55ee9e5efea82
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 77
-  completed_plans: 74
+  completed_plans: 75
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 — Phase 06.4.1 inserted (bar-mode control hints, HUD status min-width, favicon); next: /gsd-plan-phase 06.4.1
+**Current focus:** Phase 06.4.1 — Address tech debt: bar-mode control hints, HUD status min-width, favicon
 
 ## Current Position
 
-Phase: 06.4.1 (Address tech debt: bar-mode control hints, HUD status min-width, favicon) — READY TO EXECUTE
-Plan: Not started
+Phase: 06.4.1 (Address tech debt: bar-mode control hints, HUD status min-width, favicon) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-11-24 — Phase 06.4 complete
+Last activity: 2026-11-24 — Phase 06.4.1 execution started
 
 Progress: [██████████] 100% (10/10 phases, 74/74 plans)
 
@@ -141,6 +141,7 @@ Progress: [██████████] 100% (10/10 phases, 74/74 plans)
 | Phase 06.4 P02 | 4min | 2 tasks | 3 files |
 | Phase 06.4 P03 | 3 min | 2 tasks | 4 files |
 | Phase 06.4 P04 | 21min | 2 tasks | 1 files |
+| Phase 06.4.1 P01 | 9 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -323,6 +324,9 @@ Recent decisions affecting current work:
 - [Phase 06.4]: 06.4-02: sling rim SLING_RIM #7d82a8 at 0.015 m on every segment != el.kickFace, between body fill and amber rubber; contrast 5.35 vs BG_BOTTOM, 3.62 vs SLING_BODY, below the rubber's 11.43
 - [Phase 06.4]: 06.4-03: D-13 is defined by first sling contact (user ruling A): own first contact fails, an uncontacted flip must clear within 60 steps, an opposite first contact is a cross shot under the cap; root-shot titles/docs and 06.3 D-13 now say so, no assertion changed
 - [Phase 06.4]: 06.4-04: user approved the narrow-viewport HUD bar and the sling rim on the live build at 1440x900, 768x1024 and 375x812 (verbatim "approved"); A3, A4, the full-width bar and A5 (rim #7d82a8, 0.015 m) kept as built, nothing tuned
+- [Phase 06.4.1]: Bar-mode hint is static markup sharing the status cell, hidden by visibility under .hud-status:not(:empty); no JS change
+- [Phase 06.4.1]: 06.4 WR-02 fixed in CSS: base .hud-status min-width calc(23 * (1ch + 0.12em)); side/bar threshold at vh 900 moves to about vw 1109-1148
+- [Phase 06.4.1]: 06.4 IN-03: the bar keeps the Mute row by .hud-controls-mute, not by position
 
 ### Pending Todos
 
@@ -371,6 +375,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T17:38:18.212Z
-Stopped at: Phase 06.4 complete — all v1.0 phases complete; ready to re-audit and complete milestone v1.0
+Last session: 2026-11-24T19:17:59.372Z
+Stopped at: Completed 06.4.1-01-PLAN.md
 Resume file: None

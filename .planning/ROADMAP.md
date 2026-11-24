@@ -370,11 +370,11 @@ Plans:
 **Goal:** A shared link works on a narrow window. In the narrow-viewport HUD bar, the player sees how to launch and flip (Space, ← →) whenever no status is showing, without changing the bar's constant height. The side panel keeps its 16 px clearance from the table in every HUD state, including GAME OVER (06.4 WR-02). The tab shows a procedural SVG favicon and the clean-boot `/favicon.ico` 404 is gone, with the RND-01 asset gate amended to admit exactly that one inline icon. Render/DOM-only: `src/table`, `src/physics`, `src/game` and the lockfile stay byte-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3.
 **Requirements**: TBD
 **Depends on:** Phase 06.4
-**Plans:** 3 plans (3 waves)
+**Plans:** 1/3 plans executed (3 waves)
 
 Plans:
 **Wave 1**
-- [ ] 06.4.1-01-PLAN.md — Bar-mode control hint (static `.hud-hint` sharing the status cell, shown only while the status is empty, bar height unchanged), 06.4 WR-02 status reserve tied to statusText, 06.4 IN-03 Mute row by class [wave 1]
+- [x] 06.4.1-01-PLAN.md — Bar-mode control hint (static `.hud-hint` sharing the status cell, shown only while the status is empty, bar height unchanged), 06.4 WR-02 status reserve tied to statusText, 06.4 IN-03 Mute row by class [wave 1]
 
 **Wave 2** *(blocked on Wave 1: shares index.html)*
 - [ ] 06.4.1-02-PLAN.md — Procedural SVG data-URI favicon in head; RND-01 gate carve-out for exactly one validated, palette-only icon, with negative tests [wave 2]
