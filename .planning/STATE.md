@@ -10,10 +10,10 @@ last_activity_desc: Phase 06.4.1 complete
 state_head: 1b43db9cb5e6e4a4197849c0869be0b4c4323f9a
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 77
   completed_plans: 77
-  percent: 91
+  percent: 100
 milestone_name: milestone
 ---
 
@@ -24,7 +24,7 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.4.1 — Address tech debt: bar-mode control hints, HUD status min-width, favicon
+**Current focus:** Milestone v1.0 — all 11 phases complete; next is the milestone audit and close
 
 ## Current Position
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: All phases complete
 Last activity: 2026-11-24 — Phase 06.4.1 complete
 
-Progress: [█████████░] 91% (10/10 phases, 74/74 plans)
+Progress: [██████████] 100% (11/11 phases, 77/77 plans)
 
 ## Performance Metrics
 
@@ -355,8 +355,10 @@ Recent decisions affecting current work:
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
 - ~~[Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.~~ Resolved in 06.2 (06.2-06: open 0)
 - [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 6 open info rows (IN-02..IN-07); IN-01 fixed in 06.4-03. IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. ~~CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.~~ Done in 06.4-03.
-- [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 2 warning, 6 info). WR-02 is the one that touches the goal: `#hud` is measured at boot with an empty status line, and the reviewer estimates the GAME OVER prompt can widen the side panel 10–30 px into the 16 px gap near vw 1080–1110 at vh 900 (font-metric estimate, unmeasured). WR-01: the boot-call guard in `apply-view.test.ts` can't fail (the dpr handler's `applyView();` also matches). Disposition them before the milestone closes.
-- [Phase 06.4]: 06.4-UI-REVIEW.md (21/24) follow-ups, none blocking: bar mode hides the Space/flipper-key hints (approved as A3 at UAT), 11 px labels, `/favicon.ico` 404.
+- [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 6 open rows (0 critical, 1 warning, 5 info). ~~WR-02 (GAME OVER prompt widening the side panel into the 16 px gap)~~ and ~~IN-03~~ fixed in 06.4.1-01 (48ff6f1); the widening was measured real (271.1 → 280.5 px) and the reserve closes it. WR-01: the boot-call guard in `apply-view.test.ts` can't fail (the dpr handler's `applyView();` also matches). Disposition the rest before the milestone closes.
+- [Phase 06.4]: 06.4-UI-REVIEW.md (21/24) follow-ups, none blocking: ~~bar mode hides the Space/flipper-key hints~~ (06.4.1-01), 11 px labels, ~~`/favicon.ico` 404~~ (06.4.1-02).
+- [Phase 06.4.1]: 06.4.1-REVIEW-DISPOSITION.md has 5 open rows (0 critical, 2 warning, 3 info). WR-01: the favicon validator in `asset-free.test.ts` percent-decodes but does not HTML-entity-decode the href, so an entity-encoded payload passes the RND-01 carve-out; WR-02: SMIL `<set>`/`<animate>` carry off-palette colours past the paint check. Both are gate-robustness gaps (the shipped icon is clean) and mirror SECURITY T-06.4.1-04/-06/-07, open below the high threshold. Fix with `/gsd-code-review 06.4.1 --fix` or disposition at milestone close.
+- [Phase 06.4.1]: 06.4.1-UI-REVIEW.md (20/24) follow-ups, none blocking: under A1 = A the "Hold Space to launch" hint stays during active play (a launch-scoped hint needs a JS change); 11 px labels still open; the hint hides via `.hud-status:not(:empty)`, so a whitespace write to `#hud-status` would hide it for good.
 
 ### Quick Tasks Completed
 
@@ -382,6 +384,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T20:07:43.497Z
-Stopped at: Phase 06.4.1 complete — all phases complete
+Last session: 2026-11-24T20:25:05.152Z
+Stopped at: Phase 06.4.1 complete — all v1.0 phases complete, ready for milestone audit
 Resume file: None
