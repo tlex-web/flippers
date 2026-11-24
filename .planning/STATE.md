@@ -1,19 +1,18 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: "06.2"
-status: completed
-stopped_at: Phase 06.2 complete — all phases complete
-last_updated: "2026-11-23T21:57:58.643Z"
+current_phase: "06.3"
+status: Not planned yet
+stopped_at: Phase 06.3 context gathered
+last_updated: "2026-11-24T00:27:59.219Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 06.2 complete
-state_head: 0f3849ca218e6e7925f6ac486d04b01404a73d0e
+state_head: 28998f5604fff751d251bcdeef00a45e3063ae33
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 6
   total_plans: 67
   completed_plans: 67
-  percent: 75
 milestone_name: milestone
 ---
 
@@ -28,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-11-23)
 
 ## Current Position
 
-Phase: 06.2
+Phase: 06.3
 Plan: Not started
-Status: All phases complete
+Status: Not planned yet
 Last activity: 2026-11-23 — Phase 06.2 complete
 
 Progress: [████████░░] 75%
@@ -333,6 +332,7 @@ Recent decisions affecting current work:
 
 - Phase 06.1 inserted after Phase 6: Address tech debt: bat/sling pinch (WR-03) + review hygiene (URGENT)
 - Phase 06.2 inserted after Phase 06.1: Address tech debt: ball-search soft-lock + 06.1 review triage (from v1.0 re-audit) (URGENT)
+- Phase 06.3 inserted after Phase 06.2: Fix slingshot deflection on flipper-root shots (todo 2026-11-23-root-shot-deflects-off-slingshot) (URGENT)
 
 ## Deferred Items
 
@@ -344,6 +344,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-23T21:59:21.105Z
-Stopped at: Phase 06.2 complete (UAT 1/1 passed) — all v1.0 phases complete; root-shot sling todo open before milestone close
-Resume file: None
+Last session: 2026-11-24T00:27:54.769Z
+Stopped at: Phase 06.3 context gathered
+Resume file: .planning/phases/06.3-fix-slingshot-deflection-on-flipper-root-shots/06.3-CONTEXT.md
