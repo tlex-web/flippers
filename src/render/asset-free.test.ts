@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 
 import indexHtml from "../../index.html?raw";
+import * as palette from "./palette";
 
 /**
  * RND-01 asset gate (05-08; also AUD-01's "no audio files"). The table is drawn
@@ -136,6 +137,13 @@ function byName(name: string): RegExp {
   return p.re;
 }
 
+/** Every `#rrggbb` string export of palette.ts, lowercased: the only colors the favicon may use. */
+const PALETTE_HEX: ReadonlySet<string> = new Set(
+  Object.values<unknown>(palette)
+    .filter((v): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v))
+    .map((v) => v.toLowerCase()),
+);
+
 /**
  * The one procedural favicon index.html may carry (06.4.1): an icon link of
  * exactly this shape, attributes in this order, whose href is an inline SVG
@@ -159,6 +167,32 @@ function stripProceduralIcon(html: string): string {
     );
   }
   return html.slice(0, m.index) + html.slice(m.index + m[0].length);
+}
+
+/** The SVG namespace, the one http string the favicon payload may hold. */
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** The real favicon payload, decoded: BG_BOTTOM rounded square, WALL ring, BUMPER_CAP disc. */
+const GOOD_SVG =
+  `<svg xmlns='${SVG_NS}' viewBox='0 0 32 32'>` +
+  "<rect width='32' height='32' rx='7' fill='#0b0420'/>" +
+  "<circle cx='16' cy='16' r='11' fill='none' stroke='#4cc9f0' stroke-width='2.5'/>" +
+  "<circle cx='16' cy='16' r='6' fill='#f72585'/>" +
+  "</svg>";
+
+/** A procedural icon link (the exact admitted shape) carrying `svg` as its data URI. */
+function iconLink(svg: string): string {
+  return `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(svg)}" />`;
+}
+
+/** GOOD_SVG with one extra element before `</svg>`. */
+function withElement(fragment: string): string {
+  return GOOD_SVG.replace("</svg>", `${fragment}</svg>`);
+}
+
+/** GOOD_SVG with one extra attribute on its rect. */
+function withAttr(attr: string): string {
+  return GOOD_SVG.replace("<rect ", `<rect ${attr} `);
 }
 
 describe("asset-free tree (RND-01)", () => {
@@ -241,5 +275,76 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   it("the icon link and data: URI patterns still exist and still trip on the raw index.html", () => {
     expect(byName("icon link").test(indexHtml)).toBe(true);
     expect(byName("data: URI asset").test(indexHtml)).toBe(true);
+  });
+
+  it("PALETTE_HEX holds the favicon's three colors and no rgba value", () => {
+    for (const hex of [palette.BG_BOTTOM, palette.WALL, palette.BUMPER_CAP]) {
+      expect(PALETTE_HEX.has(hex), hex).toBe(true);
+    }
+    expect([...PALETTE_HEX].every((v) => /^#[0-9a-f]{6}$/.test(v))).toBe(true);
+  });
+
+  it("GOOD_SVG is the decoded payload of the real favicon", () => {
+    const m = /href="data:image\/svg\+xml,([^"]*)"/.exec(indexHtml);
+    expect(m?.[1] === undefined ? null : decodeURIComponent(m[1])).toBe(GOOD_SVG);
+  });
+
+  it("strips one valid procedural icon link down to no link at all", () => {
+    expect(stripProceduralIcon(iconLink(GOOD_SVG)).includes("<link")).toBe(false);
+  });
+
+  it("the real index.html still passes the payload validation", () => {
+    expect(() => stripProceduralIcon(indexHtml)).not.toThrow();
+  });
+
+  it.each<readonly [string, string, string]>([
+    ["no xmlns prefix", GOOD_SVG.replace(` xmlns='${SVG_NS}'`, ""), "must start with"],
+    ["url(", withElement("<rect width='1' height='1' filter='url(#f)'/>"), "forbidden url("],
+    ["href", withElement("<a href='x'></a>"), "forbidden href"],
+    ["<image", withElement("<image width='1' height='1'/>"), "forbidden <image"],
+    ["<use", withElement("<use x='0'/>"), "forbidden <use"],
+    ["<script", withElement("<script>alert(1)</script>"), "forbidden <script"],
+    ["<style", withElement("<style>rect{opacity:0}</style>"), "forbidden <style"],
+    [
+      "<foreignObject",
+      withElement("<foreignObject width='1' height='1'></foreignObject>"),
+      "forbidden <foreignObject",
+    ],
+    ["@import", withElement("<text>@import x</text>"), "forbidden @import"],
+    ["javascript:", withElement("<text>javascript:void(0)</text>"), "forbidden javascript:"],
+    ["style attribute", withAttr("style='opacity:0'"), "forbidden style attribute"],
+    ["event attribute", withAttr("onload='x'"), "forbidden event attribute"],
+    ["http outside the xmlns", withElement("<text>http://example.com</text>"), "http outside"],
+    ["fill='red'", withAttr("fill='red'"), "paint fill=red"],
+    ['fill="red"', withAttr('fill="red"'), "paint fill=red"],
+    ["fill='#ff0000'", withAttr("fill='#ff0000'"), "paint fill=#ff0000"],
+    ["off-palette stroke", withAttr("stroke='#123456'"), "paint stroke=#123456"],
+    ["off-palette stop-color", withElement("<stop stop-color='#abcdef'/>"), "paint stop-color"],
+    ["off-palette hex in text", withElement("<text>#ff0000</text>"), "color #ff0000"],
+  ])("rejects an icon SVG with %s", (_name, svg, rule) => {
+    expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
+  });
+
+  it("two procedural icon links throw with the count", () => {
+    const two = iconLink(GOOD_SVG) + iconLink(GOOD_SVG);
+    expect(() => stripProceduralIcon(two)).toThrow("found 2");
+  });
+
+  it("a second, .ico icon link beside the valid one still trips the icon link pattern", () => {
+    const html = `${iconLink(GOOD_SVG)}\n<link rel="icon" href="favicon.ico">`;
+    expect(scan({ "/x.html": stripProceduralIcon(html) })).toContain("/x.html: icon link");
+  });
+
+  it("a .png icon link beside the valid one still trips the gate", () => {
+    const html = `${iconLink(GOOD_SVG)}\n<link rel="icon" type="image/png" href="icon.png">`;
+    expect(scan({ "/x.html": stripProceduralIcon(html) })).toContain("/x.html: icon link");
+  });
+
+  it("a data:image/png icon link is not admitted and trips both patterns", () => {
+    const png = '<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">';
+    expect(() => stripProceduralIcon(png)).toThrow("found 0");
+    const hits = scan({ "/x.html": png });
+    expect(hits).toContain("/x.html: icon link");
+    expect(hits).toContain("/x.html: data: URI asset");
   });
 });
