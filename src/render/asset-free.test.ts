@@ -194,12 +194,40 @@ const ICON_ELEMENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The only attributes the favicon SVG may use (case-sensitive): the xmlns,
+ * geometry, and the fill/stroke paint the palette check reads.
+ * 06.4.1-REVIEW WR-02 (second pass): attributes were still a denylist, so an
+ * unlisted presentation attribute such as `filter='invert(1)'` recolored the
+ * icon with no flagged token. Nothing that filters, masks, clips, animates or
+ * fetches is listed.
+ */
+const ICON_ATTRS: ReadonlySet<string> = new Set([
+  "xmlns",
+  "viewBox",
+  "width",
+  "height",
+  "x",
+  "y",
+  "rx",
+  "ry",
+  "cx",
+  "cy",
+  "r",
+  "d",
+  "fill",
+  "stroke",
+  "stroke-width",
+  "transform",
+]);
+
+/**
  * Throws unless `svg` is a static, palette-colored drawing: it starts with the
  * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
  * token and no http beyond that xmlns, every fill, stroke and stop-color value
- * is none or a palette.ts hex, every `#hex` in it is a palette.ts hex, and
- * every `<` opens or closes an ICON_ELEMENTS element. The element check runs
- * last so the more specific checks above name their own faults.
+ * is none or a palette.ts hex, every `#hex` in it is a palette.ts hex, every
+ * `<` opens or closes an ICON_ELEMENTS element, and every attribute name is in
+ * ICON_ATTRS (both allowlists, not denylists). The element and attribute checks
+ * run last so the more specific checks above name their own faults.
  *
  * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
  * the browser reads the SVG, so a reference could spell out any token below
@@ -236,6 +264,16 @@ function validateIconSvg(svg: string): void {
     const name = m[1] ?? "";
     if (!ICON_ELEMENTS.has(name)) {
       throw new Error(`icon SVG element <${name}> is not allowed`);
+    }
+  }
+  // Every name directly before an `=`, after whitespace or a quote: XML puts
+  // whitespace between attributes, and the quote also catches a malformed
+  // `'filter=` with none. Text inside a value only adds names (stricter), and
+  // `&` is already rejected, so no name is hidden behind a reference.
+  for (const m of svg.matchAll(/[\s'"]([^\s'"=/>]+)\s*=/g)) {
+    const name = m[1] ?? "";
+    if (!ICON_ATTRS.has(name)) {
+      throw new Error(`icon SVG attribute ${name} is not allowed`);
     }
   }
 }
@@ -472,6 +510,19 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     ["a filter primitive", withElement("<feFlood flood-color='red'/>"), "element <feFlood>"],
     ["a comment", withElement("<!-- note -->"), "element <!--"],
     ["an uppercase tag", withElement("<RECT width='1' height='1'/>"), "element <RECT>"],
+    // 06.4.1-REVIEW WR-02 (second pass): presentation attributes recolor
+    // without a fill= or #hex.
+    [
+      "a filter attribute",
+      withAttr("filter='invert(1) drop-shadow(0 0 2px red)'"),
+      "attribute filter",
+    ],
+    ["an opacity attribute", withAttr("opacity='0.3'"), "attribute opacity"],
+    [
+      "an attribute after a quote with no space",
+      GOOD_SVG.replace("fill='#0b0420'", "fill='#0b0420'filter='invert(1)'"),
+      "attribute filter",
+    ],
   ])("rejects an icon SVG with %s", (_name, svg, rule) => {
     expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
   });
