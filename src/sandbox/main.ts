@@ -102,7 +102,7 @@ import { FlashTracker, maxElementId } from "../render/flash";
 import { LampTracker, type LampReader } from "../render/lamps";
 import type { LayerFactory } from "../render/static-layer";
 import { TableRenderer, type FlashReader } from "../render/table-renderer";
-import { computeView, tableBounds } from "../render/view-transform";
+import { computeView, heightUnderBar, sideHudClears, tableBounds } from "../render/view-transform";
 import type { BallState } from "../physics/types";
 import { DebugRenderer } from "./debug-draw";
 import { PresentationObserver } from "./presentation-observer";
@@ -366,9 +366,25 @@ function main(): void {
     tableRenderer = tr;
     // The world box never changes; the view is recomputed from the display.
     const bounds = tableBounds(world.getElements());
+    // Narrow viewports (06.4): keep the side panel only when the fitted canvas
+    // clears it; otherwise index.html turns the HUD into a bar above the table
+    // and the table is fitted under the measured bar. The only layout reads.
+    const sandbox = requireElement("sandbox");
+    const hud = requireElement("hud");
     const applyView = (): void => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      sandbox.setAttribute("data-hud", "side"); // measure the panel in its side form
+      const full = computeView(bounds, vw, vh, dpr);
+      if (sideHudClears(full, vw, hud.getBoundingClientRect().right)) {
+        tr.resize(full);
+        return;
+      }
+      sandbox.setAttribute("data-hud", "bar");
+      // The bar's height, not its bottom: the bottom depends on the stale canvas.
       tr.resize(
-        computeView(bounds, window.innerWidth, window.innerHeight, window.devicePixelRatio || 1),
+        computeView(bounds, vw, heightUnderBar(vh, hud.getBoundingClientRect().height), dpr),
       );
     };
     applyView();

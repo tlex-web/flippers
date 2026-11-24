@@ -49,6 +49,18 @@
           0 0 24px var(--frame-glow),
           0 0 60px rgba(0, 0, 0, 0.6);
       }
+      /* Narrow layout (06.4): main.ts sets data-hud="bar" when the side panel
+         would cover the canvas. */
+      #sandbox[data-hud="bar"] {
+        flex-direction: column;
+        gap: 8px; /* = HUD_BAR_GAP_CSS */
+      }
+      #sandbox[data-hud="bar"] .hud {
+        position: static;
+        order: -1; /* above the canvas; DOM and reading order unchanged */
+        align-self: stretch;
+        margin: 0 8px;
+      }
       /* Score HUD (GAME-01): system-font DOM text, crisp at any canvas fit. */
       .hud {
         position: fixed;

@@ -11,6 +11,9 @@
  * display, never the other way round.
  *
  * Device px = meters * scale + off (per axis).
+ *
+ * The module also holds the pure narrow-viewport HUD layout predicate (06.4:
+ * `sideHudClears`, `heightUnderBar`); main.ts does the DOM measuring.
  */
 
 import { PIXELS_PER_METER } from "../physics/constants";
@@ -46,6 +49,12 @@ export const VIEW_FILL = 0.96;
 
 /** Padding (logical CSS px at fit 1) around the world box so strokes are not clipped. */
 export const VIEW_PAD_CSS = 24;
+
+/** Gap (CSS px) the side HUD panel keeps from the canvas (06.4). */
+export const HUD_SIDE_GAP_CSS = 16;
+
+/** Gap (CSS px) between the top HUD bar and the canvas; equals `gap` on `#sandbox[data-hud="bar"]` in index.html. */
+export const HUD_BAR_GAP_CSS = 8;
 
 /*
  * Plunger charge meter and pullback layout (D-10). The meter is an outlined bar
@@ -146,4 +155,21 @@ export function computeView(
     offX: fit * d * (VIEW_PAD_CSS - minX * PIXELS_PER_METER),
     offY: fit * d * (VIEW_PAD_CSS - minY * PIXELS_PER_METER),
   };
+}
+
+/**
+ * Whether the centered canvas's left edge clears a side HUD panel whose right
+ * edge is at `panelRight` CSS px, by at least `HUD_SIDE_GAP_CSS`. A NaN input
+ * makes the comparison false, which selects the top bar.
+ */
+export function sideHudClears(view: ViewTransform, viewportW: number, panelRight: number): boolean {
+  return (viewportW - view.cssW) / 2 >= panelRight + HUD_SIDE_GAP_CSS;
+}
+
+/**
+ * Viewport height (CSS px) left for the table under a top HUD bar `barH` CSS px
+ * tall and its `HUD_BAR_GAP_CSS` gap. computeView clamps a result below 1.
+ */
+export function heightUnderBar(viewportH: number, barH: number): number {
+  return viewportH - barH - HUD_BAR_GAP_CSS;
 }
