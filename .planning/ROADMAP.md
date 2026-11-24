@@ -21,6 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
 - [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
 - [x] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage** (completed 2026-11-23)
+- [ ] **Phase 06.3: Fix slingshot deflection on flipper-root shots**
 
 ## Phase Details
 
@@ -328,3 +329,13 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 - [x] 06.2-06-PLAN.md — Phase gate plus records: full gate on the merged tree, main-tree LF re-check, 06.1 ledger to open 0, soft-lock todo completed, 04 lost-finding note resolved, STATE.md [wave 3]
+
+### Phase 06.3: Fix slingshot deflection on flipper-root shots (INSERTED)
+
+**Goal:** Both slingshots are trimmed (lower-right corner slid up along the kick face, kick speed and direction unchanged, kick face named explicitly) so flips from mid-bat to the tip (d ≥ 0.25 m from the hinge) reach the upper field before touching a sling, on both bats at every flip timing. Today no bat-launched flip does. The root strip (d < 0.25 m) stays blocked by the sling's inlane corner. That is a measured, reported known limit, deferred to a bat-to-ball rescale. The fix keeps rule (1) bat clearance over the full sweep, keeps the sling lift at or below 0.35 m, and keeps the sling-pinch proof GREEN. Source: `.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md`; decisions in `06.3-CONTEXT.md`.
+**Requirements**: TBD
+**Depends on:** Phase 06.2
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 06.3 to break down)
