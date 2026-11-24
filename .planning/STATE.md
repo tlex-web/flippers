@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 06.4.1
 current_phase_name: "Address tech debt: bar-mode control hints, HUD status min-width, favicon"
-status: executing
-stopped_at: Completed 06.4.1-02-PLAN.md
-last_updated: "2026-11-24T19:53:20.634Z"
+status: verifying
+stopped_at: Completed 06.4.1-03-PLAN.md
+last_updated: "2026-11-24T20:07:48.126Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.4.1 execution started
-state_head: 82788e780e4efe6d0a5758a3e7f766d4afcd94e6
+state_head: c8049176bcda815ac243a026a739b55c8950b960
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 77
-  completed_plans: 76
+  completed_plans: 77
 milestone_name: milestone
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 Phase: 06.4.1 (Address tech debt: bar-mode control hints, HUD status min-width, favicon) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-24 — Phase 06.4.1 execution started
 
 Progress: [██████████] 100% (10/10 phases, 74/74 plans)
@@ -143,6 +143,7 @@ Progress: [██████████] 100% (10/10 phases, 74/74 plans)
 | Phase 06.4 P04 | 21min | 2 tasks | 1 files |
 | Phase 06.4.1 P01 | 9 min | 2 tasks | 4 files |
 | Phase 06.4.1 P02 | 30min | 2 tasks | 2 files |
+| Phase 06.4.1 P03 | 11min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -330,6 +331,8 @@ Recent decisions affecting current work:
 - [Phase 06.4.1]: 06.4 IN-03: the bar keeps the Mute row by .hud-controls-mute, not by position
 - [Phase 06.4.1]: 06.4.1-02: favicon is one inline SVG data URI in head (bumper motif: BUMPER_CAP disc, WALL ring, BG_BOTTOM square); no icon file, no public/
 - [Phase 06.4.1]: 06.4.1-02: RND-01 gate admits exactly one <link rel=icon type=image/svg+xml> data URI after validateIconSvg (xmlns prefix, ICON_FORBIDDEN, no http beyond xmlns, palette-only paint and hex); icon link and data: URI patterns kept
+- [Phase 06.4.1]: 06.4.1-03: user approved the bar hint, GAME OVER clearance and favicon on the live build (verbatim "approved"); A1 = A (hint whenever no status shows) and icon = A (bumper) kept as built, nothing tuned
+- [Phase 06.4.1]: 06.4.1-03: 06.4 ledger WR-02 and IN-03 fixed by 06.4.1-01 (48ff6f1), open 8 -> 6; IN-01, WR-01, IN-02, IN-04, IN-05, IN-06 stay open for milestone-close triage
 
 ### Pending Todos
 
@@ -378,6 +381,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T19:53:14.934Z
-Stopped at: Completed 06.4.1-02-PLAN.md
+Last session: 2026-11-24T20:07:43.497Z
+Stopped at: Completed 06.4.1-03-PLAN.md
 Resume file: None
