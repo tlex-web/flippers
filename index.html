@@ -41,8 +41,10 @@
         align-items: center;
         justify-content: center;
         min-height: 100vh;
+        min-height: 100dvh; /* mobile: vh is lvh, which hides the apron behind the URL bar */
       }
       #stage {
+        flex: none; /* never let flex shrink the explicitly sized canvas */
         display: block;
         border: 1px solid var(--frame);
         box-shadow:
@@ -50,7 +52,12 @@
           0 0 60px rgba(0, 0, 0, 0.6);
       }
       /* Narrow layout (06.4): main.ts sets data-hud="bar" when the side panel
-         would cover the canvas. */
+         would cover the canvas. The HUD becomes a 3-row bar above the table:
+         SCORE label and ball or high score; the score and the Mute key with its
+         MUTED marker; the status line. Every row keeps one height in every game
+         state (ball and best can both be empty in attract), so the bar never
+         changes height without a resize and the table never moves. The keyboard
+         list (except Mute), the Windows note and the dev readout are hidden. */
       #sandbox[data-hud="bar"] {
         flex-direction: column;
         gap: 8px; /* = HUD_BAR_GAP_CSS */
@@ -60,6 +67,46 @@
         order: -1; /* above the canvas; DOM and reading order unchanged */
         align-self: stretch;
         margin: 0 8px;
+        padding: 8px 12px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+          "label aux"
+          "score mute"
+          "status status";
+        column-gap: 12px;
+        row-gap: 4px;
+        align-items: center;
+      }
+      #sandbox[data-hud="bar"] .hud-label {
+        grid-area: label;
+      }
+      #sandbox[data-hud="bar"] .hud-score {
+        grid-area: score;
+      }
+      #sandbox[data-hud="bar"] .hud-ball,
+      #sandbox[data-hud="bar"] .hud-best {
+        grid-area: aux;
+        justify-self: end;
+        margin-top: 0;
+        line-height: 1.25;
+        min-height: 1.25em;
+      }
+      #sandbox[data-hud="bar"] .hud-status {
+        grid-area: status;
+        line-height: 1.2; /* text height = its min-height: 1.2em */
+      }
+      #sandbox[data-hud="bar"] .hud-controls {
+        grid-area: mute;
+        justify-self: end;
+        margin: 0;
+      }
+      #sandbox[data-hud="bar"] .hud-controls > :not(:nth-last-child(-n + 2)) {
+        display: none;
+      }
+      #sandbox[data-hud="bar"] .hud-controls-note,
+      #sandbox[data-hud="bar"] .hud-diag {
+        display: none;
       }
       /* Score HUD (GAME-01): system-font DOM text, crisp at any canvas fit. */
       .hud {

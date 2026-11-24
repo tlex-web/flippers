@@ -15,6 +15,14 @@
  * read of world state goes through the `PhysicsWorld` interface; this file never
  * imports the engine (D-05/D-07). The canvas paints no text (D-01): the HUD is DOM.
  *
+ * Narrow viewports (06.4, GAME-01): `applyView` measures the HUD panel in its
+ * side form. When the fitted canvas would not clear it by `HUD_SIDE_GAP_CSS`,
+ * `applyView` sets `data-hud="bar"` on `#sandbox` (index.html turns the panel
+ * into a 3-row bar above the table) and fits the table to the height under the
+ * measured bar (`heightUnderBar`). The layout reads run only on boot, resize and
+ * dpr change, never in the frame. `?debug=1` never calls `applyView` and keeps
+ * the side layout.
+ *
  * `?debug=1` (exact match) selects the old diagnosis renderer (`DebugRenderer`:
  * outlines, velocity arrow, contact markers) instead; any other URL draws the
  * procedural table.
