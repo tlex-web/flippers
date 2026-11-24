@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, it, expect } from "vitest";
+import { JSDOM } from "jsdom";
 
 import indexHtml from "../../index.html?raw";
 import * as palette from "./palette";
@@ -397,6 +398,199 @@ function stripProceduralIcon(html: string): string {
   return html.slice(0, m.index) + html.slice(m.index + m[0].length);
 }
 
+/** The namespace XML puts every `xmlns` and `xmlns:*` declaration attribute in. */
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
+
+/** The paint attributes whose values must be none or a palette.ts hex. */
+const PAINT_ATTRS: ReadonlySet<string> = new Set(["fill", "stroke", "stop-color"]);
+
+/** `s` with only ASCII A-Z lowercased (HTML and CSS keywords are ASCII case-insensitive). */
+function asciiLower(s: string): string {
+  return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+}
+
+/**
+ * The rel tokens of `el`: its rel attribute ASCII-lowercased and split on
+ * HTML's ASCII whitespace (tab, LF, FF, CR, space), empty tokens dropped.
+ */
+function relTokens(el: Element): string[] {
+  return asciiLower(el.getAttribute("rel") ?? "")
+    .split(/[\t\n\f\r ]+/)
+    .filter((t) => t !== "");
+}
+
+/** True when `el`'s rel tokens include `icon` (the `rel~=icon` test, ASCII case-insensitive). */
+function isIconLink(el: Element): boolean {
+  return relTokens(el).includes("icon");
+}
+
+/** A thrown value's message (jsdom's DOMException may not be an Error of this realm). */
+function errorDetail(e: unknown): string {
+  if (typeof e === "object" && e !== null && "message" in e && typeof e.message === "string") {
+    return e.message;
+  }
+  return String(e);
+}
+
+/**
+ * Throws unless `el` and everything under it is a static, palette-colored
+ * drawing, checked in preorder (each element before its children): the
+ * element is an ICON_ELEMENTS member in the SVG namespace; every attribute is
+ * a null-namespace ICON_ATTRS member or the bare `xmlns` declaration (so
+ * `xmlns:*`, `xlink:*` and `xml:*` fail); every fill, stroke and stop-color
+ * value is none or a palette.ts hex once CSS whitespace (ASCII only) is
+ * stripped from its ends; every ICON_SHAPES element carries its own fill
+ * (SVG's initial fill is black, which palette.ts does not hold); and the
+ * element holds only element children (no text, CDATA, comment or processing
+ * instruction). Node kinds are compared by count and numeric nodeType, since
+ * the global `Node` constant does not exist in the node test environment.
+ */
+function checkIconElement(el: Element): void {
+  if (el.namespaceURI !== SVG_NS || !ICON_ELEMENTS.has(el.localName)) {
+    throw new Error(`icon SVG element <${el.tagName}> is not allowed`);
+  }
+  const attrs = Array.from(el.attributes);
+  for (const attr of attrs) {
+    const bareXmlns = attr.name === "xmlns" && attr.namespaceURI === XMLNS_NS;
+    if (!bareXmlns && (attr.namespaceURI !== null || !ICON_ATTRS.has(attr.localName))) {
+      throw new Error(`icon SVG attribute ${attr.name} is not allowed`);
+    }
+  }
+  for (const attr of attrs) {
+    if (attr.namespaceURI !== null || !PAINT_ATTRS.has(attr.localName)) continue;
+    // CSS strips only its own whitespace (space, tab, LF, CR, FF);
+    // String.prototype.trim() would also strip U+00A0 and U+FEFF, which CSS
+    // keeps, so such a value is an invalid color and the shape paints black.
+    const value = asciiLower(attr.value.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, ""));
+    if (value !== "none" && !PALETTE_HEX.has(value)) {
+      throw new Error(`icon SVG paint ${attr.name}=${attr.value} is not none or a palette.ts hex`);
+    }
+  }
+  if (ICON_SHAPES.has(el.localName) && !el.hasAttributeNS(null, "fill")) {
+    throw new Error(`icon SVG <${el.localName}> has no fill (SVG's initial black is off-palette)`);
+  }
+  if (el.childNodes.length !== el.children.length) {
+    const other = Array.from(el.childNodes).find((n) => n.nodeType !== 1);
+    throw new Error(`icon SVG must hold only elements, found node type ${other?.nodeType}`);
+  }
+  for (const child of Array.from(el.children)) checkIconElement(child);
+}
+
+/**
+ * Throws unless `svg` is a well-formed XML document holding only an `<svg>`
+ * root in the SVG namespace whose tree passes checkIconElement. The XML parser
+ * (jsdom with contentType image/svg+xml, the browser's own route for an SVG
+ * image) decodes character and entity references and normalizes attribute
+ * values before any check reads them, so the checks see the attribute names,
+ * values and elements the browser renders, not their spelling. A document
+ * holding anything beside its root (a doctype, a comment, an xml-stylesheet
+ * processing instruction) fails.
+ */
+function checkIconSvg(svg: string): void {
+  let doc: Document;
+  try {
+    doc = new JSDOM(svg, { contentType: "image/svg+xml" }).window.document;
+  } catch (e) {
+    throw new Error(`icon SVG is not well-formed XML: ${errorDetail(e)}`);
+  }
+  const root = doc.documentElement;
+  if (doc.childNodes.length !== 1 || doc.firstChild !== root) {
+    throw new Error("icon SVG document must hold only its svg root");
+  }
+  if (root.localName !== "svg" || root.namespaceURI !== SVG_NS) {
+    throw new Error("icon SVG root must be <svg> in the SVG namespace");
+  }
+  checkIconElement(root);
+}
+
+/**
+ * The SVG text a browser decodes from the icon `href`, read the browser's way:
+ * the WHATWG URL parser (which drops raw tab, LF and CR) and then Node's
+ * fetch, whose data: URL processor is the fetch spec's own algorithm (via
+ * undici), so percent-decoding, bad escapes and `;base64,` bodies behave as
+ * they do in the browser. The protocol must be data: before fetch is called,
+ * so a remote href can never reach the network. The MIME type must be exactly
+ * image/svg+xml with no parameters (a charset parameter would override XML
+ * encoding detection in the browser). Every body byte must be printable ASCII
+ * (0x20 to 0x7E): that leaves the browser's XML decoder nothing to sniff (no
+ * BOM, no charset, no encoding-declaration effect, no control or non-ASCII
+ * character), so the string handed to checkIconSvg is provably the text the
+ * browser decodes. The favicon needs nothing outside printable ASCII.
+ *
+ * Async because there is no synchronous built-in data: URL processor, and
+ * importing jsdom's transitive data-urls package would be an undeclared
+ * dependency.
+ */
+async function decodeIconHref(href: string): Promise<string> {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    throw new Error("icon href must be a data: URL");
+  }
+  if (url.protocol !== "data:") throw new Error("icon href must be a data: URL");
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new Error("icon href must be a data: URL");
+  }
+  const contentType = res.headers.get("content-type");
+  if (contentType !== "image/svg+xml") {
+    throw new Error(`icon href MIME type must be image/svg+xml, found ${contentType}`);
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const offset = bytes.findIndex((b) => b < 0x20 || b > 0x7e);
+  if (offset !== -1) {
+    const hh = (bytes[offset] ?? 0).toString(16).padStart(2, "0");
+    throw new Error(`icon SVG must be printable ASCII, found byte 0x${hh} at ${offset}`);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * `html` as jsdom parses it (the spec HTML tree a browser builds), with its
+ * one icon link removed and the rest serialized, so the unchanged PATTERNS
+ * scan canonical markup: every attribute double-quoted, `>` in a value
+ * escaped. Throws unless the document holds exactly one link whose rel tokens
+ * include icon, holds no noscript element, and that link's type is exactly
+ * image/svg+xml, its rel is exactly the single token icon, its attributes are
+ * exactly rel, type and href (nothing else rides on the removed element), and
+ * its href decodes (decodeIconHref) to an SVG that passes checkIconSvg.
+ *
+ * JSDOM is built with default options, so it never runs scripts or loads
+ * subresources; that also means it parses with the scripting flag off, while
+ * browsers parse with it on, which changes how noscript content tokenizes.
+ * index.html needs no noscript, so one is rejected instead of modeled.
+ */
+async function stripIconLink(html: string): Promise<string> {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+  const icons = Array.from(doc.querySelectorAll("link")).filter(isIconLink);
+  const link = icons[0];
+  if (icons.length !== 1 || !link) {
+    throw new Error(`expected exactly one icon link in index.html, found ${icons.length}`);
+  }
+  if (doc.querySelector("noscript")) {
+    throw new Error("index.html must hold no noscript element");
+  }
+  const type = link.getAttribute("type");
+  if (type !== "image/svg+xml") {
+    throw new Error(`icon link type must be image/svg+xml, found ${type}`);
+  }
+  const tokens = relTokens(link);
+  if (tokens.length !== 1 || tokens[0] !== "icon") {
+    throw new Error(`icon link rel must be exactly icon, found ${link.getAttribute("rel")}`);
+  }
+  const names = link.getAttributeNames().sort().join(",");
+  if (names !== "href,rel,type") {
+    throw new Error(`icon link may carry only rel, type and href, found ${names}`);
+  }
+  checkIconSvg(await decodeIconHref(link.getAttribute("href") ?? ""));
+  link.remove();
+  return dom.serialize();
+}
+
 /** The real favicon payload, decoded: BG_BOTTOM rounded square, WALL ring, BUMPER_CAP disc. */
 const GOOD_SVG =
   `<svg xmlns='${SVG_NS}' viewBox='0 0 32 32'>` +
@@ -433,8 +627,8 @@ describe("asset-free tree (RND-01)", () => {
     expect(indexHtml).toContain("<html");
   });
 
-  it("finds no image, audio or font asset, and no network fetch, in src or index.html", () => {
-    const hits = scan({ ...SOURCES, "/index.html": stripProceduralIcon(indexHtml) });
+  it("finds no image, audio or font asset, and no network fetch, in src or index.html", async () => {
+    const hits = scan({ ...SOURCES, "/index.html": await stripIconLink(indexHtml) });
     expect(hits).toEqual([]);
   });
 
@@ -764,6 +958,46 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   it("a .png icon link beside the valid one still trips the gate", () => {
     const html = `${iconLink(GOOD_SVG)}\n<link rel="icon" type="image/png" href="icon.png">`;
     expect(scan({ "/x.html": stripProceduralIcon(html) })).toContain("/x.html: icon link");
+  });
+
+  // 06.4.1-REVIEW WR-01 and WR-02: each PoC was accepted by the regex gate.
+  // WR-01 merges the real icon link into a preceding unclosed open tag (the
+  // parser keeps the first type and href and drops the validated ones as
+  // duplicates); WR-02 hides a second icon link behind a quoted `>`; WR-02b is
+  // the unquoted data: URI half, caught once serialization quotes the value.
+  it.each<readonly [string, string, string, string | null]>([
+    [
+      "WR-01: an icon link merged into a preceding unclosed open tag",
+      "<title>Flippers</title>",
+      "<title>Flippers</title>\n<link type=image/png href=data:image/png;base64,iVBORw0KGgo=",
+      "type must be image/svg+xml, found image/png",
+    ],
+    [
+      "WR-02: a second icon link after a quoted >",
+      "</head>",
+      "<link title='>' rel=icon type=image/png href=data:image/png;base64,iVBORw0KGgo=>\n</head>",
+      "found 2",
+    ],
+    [
+      "WR-02b: an unquoted data: URI after a quoted >",
+      "</head>",
+      "<link title='>' rel=preload as=image href=data:image/png;base64,iVBORw0KGgo=>\n</head>",
+      null,
+    ],
+  ])("the gate rejects the %s PoC", async (_name, find, repl, rule) => {
+    const html = indexHtml.replace(find, repl);
+    expect(html).not.toBe(indexHtml);
+    if (rule !== null) {
+      await expect(stripIconLink(html)).rejects.toThrow(rule);
+    } else {
+      const result = await stripIconLink(html);
+      expect(scan({ "/index.html": result })).toContain("/index.html: data: URI asset");
+    }
+  });
+
+  it("a noscript element is rejected (jsdom parses with scripting off, browsers with it on)", async () => {
+    const html = `${iconLink(GOOD_SVG)}<noscript><p title="</noscript><link rel=icon href=x.png>"></p></noscript>`;
+    await expect(stripIconLink(html)).rejects.toThrow("index.html must hold no noscript element");
   });
 
   it("a data:image/png icon link is not admitted and trips both patterns", () => {
