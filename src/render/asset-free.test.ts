@@ -327,10 +327,14 @@ const PROCEDURAL_ICON =
 
 /**
  * Every character the raw icon href payload may hold: ASCII letters and digits,
- * `%` escapes, what encodeURIComponent leaves unescaped (`-_.!~*'()`), and the
- * space, `=`, `/` and `:` the real favicon writes literally.
+ * what encodeURIComponent leaves unescaped (`-_.!~*'()`), the space, `=`, `/`
+ * and `:` the real favicon writes literally, and `%` only as the start of a
+ * two-hex-digit escape.
+ * 06.4.1-REVIEW IN-01: a lone `%` (a stray one, or `%zz`) used to get past this
+ * and make decodeURIComponent throw a bare URIError that named neither the icon
+ * nor the rule; it now fails here with this gate's own message.
  */
-const ICON_HREF_CHARS = /^[A-Za-z0-9%\-_.!~*'() =/:]*$/;
+const ICON_HREF_CHARS = /^(?:[A-Za-z0-9\-_.!~*'() =/:]|%[0-9A-Fa-f]{2})*$/;
 
 /**
  * `html` with its one procedural icon link removed, so the unchanged PATTERNS
@@ -363,7 +367,7 @@ function stripProceduralIcon(html: string): string {
   }
   if (!ICON_HREF_CHARS.test(raw)) {
     throw new Error(
-      "icon href holds a raw character outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
+      "icon href holds a raw character or bad % escape outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
     );
   }
   validateIconSvg(decodeURIComponent(raw));
@@ -609,6 +613,19 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     expect(raw).not.toBe(encoded);
     // What the browser decodes once the URL parser drops the raw character.
     expect(raw.replace(/[\t\n\r]/g, "")).toBe(encoded);
+    const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
+    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
+    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+  });
+
+  // 06.4.1-REVIEW IN-01: built by hand, because iconLink() never writes a bad
+  // escape. Each one would make decodeURIComponent throw a bare URIError.
+  it.each<readonly [string, string]>([
+    ["a %zz escape", encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg", "%zz%3C%2Fsvg")],
+    ["a % with one hex digit", `${encodeURIComponent(GOOD_SVG)}%4`],
+    ["a trailing %", `${encodeURIComponent(GOOD_SVG)}%`],
+  ])("rejects an icon href carrying %s with the ICON_HREF_CHARS message", (_name, raw) => {
+    expect(() => decodeURIComponent(raw)).toThrow(URIError);
     const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
     expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
     expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
