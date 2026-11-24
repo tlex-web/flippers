@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: "06.4"
 current_phase_name: "Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording"
 status: executing
-stopped_at: Completed 06.4-01-PLAN.md
-last_updated: "2026-11-24T16:59:14.496Z"
+stopped_at: Completed 06.4-02-PLAN.md
+last_updated: "2026-11-24T17:06:16.593Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.4 execution started
-state_head: 6b78c0b161ab807f96218c6e51b2a179eb832c28
+state_head: 9d2e2d9d08d2d699dc502d3aa5aebe3da04ed9b5
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 74
-  completed_plans: 71
+  completed_plans: 72
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 ## Current Position
 
 Phase: 06.4 (Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-11-24 — Phase 06.4 execution started
 
@@ -137,6 +137,7 @@ Progress: [██████████] 100%
 | Phase 06.3 P02 | 8min | 2 tasks | 3 files |
 | Phase 06.3 P03 | 13min | 3 tasks | 3 files |
 | Phase 06.4 P01 | 10 min | 2 tasks | 5 files |
+| Phase 06.4 P02 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -316,6 +317,7 @@ Recent decisions affecting current work:
 - [Phase 06.3]: 06.3-03: ruling A - own-sling failures classified by first sling contact; the cross shot that ricochets into its own sling counts under the opposite-sling cap. Literal never-touches reading (B) rejected
 - [Phase 06.4]: 06.4-01: HUD layout switch is measured (sideHudClears on the fitted canvas vs the panel's measured right edge), never a width media query; bar mode = constant-height 3-row grid above the table
 - [Phase 06.4]: 06.4-01: bar mode hides the keyboard list except Mute, the Windows note and #hud-diag; ball/best share one cell with min-height so the bar never changes height
+- [Phase 06.4]: 06.4-02: sling rim SLING_RIM #7d82a8 at 0.015 m on every segment != el.kickFace, between body fill and amber rubber; contrast 5.35 vs BG_BOTTOM, 3.62 vs SLING_BODY, below the rubber's 11.43
 
 ### Pending Todos
 
@@ -361,6 +363,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T16:59:06.469Z
-Stopped at: Completed 06.4-01-PLAN.md
+Last session: 2026-11-24T17:06:08.421Z
+Stopped at: Completed 06.4-02-PLAN.md
 Resume file: None
