@@ -251,15 +251,28 @@ const PROCEDURAL_ICON =
   /<link\s+rel="icon"\s+type="image\/svg\+xml"\s+href="data:image\/svg\+xml,([^"]*)"\s*\/?>/g;
 
 /**
+ * Every character the raw icon href payload may hold: ASCII letters and digits,
+ * `%` escapes, what encodeURIComponent leaves unescaped (`-_.!~*'()`), and the
+ * space, `=`, `/` and `:` the real favicon writes literally.
+ */
+const ICON_HREF_CHARS = /^[A-Za-z0-9%\-_.!~*'() =/:]*$/;
+
+/**
  * `html` with its one procedural icon link removed, so the unchanged PATTERNS
  * scan the rest. Throws unless exactly one such link is present, its raw href
- * holds no HTML character reference, and its decoded SVG passes
- * validateIconSvg.
+ * holds no HTML character reference and only ICON_HREF_CHARS, and its decoded
+ * SVG passes validateIconSvg.
  *
  * 06.4.1-REVIEW WR-01: the browser's HTML tokenizer decodes character
  * references in the attribute value before it reads the data: URL, so `&lt;`,
  * `&#x68;` and the like would let the validator check different text from what
  * the browser renders. A literal `&` is rejected rather than decoded.
+ *
+ * 06.4.1-REVIEW WR-01 (second pass): the URL parser then deletes every raw tab,
+ * LF and CR before the data: body is percent-decoded, so `st<LF>yle=` would reach
+ * the browser as `style=` while every token check sees it split. The raw href is
+ * held to a positive character allowlist instead, which also closes any other
+ * URL-parser normalization of characters the favicon does not need.
  */
 function stripProceduralIcon(html: string): string {
   const matches = [...html.matchAll(PROCEDURAL_ICON)];
@@ -272,6 +285,11 @@ function stripProceduralIcon(html: string): string {
   const raw = m[1] ?? "";
   if (raw.includes("&")) {
     throw new Error("icon href must not contain HTML character references");
+  }
+  if (!ICON_HREF_CHARS.test(raw)) {
+    throw new Error(
+      "icon href holds a raw character outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
+    );
   }
   validateIconSvg(decodeURIComponent(raw));
   return html.slice(0, m.index) + html.slice(m.index + m[0].length);
@@ -468,6 +486,28 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     const link = `<link rel="icon" type="image/svg+xml" href="${href}" />`;
     expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
     expect(() => stripProceduralIcon(link)).toThrow("HTML character references");
+  });
+
+  // 06.4.1-REVIEW WR-01 (second pass): built by hand, because iconLink() would
+  // percent-encode the raw tab, LF or CR that the URL parser deletes.
+  it.each<readonly [string, string, string, string]>([
+    ["a style attribute split by a raw LF", withAttr("style='fill:red'"), "style", "st\nyle"],
+    ["an event attribute split by a raw tab", withAttr("onload='x'"), "onload", "on\tload"],
+    [
+      "url( split by a raw CR",
+      withElement("<rect width='1' height='1' filter='url(#0b0420)'/>"),
+      "url(",
+      "u\rrl(",
+    ],
+  ])("rejects an icon href carrying %s", (_name, svg, token, split) => {
+    const encoded = encodeURIComponent(svg);
+    const raw = encoded.replace(token, split);
+    expect(raw).not.toBe(encoded);
+    // What the browser decodes once the URL parser drops the raw character.
+    expect(raw.replace(/[\t\n\r]/g, "")).toBe(encoded);
+    const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
+    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
+    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
   });
 
   it("two procedural icon links throw with the count", () => {
