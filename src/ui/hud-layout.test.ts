@@ -35,11 +35,11 @@ function ev(code: string, repeat = false) {
 }
 
 /** Each key cap the bar-mode hint shows, and the event code it names. */
-const KEY_CODE: Readonly<Record<string, string>> = {
+const KEY_CODE = {
   Space: "Space",
   "←": "ArrowLeft",
   "→": "ArrowRight",
-};
+} as const;
 
 /** The bar-mode hint's inner markup ("" when it is missing). */
 function hintBody(): string {

@@ -96,6 +96,28 @@
         grid-area: status;
         line-height: 1.2; /* text height = its min-height: 1.2em */
       }
+      /* Bar-mode control hint (06.4.1, 06.4-UI-REVIEW fix 1): static and not
+         announced; it shares the status cell and shows only while the status
+         line is empty. visibility, not display, keeps the row height constant.
+         Side mode shows the full controls list instead. */
+      .hud-hint {
+        display: none;
+      }
+      #sandbox[data-hud="bar"] .hud-hint {
+        display: block;
+        grid-area: status; /* shares the status cell */
+        min-width: 0; /* never widens the grid (320 px) */
+        margin: 0; /* a p's default 1em margins would grow the status row */
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 12px;
+        line-height: 1.6; /* 12 px x 1.6 = 19.2 px = the status row's 16 px x 1.2 */
+        color: var(--text-muted);
+      }
+      #sandbox[data-hud="bar"] .hud-status:not(:empty) + .hud-hint {
+        visibility: hidden;
+      }
       #sandbox[data-hud="bar"] .hud-controls {
         grid-area: mute;
         justify-self: end;
@@ -207,7 +229,8 @@
         white-space: nowrap;
       }
       .hud-controls kbd,
-      .hud-controls-note kbd {
+      .hud-controls-note kbd,
+      .hud-hint kbd {
         font: inherit;
         min-width: 1.2em;
         padding: 0 4px;
@@ -353,6 +376,7 @@
         <div id="hud-ball" class="hud-ball"></div>
         <div id="hud-best" class="hud-best"></div>
         <div id="hud-status" class="hud-status" role="status" aria-live="polite"></div>
+        <p class="hud-hint">Hold <kbd>Space</kbd> to launch · <kbd>←</kbd> <kbd>→</kbd> flip</p>
         <dl id="hud-controls" class="hud-controls">
           <dt>Start</dt>
           <dd><kbd>Enter</kbd></dd>

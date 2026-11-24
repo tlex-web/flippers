@@ -175,6 +175,8 @@ describe("statusText (GAME-02/03, 06-UI-SPEC status line)", () => {
     ["attract", 0, "PRESS ENTER TO START"],
     ["gameOver", 0, "GAME OVER · PRESS ENTER"],
     ["warning", 0, "WARNING"],
+    // index.html shows the bar hint through .hud-status:not(:empty) + .hud-hint,
+    // so the none status must stay the empty string.
     ["none", 0, ""],
   ] as const)("(%s, %d) reads %j", (code, value, text) => {
     expect(statusText(code, value)).toBe(text);
