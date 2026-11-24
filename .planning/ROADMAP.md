@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
 - [x] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage** (completed 2026-11-23)
 - [x] **Phase 06.3: Fix slingshot deflection on flipper-root shots** (completed 2026-11-24)
-- [ ] **Phase 06.4: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording**
+- [x] **Phase 06.4: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording** (completed 2026-11-24)
 
 ## Phase Details
 
@@ -353,7 +353,7 @@ Plans:
 **Goal:** The HUD never covers the playfield. Wide windows keep today's top-left panel. Wherever that panel would reach the fitted table (768x1024, 375x812, square windows), a measured switch turns it into a constant-height 3-row bar above the table, and the table is fitted under it. Both slingshots show a visible slate rim on their passive faces under the amber kick face. The change is render-only: geometry, physics and feel are untouched. 06.3's D-13 text, the root-shot test titles and the ledgers state the own-sling gate by first sling contact (user ruling A). Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3.
 **Requirements**: TBD
 **Depends on:** Phase 06.3
-**Plans:** 4/4 plans executed (2 waves)
+**Plans:** 4/4 plans complete (2 waves)
 
 Plans:
 **Wave 1**
