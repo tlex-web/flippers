@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.3"
-current_phase_name: Fix slingshot deflection on flipper-root shots
-status: verifying
-stopped_at: Completed 06.3-03-PLAN.md
-last_updated: "2026-11-24T01:52:36.571Z"
+status: completed
+stopped_at: Phase 06.3 complete — all phases complete
+last_updated: "2026-11-24T02:08:50.017Z"
 last_activity: 2026-11-24
-last_activity_desc: Phase 06.3 execution started
-state_head: 70faae10545a6410085644edd39a11093aac3dd1
+last_activity_desc: Phase 06.3 complete
+state_head: 8e5b4e81eb6e38e267ecee04cf32559b46c3b657
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 70
   completed_plans: 70
+  percent: 67
 milestone_name: milestone
 ---
 
@@ -28,18 +28,18 @@ See: .planning/PROJECT.md (updated 2026-11-23)
 
 ## Current Position
 
-Phase: 06.3 (Fix slingshot deflection on flipper-root shots) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-11-24 — Phase 06.3 execution started
+Phase: 06.3
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-11-24 — Phase 06.3 complete
 
-Progress: [████████░░] 75%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 68
+- Total plans completed: 71
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -55,6 +55,7 @@ Progress: [████████░░] 75%
 | 06 | 14 | - | - |
 | 06.1 | 5 | - | - |
 | 06.2 | 6 | - | - |
+| 06.3 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -315,8 +316,9 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- [Root-struck flipper shots deflect off the slingshot's lower face (major, open)](.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md): user-observed at the 06.2-03 check, not a review finding and not resolved by 06.2. A v1.0 item to plan before the milestone closes (gap plan or 06.3 insert).
+- [Rescale bat to ball for root shots (backlog)](.planning/todos/pending/2026-11-24-rescale-bat-to-ball-for-root-shots.md): the root strip (d < 0.25 m) still meets the sling's inlane corner after 06.3 (10/139 clear vs 118/139 with no slings); deferred to a bat-to-ball rescale (D-03).
 
+(The 2026-11-23 root-shot sling-deflection todo was closed by 06.3-03: [todo file](.planning/todos/completed/2026-11-23-root-shot-deflects-off-slingshot.md).)
 (The 2026-11-21 load-timeout todo was closed by 05-07: [todo file](.planning/todos/completed/2026-11-21-give-heavy-simulation-tests-an-explicit-timeout-so-the-suite.md).)
 (The 2026-11-23 hinge-pocket soft-lock todo was closed by 06.2-02: [todo file](.planning/todos/completed/2026-11-23-dead-flipper-hinge-pocket-soft-lock.md).)
 
@@ -355,5 +357,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-11-24T01:52:33.773Z
-Stopped at: Completed 06.3-03-PLAN.md
+Stopped at: Phase 06.3 complete — all phases complete
 Resume file: None

@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Juice & Polish** - Screen shake, particles, lighting, skill shot, ball-save, and persisted high score (completed 2026-11-23)
 - [x] **Phase 06.1: Address tech debt: bat/sling pinch (WR-03) + review hygiene** (completed 2026-11-23)
 - [x] **Phase 06.2: Address tech debt: ball-search soft-lock + 06.1 review triage** (completed 2026-11-23)
-- [ ] **Phase 06.3: Fix slingshot deflection on flipper-root shots**
+- [x] **Phase 06.3: Fix slingshot deflection on flipper-root shots** (completed 2026-11-24)
 
 ## Phase Details
 
@@ -335,7 +335,7 @@ Plans:
 **Goal:** Both slingshots are trimmed (lower-right corner slid up along the kick face, kick speed and direction unchanged, kick face named explicitly) so flips from mid-bat to the tip (0.25 m ≤ d ≤ 0.45 m from the hinge) reach the upper field without first touching their own bat's sling, on both bats at every flip timing. Today 61 such flips hit their own sling first. The corner is t = 0.28, at (0.944, 4.102). Cross shots that graze the opposite sling are reported as a metric, capped at the measured 30 contacts with at most 2 knocked back down (D-13/D-14). The root strip (d < 0.25 m) stays blocked by the sling's inlane corner. That is a measured, reported known limit, deferred to a bat-to-ball rescale. The fix keeps rule (1) bat clearance over the full sweep, keeps the sling lift at or below 0.35 m, and keeps the sling-pinch proof GREEN. Source: `.planning/todos/pending/2026-11-23-root-shot-deflects-off-slingshot.md`; decisions in `06.3-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.2
-**Plans:** 3/3 plans executed (3 waves)
+**Plans:** 3/3 plans complete (3 waves)
 
 Plans:
 **Wave 1**
