@@ -7,8 +7,9 @@
  * a seeded starfield (identical on every load); then, in world meters, a
  * "lighter" light pool over the lower-center play area and every non-mount
  * table element by kind, each bumper, slingshot and wall preceded by its own
- * down-right drop shadow (PLSH-03, D-20); then every unlit lamp lens from
- * `buildLampShapes` with its faint specular rim (D-21); last, back at
+ * down-right drop shadow (PLSH-03, D-20), and each slingshot gets a slate rim
+ * on its passive faces under the amber kick-face rubber (06.4); then every
+ * unlit lamp lens from `buildLampShapes` with its faint specular rim (D-21); last, back at
  * identity, the vignette over the whole backing. Flipper mounts are skipped: the bats are drawn live.
  * `shadowBlur` is used only here (bake time, D-24) and is reset to 0 before
  * returning. Pure geometry and gradients, no assets.
@@ -39,6 +40,8 @@ import {
   RUBBER_LINE_M,
   SENSOR_LINE_M,
   SLING_BODY,
+  SLING_RIM,
+  SLING_RIM_LINE_M,
   SLING_RUBBER,
   STAR,
   VIGNETTE_CLEAR,
@@ -284,6 +287,18 @@ function drawSlingshot(ctx: CanvasRenderingContext2D, el: ResolvedElement): void
   traceElement(ctx, el);
   ctx.fillStyle = SLING_BODY;
   ctx.fill();
+  // Passive-face rim (06.4): every segment but the kick face, under the rubber.
+  ctx.beginPath();
+  for (let i = 0; i < el.segments.length; i++) {
+    if (i === el.kickFace) continue;
+    const s = el.segments[i];
+    if (!s) continue;
+    ctx.moveTo(s.a.x, s.a.y);
+    ctx.lineTo(s.b.x, s.b.y);
+  }
+  ctx.strokeStyle = SLING_RIM;
+  ctx.lineWidth = SLING_RIM_LINE_M;
+  ctx.stroke();
   const face = deriveKickFace(el);
   if (!face) return;
   ctx.beginPath();
