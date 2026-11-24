@@ -442,7 +442,11 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     for (const hex of [palette.BG_BOTTOM, palette.WALL, palette.BUMPER_CAP]) {
       expect(PALETTE_HEX.has(hex), hex).toBe(true);
     }
-    expect([...PALETTE_HEX].every((v) => /^#[0-9a-f]{6}$/.test(v))).toBe(true);
+    const rgba = Object.values<unknown>(palette).filter(
+      (v): v is string => typeof v === "string" && v.startsWith("rgba("),
+    );
+    expect(rgba).toContain(palette.WALL_GLOW);
+    for (const v of rgba) expect(PALETTE_HEX.has(v.toLowerCase()), v).toBe(false);
   });
 
   it("GOOD_SVG is the decoded payload of the real favicon", () => {
