@@ -2,9 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 
 import { CollisionRouter } from "../app/collision-router";
 import { ballMass } from "../physics/constants";
-import type { BallId, BallState, CollisionEvent, CollisionPartnerKind } from "../physics/types";
+import type {
+  BallId,
+  BallState,
+  CollisionEvent,
+  CollisionPartnerKind,
+  Vec2,
+} from "../physics/types";
 import { resolve, type ResolvedElement } from "../table/resolve";
-import { TABLE_SPEC, type TableSpec } from "../table/spec";
+import { mirrorPath, TABLE_SPEC, type PathNode, type TableSpec } from "../table/spec";
 import {
   deriveKickFace,
   ReactiveElements,
@@ -301,6 +307,22 @@ function tableElement(id: number): ResolvedElement {
   return el;
 }
 
+/** Sling 300 trimmed to t = 0.28 (06.3 D-14): its 0.266 m hypotenuse is shorter than the 0.75 m inlane edge and the 0.505 m lower face. */
+const TRIMMED_LEFT_SLING: readonly Vec2[] = [
+  { x: 0.86, y: 3.85 },
+  { x: 0.86, y: 4.6 },
+  { x: 0.944, y: 4.102 },
+];
+
+/** Resolve a TABLE_SPEC slingshot with its path swapped for `path`. */
+function slingWithPath(id: number, path: readonly PathNode[]): ResolvedElement {
+  const el = TABLE_SPEC.find((x) => x.id === id);
+  if (!el || !("path" in el)) throw new Error(`polyline element ${id} missing`);
+  const resolved = resolve([{ ...el, path }])[0];
+  if (!resolved) throw new Error(`element ${id} did not resolve`);
+  return resolved;
+}
+
 describe("slingshot kick face (ELEM-02 geometry)", () => {
   it("the face of sling 300 is its hypotenuse, normal out to the field and up-table", () => {
     const f = deriveKickFace(tableElement(300));
@@ -318,6 +340,24 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
     expect(f.nx).toBeCloseTo(-0.9487, 3);
     expect(f.ny).toBeCloseTo(-0.3162, 3);
     expect(Math.hypot(f.ax - f.bx, f.ay - f.by)).toBeCloseTo(Math.hypot(0.3, 0.9), 9);
+  });
+
+  it("the kick face is the named hypotenuse even where it is not the longest segment: sling 300 nx > 0, ny < 0, never the inlane edge; sling 301 mirrors it (06.3 D-09)", () => {
+    const left = deriveKickFace(slingWithPath(300, TRIMMED_LEFT_SLING));
+    if (!left) throw new Error("no face on trimmed sling 300");
+    const ends = [`${left.ax},${left.ay}`, `${left.bx},${left.by}`].sort();
+    expect(ends).toEqual(["0.86,3.85", "0.944,4.102"]);
+    expect(left.nx).toBeGreaterThan(0);
+    expect(left.ny).toBeLessThan(0);
+
+    const right = deriveKickFace(slingWithPath(301, mirrorPath(TRIMMED_LEFT_SLING)));
+    if (!right) throw new Error("no face on trimmed sling 301");
+    expect(right.nx).toBeLessThan(0);
+    expect(right.ny).toBeLessThan(0);
+    expect(Math.hypot(right.ax - right.bx, right.ay - right.by)).toBeCloseTo(
+      0.28 * Math.hypot(0.3, 0.9),
+      9,
+    );
   });
 
   it("an element with no segment has no face", () => {
