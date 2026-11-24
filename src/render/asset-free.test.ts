@@ -129,6 +129,38 @@ function scan(files: Readonly<Record<string, string>>): string[] {
   return hits;
 }
 
+/** The named pattern's RegExp; throws if the pattern was removed from PATTERNS. */
+function byName(name: string): RegExp {
+  const p = PATTERNS.find((q) => q.name === name);
+  if (!p) throw new Error(`${name} pattern missing`);
+  return p.re;
+}
+
+/**
+ * The one procedural favicon index.html may carry (06.4.1): an icon link of
+ * exactly this shape, attributes in this order, whose href is an inline SVG
+ * data URI. `\s+` between attributes because Prettier puts each on its own
+ * line. Global, so matchAll can count every occurrence (never call .test on it:
+ * lastIndex is stateful).
+ */
+const PROCEDURAL_ICON =
+  /<link\s+rel="icon"\s+type="image\/svg\+xml"\s+href="data:image\/svg\+xml,([^"]*)"\s*\/?>/g;
+
+/**
+ * `html` with its one procedural icon link removed, so the unchanged PATTERNS
+ * scan the rest. Throws unless exactly one such link is present.
+ */
+function stripProceduralIcon(html: string): string {
+  const matches = [...html.matchAll(PROCEDURAL_ICON)];
+  const m = matches[0];
+  if (matches.length !== 1 || !m) {
+    throw new Error(
+      `expected exactly one procedural SVG icon link in index.html, found ${matches.length}`,
+    );
+  }
+  return html.slice(0, m.index) + html.slice(m.index + m[0].length);
+}
+
 describe("asset-free tree (RND-01)", () => {
   it("scans every non-test source file under src, plus index.html", () => {
     const files = Object.keys(SOURCES);
@@ -143,7 +175,7 @@ describe("asset-free tree (RND-01)", () => {
   });
 
   it("finds no image, audio or font asset, and no network fetch, in src or index.html", () => {
-    const hits = scan({ ...SOURCES, "/index.html": indexHtml });
+    const hits = scan({ ...SOURCES, "/index.html": stripProceduralIcon(indexHtml) });
     expect(hits).toEqual([]);
   });
 
@@ -170,11 +202,6 @@ describe("asset-free tree (RND-01)", () => {
   });
 
   it("the script patterns catch remote modules, created media, data: URIs and workers, not local imports", () => {
-    const byName = (name: string): RegExp => {
-      const p = PATTERNS.find((q) => q.name === name);
-      if (!p) throw new Error(`${name} pattern missing`);
-      return p.re;
-    };
     const remote = byName("remote ES module specifier");
     expect(remote.test('const m = await import("https://cdn.example/m.js");')).toBe(true);
     expect(remote.test('import x from "//cdn.example/x.js";')).toBe(true);
@@ -202,5 +229,17 @@ describe("asset-free tree (RND-01)", () => {
       expect(p.re.test(p.sample), `${p.name} missed its sample`).toBe(true);
       expect(scan({ "/sample.ts": p.sample })).toContain(`/sample.ts: ${p.name}`);
     }
+  });
+});
+
+describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
+  it("index.html carries exactly one procedural SVG icon link, and stripping it leaves no icon", () => {
+    const stripped = stripProceduralIcon(indexHtml);
+    expect(stripped.includes('rel="icon"')).toBe(false);
+  });
+
+  it("the icon link and data: URI patterns still exist and still trip on the raw index.html", () => {
+    expect(byName("icon link").test(indexHtml)).toBe(true);
+    expect(byName("data: URI asset").test(indexHtml)).toBe(true);
   });
 });
