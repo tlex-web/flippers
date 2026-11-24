@@ -14,12 +14,28 @@ import * as palette from "./palette";
  * into the build verbatim, bypassing every source scan).
  *
  * One icon is allowed (06.4.1): index.html may carry exactly one
- * `<link rel="icon" type="image/svg+xml">` whose href is an inline SVG data URI
- * drawn only from palette.ts colors, with every shape declaring its own fill
- * (SVG's default fill is black, which palette.ts does not hold). The gate
- * validates that one link's decoded SVG and strips the link before scanning
- * with the unchanged patterns, so every other icon link, icon file and `data:`
- * URI still fails.
+ * `<link rel="icon" type="image/svg+xml">` whose href is an inline SVG data URL
+ * drawn only from palette.ts colors. The gate reads it through real parsers,
+ * the same routes the browser takes, never a regex over markup:
+ *
+ * - HTML: jsdom builds the spec HTML tree. Exactly one link may carry the icon
+ *   rel token, its rel, type and attribute set are pinned, and no noscript
+ *   element may appear (jsdom parses with the scripting flag off and browsers
+ *   with it on, which changes how noscript content tokenizes).
+ * - data: URL: Node's WHATWG URL parser and fetch (the fetch spec's data: URL
+ *   processor) decode the href; the MIME type must be exactly image/svg+xml and
+ *   every byte printable ASCII, so the browser's XML decoder has nothing to
+ *   sniff and the decoded text is provably what the browser renders.
+ * - SVG: jsdom's XML parser builds the tree (decoding references first), then
+ *   element and attribute allowlists, a per-shape fill presence check (SVG's
+ *   initial fill is black, which palette.ts does not hold) and a palette check
+ *   on every paint value.
+ *
+ * The icon link is then removed and the serialized remainder (canonical
+ * markup: every attribute double-quoted) is scanned with the unchanged
+ * patterns, so every other icon link, icon file and `data:` URI still fails.
+ * The regex validator this replaces was retired after six 06.4.1 review passes
+ * kept finding validator-vs-browser parsing mismatches.
  *
  * The sources are read through Vite's raw imports (the project has no Node
  * typings, and this is the same idiom key-labels.test.ts uses for index.html).
@@ -153,39 +169,19 @@ const PALETTE_HEX: ReadonlySet<string> = new Set(
     .map((v) => v.toLowerCase()),
 );
 
-/** The SVG namespace, the one http string the favicon payload may hold. */
+/** The SVG namespace: the favicon's root and every element in it must be in it. */
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** The start every favicon payload must have (an SVG loaded as an image needs its xmlns). */
-const SVG_PREFIX = `<svg xmlns='${SVG_NS}'`;
+/** The namespace XML puts every `xmlns` and `xmlns:*` declaration attribute in. */
+const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
 
 /**
- * Tokens the decoded favicon SVG may not contain (case-insensitive): anything
- * that fetches (url(, href, <image, <use, @import), runs script (<script,
- * <foreignObject, javascript:, on* event attributes) or styles outside the
- * paint attributes (<style, a style attribute). Not global, so .test is safe.
- */
-const ICON_FORBIDDEN: readonly { readonly name: string; readonly re: RegExp }[] = [
-  { name: "url(", re: /url\(/i },
-  { name: "href", re: /href/i },
-  { name: "<image", re: /<image/i },
-  { name: "<use", re: /<use/i },
-  { name: "<script", re: /<script/i },
-  { name: "<style", re: /<style/i },
-  { name: "<foreignObject", re: /<foreignobject/i },
-  { name: "@import", re: /@import/i },
-  { name: "javascript:", re: /javascript:/i },
-  { name: "style attribute", re: /\sstyle\s*=/i },
-  { name: "event attribute", re: /\son[a-z]+\s*=/i },
-];
-
-/**
- * The only elements the favicon SVG may use (case-sensitive, as SVG is).
- * 06.4.1-REVIEW WR-02: ICON_FORBIDDEN is a denylist, so any element nobody
- * listed got in by default, e.g. SMIL `<set>` and `<animate>`, which repaint
- * through `to`/`values` that the paint check never reads. This allowlist is
- * the backstop: static shapes and grouping only, nothing that animates,
- * filters, fetches or holds text.
+ * The only elements the favicon SVG may use (by localName, in the SVG
+ * namespace; case-sensitive, as SVG is). An allowlist, not a denylist: an
+ * element nobody listed would otherwise get in by default, e.g. SMIL `<set>`
+ * and `<animate>`, which repaint through `to`/`values` that the paint check
+ * never reads (06.4.1-REVIEW WR-02). Static shapes and grouping only, nothing
+ * that animates, filters, fetches or holds text.
  */
 const ICON_ELEMENTS: ReadonlySet<string> = new Set([
   "svg",
@@ -197,18 +193,18 @@ const ICON_ELEMENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The only attributes the favicon SVG may use (case-sensitive): the xmlns,
- * geometry, and the fill/stroke paint the palette check reads.
- * 06.4.1-REVIEW WR-02 (second pass): attributes were still a denylist, so an
- * unlisted presentation attribute such as `filter='invert(1)'` recolored the
- * icon with no flagged token. Nothing that filters, masks, clips, animates or
- * fetches is listed.
- * 06.4.1-REVIEW IN-03: opacity, fill-opacity and stroke-opacity are left out on
- * purpose. Alpha blends palette colors into rendered colors palette.ts does not
- * hold, so partial opacity is not allowed in the favicon.
+ * The only null-namespace attributes the favicon SVG may use (by localName;
+ * case-sensitive): geometry, and the fill/stroke paint the palette check
+ * reads. The bare `xmlns` declaration is admitted separately by namespace, and
+ * every other namespaced attribute (`xmlns:*`, `xlink:*`, `xml:*`) fails.
+ * Nothing that filters, masks, clips, animates or fetches is listed: an
+ * unlisted presentation attribute such as `filter='invert(1)'` would recolor
+ * the icon with no paint value to check (06.4.1-REVIEW WR-02).
+ * opacity, fill-opacity and stroke-opacity are left out on purpose: alpha
+ * blends palette colors into rendered colors palette.ts does not hold, so
+ * partial opacity is not allowed in the favicon (06.4.1-REVIEW IN-03).
  */
 const ICON_ATTRS: ReadonlySet<string> = new Set([
-  "xmlns",
   "viewBox",
   "width",
   "height",
@@ -228,178 +224,10 @@ const ICON_ATTRS: ReadonlySet<string> = new Set([
 
 /**
  * The ICON_ELEMENTS that paint with SVG's initial fill, black, unless they
- * declare one. palette.ts holds no black, so each must carry its own fill.
+ * declare one. palette.ts holds no black, so each must carry its own fill
+ * (stricter than inheriting one from a `<g>`).
  */
 const ICON_SHAPES: ReadonlySet<string> = new Set(["rect", "circle", "ellipse", "path"]);
-
-/**
- * One well-formed open tag, read at a `<` (sticky: set lastIndex first): its
- * name, then its quoted attributes as one group for ICON_TAG_ATTR to split.
- */
-const ICON_OPEN_TAG = /<([a-z]+)((?:\s+[^\s'"=/>]+\s*=\s*(?:'[^']*'|"[^"]*"))*)\s*\/?>/y;
-
-/** One quoted attribute; the value is consumed whole, so its text is never read as a name. */
-const ICON_TAG_ATTR = /\s+([^\s'"=/>]+)\s*=\s*(?:'[^']*'|"[^"]*")/g;
-
-/**
- * Throws unless `svg` is a static, palette-colored drawing: it starts with the
- * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
- * token and no http beyond that xmlns, every fill, stroke and stop-color value
- * is none or a palette.ts hex once CSS whitespace (ASCII only) is stripped
- * from its ends, every `#hex` in it is a palette.ts hex, every `<` opens or
- * closes an ICON_ELEMENTS element, every attribute name is in ICON_ATTRS (both
- * allowlists, not denylists), and every ICON_SHAPES element declares its own
- * fill. The element, attribute and fill checks run last so the more specific
- * checks above name their own faults.
- *
- * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
- * the browser reads the SVG, so a reference could spell out any token below
- * while the text checks see something else. The favicon needs none, so any `&`
- * is rejected outright rather than decoded.
- */
-function validateIconSvg(svg: string): void {
-  if (!svg.startsWith(SVG_PREFIX)) {
-    throw new Error(`icon SVG must start with ${SVG_PREFIX}`);
-  }
-  if (svg.includes("&")) {
-    throw new Error("icon SVG must not contain XML character or entity references");
-  }
-  for (const f of ICON_FORBIDDEN) {
-    if (f.re.test(svg)) throw new Error(`icon SVG contains forbidden ${f.name}`);
-  }
-  if (/http/i.test(svg.replace(`xmlns='${SVG_NS}'`, ""))) {
-    throw new Error("icon SVG references http outside its xmlns");
-  }
-  // 06.4.1-REVIEW WR-01 (fourth pass): strip only CSS whitespace (space, tab,
-  // LF, CR, FF). String.prototype.trim() also strips U+00A0, U+FEFF and the
-  // rest of Unicode's whitespace, which CSS keeps, so the browser rejects such
-  // a value as a color and the shape paints SVG's initial black.
-  // 06.4.1-REVIEW WR-01 (fifth pass): the value is read up to its closing quote
-  // with a negated class, not `.`, which stops at LF and CR. With `.`, a value
-  // such as `fill='<LF>red'` made no match at all, so it was never checked, and
-  // the browser turned the LF into a space, trimmed it and painted red.
-  for (const m of svg.matchAll(/\b(fill|stroke|stop-color)\s*=\s*(?:'([^']*)'|"([^"]*)")/gi)) {
-    const raw = m[2] ?? m[3] ?? "";
-    const value = raw.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, "").toLowerCase();
-    if (value !== "none" && !PALETTE_HEX.has(value)) {
-      throw new Error(`icon SVG paint ${m[1]}=${raw} is not none or a palette.ts hex`);
-    }
-  }
-  for (const m of svg.matchAll(/#[0-9a-f]+/gi)) {
-    if (!PALETTE_HEX.has(m[0].toLowerCase())) {
-      throw new Error(`icon SVG color ${m[0]} is not a palette.ts hex`);
-    }
-  }
-  // Everything after `<` up to whitespace, `/` or `>`: comments, CDATA, doctype
-  // and processing instructions are rejected too, not skipped.
-  for (const m of svg.matchAll(/<\/?([^\s/>]*)/g)) {
-    const name = m[1] ?? "";
-    if (!ICON_ELEMENTS.has(name)) {
-      throw new Error(`icon SVG element <${name}> is not allowed`);
-    }
-  }
-  // Every name directly before an `=`, after whitespace or a quote: XML puts
-  // whitespace between attributes, and the quote also catches a malformed
-  // `'filter=` with none. Text inside a value only adds names (stricter), and
-  // `&` is already rejected, so no name is hidden behind a reference.
-  for (const m of svg.matchAll(/[\s'"]([^\s'"=/>]+)\s*=/g)) {
-    const name = m[1] ?? "";
-    if (!ICON_ATTRS.has(name)) {
-      throw new Error(`icon SVG attribute ${name} is not allowed`);
-    }
-  }
-  // 06.4.1-REVIEW WR-01 (third pass): the paint checks only read paint that is
-  // written down, and a shape with no fill paints SVG's initial black. So every
-  // shape must declare its own fill (stricter than inheriting one from a <g>).
-  // The tag is read quote-aware, so `fill=` inside another value does not
-  // count, and a tag that does not parse fails rather than being skipped.
-  for (const m of svg.matchAll(/<([a-z]+)/g)) {
-    const name = m[1] ?? "";
-    if (!ICON_SHAPES.has(name)) continue;
-    ICON_OPEN_TAG.lastIndex = m.index;
-    const tag = ICON_OPEN_TAG.exec(svg);
-    if (!tag) throw new Error(`icon SVG <${name}> open tag is malformed`);
-    const attrs = [...(tag[2] ?? "").matchAll(ICON_TAG_ATTR)].map((a) => a[1]);
-    if (!attrs.includes("fill")) {
-      throw new Error(`icon SVG <${name}> has no fill (SVG's initial black is off-palette)`);
-    }
-  }
-}
-
-/**
- * The one procedural favicon index.html may carry (06.4.1): an icon link of
- * exactly this shape, attributes in this order, whose href is an inline SVG
- * data URI. `\s+` between attributes because Prettier puts each on its own
- * line. Global, so matchAll can count every occurrence (never call .test on it:
- * lastIndex is stateful).
- */
-const PROCEDURAL_ICON =
-  /<link\s+rel="icon"\s+type="image\/svg\+xml"\s+href="data:image\/svg\+xml,([^"]*)"\s*\/?>/g;
-
-/**
- * Every character the raw icon href payload may hold: ASCII letters and digits,
- * what encodeURIComponent leaves unescaped (`-_.!~*'()`), the space, `=`, `/`
- * and `:` the real favicon writes literally, and `%` only as a printable-ASCII
- * escape (`%20` to `%7E`), so the decoded SVG holds no non-ASCII character and
- * no control character.
- * 06.4.1-REVIEW IN-01: a lone `%` (a stray one, or `%zz`) used to get past this
- * and make decodeURIComponent throw a bare URIError that named neither the icon
- * nor the rule. An escape that is not valid UTF-8 (`%FF`, `%C3%28`, an encoded
- * surrogate) did the same. Every escape left is one ASCII byte, which always
- * decodes, so each of these now fails here with this gate's own message.
- * 06.4.1-REVIEW WR-01 (fourth pass): CSS whitespace is ASCII only, so a fill
- * padded with U+00A0 or U+FEFF is an invalid color and its shape paints black.
- * The favicon needs no non-ASCII, so none may reach the validator.
- * 06.4.1-REVIEW WR-01 (fifth pass): `%0A` and `%0D` are not removed by the URL
- * parser (only raw tab, LF and CR are), so they reached the decoded SVG, where
- * a paint value holding one slipped past the paint check. The favicon needs no
- * control character, so escapes stop at printable ASCII: `%09`, `%0A`, `%0C`,
- * `%0D`, `%00` and `%7F` all fail here, and validateIconSvg reads values across
- * line breaks as well.
- */
-const ICON_HREF_CHARS = /^(?:[A-Za-z0-9\-_.!~*'() =/:]|%(?:[2-6][0-9A-Fa-f]|7[0-9A-Ea-e]))*$/;
-
-/**
- * `html` with its one procedural icon link removed, so the unchanged PATTERNS
- * scan the rest. Throws unless exactly one such link is present, its raw href
- * holds no HTML character reference and only ICON_HREF_CHARS (so it decodes to
- * printable ASCII and decodeURIComponent cannot throw), and its decoded SVG passes
- * validateIconSvg.
- *
- * 06.4.1-REVIEW WR-01: the browser's HTML tokenizer decodes character
- * references in the attribute value before it reads the data: URL, so `&lt;`,
- * `&#x68;` and the like would let the validator check different text from what
- * the browser renders. A literal `&` is rejected rather than decoded.
- *
- * 06.4.1-REVIEW WR-01 (second pass): the URL parser then deletes every raw tab,
- * LF and CR before the data: body is percent-decoded, so `st<LF>yle=` would reach
- * the browser as `style=` while every token check sees it split. The raw href is
- * held to a positive character allowlist instead, which also closes any other
- * URL-parser normalization of characters the favicon does not need.
- */
-function stripProceduralIcon(html: string): string {
-  const matches = [...html.matchAll(PROCEDURAL_ICON)];
-  const m = matches[0];
-  if (matches.length !== 1 || !m) {
-    throw new Error(
-      `expected exactly one procedural SVG icon link in index.html, found ${matches.length}`,
-    );
-  }
-  const raw = m[1] ?? "";
-  if (raw.includes("&")) {
-    throw new Error("icon href must not contain HTML character references");
-  }
-  if (!ICON_HREF_CHARS.test(raw)) {
-    throw new Error(
-      "icon href holds a raw character, or a bad or non-printable-ASCII % escape, outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
-    );
-  }
-  validateIconSvg(decodeURIComponent(raw));
-  return html.slice(0, m.index) + html.slice(m.index + m[0].length);
-}
-
-/** The namespace XML puts every `xmlns` and `xmlns:*` declaration attribute in. */
-const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
 
 /** The paint attributes whose values must be none or a palette.ts hex. */
 const PAINT_ATTRS: ReadonlySet<string> = new Set(["fill", "stroke", "stop-color"]);
@@ -599,9 +427,32 @@ const GOOD_SVG =
   "<circle cx='16' cy='16' r='6' fill='#f72585'/>" +
   "</svg>";
 
-/** A procedural icon link (the exact admitted shape) carrying `svg` as its data URI. */
+/** A procedural icon link (rel, type and href only) carrying `svg` as its data URL. */
 function iconLink(svg: string): string {
   return `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(svg)}" />`;
+}
+
+/** A procedural icon link carrying `raw` verbatim as its data URL body (no encoding). */
+function rawIconLink(raw: string): string {
+  return `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
+}
+
+/** The href of every link jsdom finds in `html` whose rel tokens include icon. */
+function iconHrefs(html: string): string[] {
+  return Array.from(new JSDOM(html).window.document.querySelectorAll("link"))
+    .filter(isIconLink)
+    .map((l) => l.getAttribute("href") ?? "");
+}
+
+/**
+ * Asserts that jsdom finds exactly one icon link in `html`, carrying an SVG
+ * data URL, so a hand-built row reaches decodeIconHref instead of failing
+ * earlier at the HTML layer.
+ */
+function expectOneSvgIconHref(html: string): void {
+  const hrefs = iconHrefs(html);
+  expect(hrefs).toHaveLength(1);
+  expect(hrefs[0]?.startsWith("data:image/svg+xml,")).toBe(true);
 }
 
 /** GOOD_SVG with one extra element before `</svg>`. */
@@ -686,9 +537,11 @@ describe("asset-free tree (RND-01)", () => {
 });
 
 describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
-  it("index.html carries exactly one procedural SVG icon link, it validates, and stripping it leaves no icon", () => {
-    const stripped = stripProceduralIcon(indexHtml);
+  it("index.html carries exactly one procedural SVG icon link, it validates, and stripping it leaves no icon", async () => {
+    const stripped = await stripIconLink(indexHtml);
     expect(stripped.includes('rel="icon"')).toBe(false);
+    expect(stripped.includes("icon")).toBe(false);
+    expect(stripped.includes("data:")).toBe(false);
   });
 
   it("the icon link and data: URI patterns still exist and still trip on the raw index.html", () => {
@@ -707,53 +560,83 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     for (const v of rgba) expect(PALETTE_HEX.has(v.toLowerCase()), v).toBe(false);
   });
 
-  it("GOOD_SVG is the decoded payload of the real favicon", () => {
-    const m = /href="data:image\/svg\+xml,([^"]*)"/.exec(indexHtml);
-    expect(m?.[1] === undefined ? null : decodeURIComponent(m[1])).toBe(GOOD_SVG);
+  it("GOOD_SVG is the decoded payload of the real favicon", async () => {
+    const hrefs = iconHrefs(indexHtml);
+    expect(hrefs).toHaveLength(1);
+    expect(await decodeIconHref(hrefs[0] ?? "")).toBe(GOOD_SVG);
   });
 
-  it("strips one valid procedural icon link down to no link at all", () => {
-    expect(stripProceduralIcon(iconLink(GOOD_SVG)).includes("<link")).toBe(false);
+  it("strips one valid procedural icon link down to no link at all", async () => {
+    expect((await stripIconLink(iconLink(GOOD_SVG))).includes("<link")).toBe(false);
   });
 
-  it("admits every allowlisted element with palette paint", () => {
+  it("admits every allowlisted element with palette paint", async () => {
     const svg = withElement(
       "<g><ellipse cx='16' cy='16' rx='3' ry='2' fill='#4cc9f0'/>" +
         "<path d='M0 0h1v1z' fill='none' stroke='#f72585'/></g>",
     );
-    expect(() => stripProceduralIcon(iconLink(svg))).not.toThrow();
+    await expect(stripIconLink(iconLink(svg))).resolves.toBeTypeOf("string");
+  });
+
+  it("admits a ;base64, SVG data URL (decoded the browser's way)", async () => {
+    const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${btoa(GOOD_SVG)}" />`;
+    await expect(stripIconLink(link)).resolves.toBeTypeOf("string");
   });
 
   it.each<readonly [string, string, string]>([
-    ["no xmlns prefix", GOOD_SVG.replace(` xmlns='${SVG_NS}'`, ""), "must start with"],
-    ["url(", withElement("<rect width='1' height='1' filter='url(#f)'/>"), "forbidden url("],
-    ["href", withElement("<a href='x'></a>"), "forbidden href"],
-    ["<image", withElement("<image width='1' height='1'/>"), "forbidden <image"],
-    ["<use", withElement("<use x='0'/>"), "forbidden <use"],
-    ["<script", withElement("<script>alert(1)</script>"), "forbidden <script"],
-    ["<style", withElement("<style>rect{opacity:0}</style>"), "forbidden <style"],
+    ["no xmlns prefix", GOOD_SVG.replace(` xmlns='${SVG_NS}'`, ""), "root must be <svg>"],
+    ["url(", withElement("<rect width='1' height='1' filter='url(#f)'/>"), "attribute filter"],
+    ["href", withElement("<a href='x'></a>"), "element <a>"],
+    ["<image", withElement("<image width='1' height='1'/>"), "element <image>"],
+    ["<use", withElement("<use x='0'/>"), "element <use>"],
+    ["<script", withElement("<script>alert(1)</script>"), "element <script>"],
+    ["<style", withElement("<style>rect{opacity:0}</style>"), "element <style>"],
     [
       "<foreignObject",
       withElement("<foreignObject width='1' height='1'></foreignObject>"),
-      "forbidden <foreignObject",
+      "element <foreignObject>",
     ],
-    ["@import", withElement("<text>@import x</text>"), "forbidden @import"],
-    ["javascript:", withElement("<text>javascript:void(0)</text>"), "forbidden javascript:"],
-    ["style attribute", withAttr("style='opacity:0'"), "forbidden style attribute"],
-    ["event attribute", withAttr("onload='x'"), "forbidden event attribute"],
-    ["http outside the xmlns", withElement("<text>http://example.com</text>"), "http outside"],
-    ["fill='red'", withAttr("fill='red'"), "paint fill=red"],
-    ['fill="red"', withAttr('fill="red"'), "paint fill=red"],
-    ["fill='#ff0000'", withAttr("fill='#ff0000'"), "paint fill=#ff0000"],
+    ["@import", withElement("<text>@import x</text>"), "element <text>"],
+    ["javascript:", withElement("<text>javascript:void(0)</text>"), "element <text>"],
+    ["style attribute", withAttr("style='opacity:0'"), "attribute style"],
+    ["event attribute", withAttr("onload='x'"), "attribute onload"],
+    ["http outside the xmlns", withElement("<text>http://example.com</text>"), "element <text>"],
+    // withAttr adds a second fill to GOOD_SVG's rect: XML forbids a duplicate
+    // attribute, so the browser renders no icon either. The single-fill rows
+    // below keep the paint intent covered.
+    ["fill='red'", withAttr("fill='red'"), "not well-formed XML"],
+    ['fill="red"', withAttr('fill="red"'), "not well-formed XML"],
+    ["fill='#ff0000'", withAttr("fill='#ff0000'"), "not well-formed XML"],
+    [
+      "a single fill='red'",
+      withElement("<rect width='32' height='32' fill='red'/>"),
+      "paint fill=red",
+    ],
+    [
+      'a single fill="red"',
+      withElement('<rect width="32" height="32" fill="red"/>'),
+      "paint fill=red",
+    ],
+    [
+      "a single fill='#ff0000'",
+      withElement("<rect width='32' height='32' fill='#ff0000'/>"),
+      "paint fill=#ff0000",
+    ],
+    // The XML parser decodes references before the paint check reads the value.
+    [
+      "a fill spelled with an XML character reference",
+      withElement("<rect width='32' height='32' fill='&#x72;ed'/>"),
+      "paint fill=red",
+    ],
     ["off-palette stroke", withAttr("stroke='#123456'"), "paint stroke=#123456"],
-    ["off-palette stop-color", withElement("<stop stop-color='#abcdef'/>"), "paint stop-color"],
-    ["off-palette hex in text", withElement("<text>#ff0000</text>"), "color #ff0000"],
+    ["off-palette stop-color", withElement("<stop stop-color='#abcdef'/>"), "element <stop>"],
+    ["off-palette hex in text", withElement("<text>#ff0000</text>"), "element <text>"],
     [
       "an XML character reference spelling url(",
       withElement("<rect width='1' height='1' filter='&#x75;rl(&#x23;f)'/>"),
-      "XML character or entity references",
+      "attribute filter",
     ],
-    // 06.4.1-REVIEW WR-02: SMIL repaints off-palette without a fill= or #hex.
+    // 06.4.1-REVIEW WR-02: SMIL repaints off-palette without a paint attribute.
     ["SMIL <set>", withElement("<set attributeName='fill' to='red'/>"), "element <set>"],
     [
       "SMIL <animate>",
@@ -766,10 +649,10 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       "element <animateTransform>",
     ],
     ["a filter primitive", withElement("<feFlood flood-color='red'/>"), "element <feFlood>"],
-    ["a comment", withElement("<!-- note -->"), "element <!--"],
+    ["a comment", withElement("<!-- note -->"), "found node type 8"],
     ["an uppercase tag", withElement("<RECT width='1' height='1'/>"), "element <RECT>"],
     // 06.4.1-REVIEW WR-02 (second pass): presentation attributes recolor
-    // without a fill= or #hex.
+    // without a paint value.
     [
       "a filter attribute",
       withAttr("filter='invert(1) drop-shadow(0 0 2px red)'"),
@@ -782,7 +665,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     [
       "an attribute after a quote with no space",
       GOOD_SVG.replace("fill='#0b0420'", "fill='#0b0420'filter='invert(1)'"),
-      "attribute filter",
+      "not well-formed XML",
     ],
     // 06.4.1-REVIEW WR-01 (third pass): a shape with no fill paints black.
     ["a rect with no fill", withElement("<rect width='32' height='32'/>"), "<rect> has no fill"],
@@ -795,119 +678,175 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     [
       "a shape tag with an unquoted value",
       withElement("<rect width=32 height='32' fill='#0b0420'/>"),
-      "<rect> open tag is malformed",
+      "not well-formed XML",
     ],
-  ])("rejects an icon SVG with %s", (_name, svg, rule) => {
-    expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
+    ["a doctype", `<!DOCTYPE svg>${GOOD_SVG}`, "document must hold only its svg root"],
+    [
+      "an xml-stylesheet processing instruction",
+      `<?xml-stylesheet href='x.css'?>${GOOD_SVG}`,
+      "document must hold only its svg root",
+    ],
+    [
+      "an xmlns:xlink declaration",
+      GOOD_SVG.replace("<svg ", "<svg xmlns:xlink='http://www.w3.org/1999/xlink' "),
+      "attribute xmlns:xlink",
+    ],
+    ["an xml:base attribute", withAttr("xml:base='x'"), "attribute xml:base"],
+  ])("rejects an icon SVG with %s", async (_name, svg, rule) => {
+    await expect(stripIconLink(iconLink(svg))).rejects.toThrow(rule);
   });
 
-  // 06.4.1-REVIEW WR-01: built by hand, because iconLink() would percent-encode
-  // the `&` and so test the XML layer instead of the HTML attribute layer.
-  it.each<readonly [string, string]>([
-    ["an <image> fetch", "&lt;image &#x68;ref=&apos;&#x68;ttps://evil.example/x.png&apos;/&gt;"],
-    ["a <script> element", "&lt;script&gt;alert(1)&lt;/script&gt;"],
-  ])("rejects an icon href hiding %s behind HTML character references", (_name, payload) => {
-    const href = `data:image/svg+xml,${GOOD_SVG.replace("</svg>", `${payload}</svg>`)}`;
-    const link = `<link rel="icon" type="image/svg+xml" href="${href}" />`;
-    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
-    expect(() => stripProceduralIcon(link)).toThrow("HTML character references");
-  });
+  // 06.4.1-REVIEW WR-01: built by hand, so the HTML tokenizer decodes the
+  // character references in the attribute before the data: URL is read. In the
+  // original inputs the raw `#` of GOOD_SVG's first fill starts the URL
+  // fragment and cuts the data body (the browser does the same), so they fail
+  // as malformed XML. The re-targeted inputs splice the same payloads into the
+  // encoded GOOD_SVG, where no raw `#` cuts the URL, so the decoded attribute
+  // text reaches the SVG allowlist.
+  const imagePayload = "&lt;image &#x68;ref=&apos;&#x68;ttps://evil.example/x.png&apos;/&gt;";
+  const scriptPayload = "&lt;script&gt;alert(1)&lt;/script&gt;";
+  it.each<readonly [string, string, string]>([
+    [
+      "an <image> fetch (raw GOOD_SVG)",
+      GOOD_SVG.replace("</svg>", `${imagePayload}</svg>`),
+      "not well-formed XML",
+    ],
+    [
+      "a <script> element (raw GOOD_SVG)",
+      GOOD_SVG.replace("</svg>", `${scriptPayload}</svg>`),
+      "not well-formed XML",
+    ],
+    [
+      "an <image> fetch (encoded GOOD_SVG)",
+      encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg%3E", `${imagePayload}%3C%2Fsvg%3E`),
+      "element <image>",
+    ],
+    [
+      "a <script> element (encoded GOOD_SVG)",
+      encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg%3E", `${scriptPayload}%3C%2Fsvg%3E`),
+      "element <script>",
+    ],
+  ])(
+    "rejects an icon href hiding %s behind HTML character references",
+    async (_name, raw, rule) => {
+      expect(raw).toContain("&");
+      const link = rawIconLink(raw);
+      expectOneSvgIconHref(link);
+      await expect(stripIconLink(link)).rejects.toThrow(rule);
+    },
+  );
 
   // 06.4.1-REVIEW WR-01 (second pass): built by hand, because iconLink() would
-  // percent-encode the raw tab, LF or CR that the URL parser deletes.
-  it.each<readonly [string, string, string, string]>([
-    ["a style attribute split by a raw LF", withAttr("style='fill:red'"), "style", "st\nyle"],
-    ["an event attribute split by a raw tab", withAttr("onload='x'"), "onload", "on\tload"],
+  // percent-encode the raw tab, LF or CR. The URL parser drops it, and the
+  // reassembled attribute reaches the SVG allowlist.
+  it.each<readonly [string, string, string, string, string]>([
+    [
+      "a style attribute split by a raw LF",
+      withAttr("style='fill:red'"),
+      "style",
+      "st\nyle",
+      "attribute style",
+    ],
+    [
+      "an event attribute split by a raw tab",
+      withAttr("onload='x'"),
+      "onload",
+      "on\tload",
+      "attribute onload",
+    ],
     [
       "url( split by a raw CR",
       withElement("<rect width='1' height='1' filter='url(#0b0420)'/>"),
       "url(",
       "u\rrl(",
+      "attribute filter",
     ],
-  ])("rejects an icon href carrying %s", (_name, svg, token, split) => {
+  ])("rejects an icon href carrying %s", async (_name, svg, token, split, rule) => {
     const encoded = encodeURIComponent(svg);
     const raw = encoded.replace(token, split);
     expect(raw).not.toBe(encoded);
     // What the browser decodes once the URL parser drops the raw character.
     expect(raw.replace(/[\t\n\r]/g, "")).toBe(encoded);
-    const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
-    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
-    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+    const link = rawIconLink(raw);
+    expectOneSvgIconHref(link);
+    await expect(stripIconLink(link)).rejects.toThrow(rule);
   });
 
   // 06.4.1-REVIEW IN-01: built by hand, because iconLink() never writes a bad
-  // escape. Each one would make decodeURIComponent throw a bare URIError. The
-  // last three are well-formed `%XX` escapes that are not valid UTF-8.
-  it.each<readonly [string, string]>([
-    ["a %zz escape", encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg", "%zz%3C%2Fsvg")],
-    ["a % with one hex digit", `${encodeURIComponent(GOOD_SVG)}%4`],
-    ["a trailing %", `${encodeURIComponent(GOOD_SVG)}%`],
-    ["a %FF byte", encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg", "%FF%3C%2Fsvg")],
-    ["a lead byte with no continuation", `${encodeURIComponent(GOOD_SVG)}%C3%28`],
-    ["an encoded surrogate", `${encodeURIComponent(GOOD_SVG)}%ED%A0%80`],
-  ])("rejects an icon href carrying %s with the ICON_HREF_CHARS message", (_name, raw) => {
-    expect(() => decodeURIComponent(raw)).toThrow(URIError);
-    const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
-    expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
-    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
-  });
-
-  // 06.4.1-REVIEW WR-01 (fourth pass): a fill padded with non-ASCII whitespace
-  // is an invalid CSS color, so its shape paints black. Built by hand so the
-  // escape is visible in the row; the href layer must stop it before decoding.
+  // escape. Each one makes decodeURIComponent throw a bare URIError; the data:
+  // URL processor instead keeps a bad escape as literal bytes and decodes a
+  // well-formed one to its byte, so each fails on what the browser would see.
+  // The last three are well-formed `%XX` escapes that are not valid UTF-8.
   it.each<readonly [string, string, string]>([
-    ["a fill padded with U+00A0", "%C2%A0%23f72585", "\u00A0#f72585"],
-    ["a fill padded with U+FEFF", "%23f72585%EF%BB%BF", "#f72585\uFEFF"],
+    [
+      "a %zz escape",
+      encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg", "%zz%3C%2Fsvg"),
+      "found node type 3",
+    ],
+    ["a % with one hex digit", `${encodeURIComponent(GOOD_SVG)}%4`, "not well-formed XML"],
+    ["a trailing %", `${encodeURIComponent(GOOD_SVG)}%`, "not well-formed XML"],
+    [
+      "a %FF byte",
+      encodeURIComponent(GOOD_SVG).replace("%3C%2Fsvg", "%FF%3C%2Fsvg"),
+      "printable ASCII",
+    ],
+    [
+      "a lead byte with no continuation",
+      `${encodeURIComponent(GOOD_SVG)}%C3%28`,
+      "printable ASCII",
+    ],
+    ["an encoded surrogate", `${encodeURIComponent(GOOD_SVG)}%ED%A0%80`, "printable ASCII"],
   ])(
-    "rejects an icon href carrying %s with the ICON_HREF_CHARS message",
-    (_name, escaped, fill) => {
-      const raw = encodeURIComponent(GOOD_SVG).replace("%23f72585", escaped);
-      expect(decodeURIComponent(raw)).toBe(GOOD_SVG.replace("#f72585", fill));
-      const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
-      expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
-      expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+    "rejects an icon href carrying %s that decodeURIComponent cannot decode",
+    async (_name, raw, rule) => {
+      expect(() => decodeURIComponent(raw)).toThrow(URIError);
+      const link = rawIconLink(raw);
+      expectOneSvgIconHref(link);
+      await expect(stripIconLink(link)).rejects.toThrow(rule);
     },
   );
 
-  // 06.4.1-REVIEW WR-01 (fifth pass): an encoded control character survives the
-  // URL parser and reaches the decoded SVG, so the href layer must stop it. The
-  // first three would pass validateIconSvg (its trim strips them around a
-  // palette hex), and the last two would fail it with the paint message, so
-  // each row throws the ICON_HREF_CHARS message only while that guard holds.
+  // 06.4.1-REVIEW WR-01 (fourth and fifth passes): a fill padded with
+  // non-ASCII whitespace is an invalid CSS color, so its shape paints black,
+  // and an encoded control character survives the URL parser. Every such byte
+  // is outside printable ASCII, so the byte rule stops it before the XML parse.
+  // Without that rule the first three control-character rows would render
+  // identically to a palette-valid icon (XML turns a literal LF, CR or tab in
+  // an attribute into a space, and CSS strips it).
   it.each<readonly [string, string, string]>([
+    ["a fill padded with U+00A0", "%C2%A0%23f72585", "\u00A0#f72585"],
+    ["a fill padded with U+FEFF", "%23f72585%EF%BB%BF", "#f72585\uFEFF"],
     ["an encoded LF before a palette fill", "%0A%23f72585", "\n#f72585"],
     ["an encoded CR after a palette fill", "%23f72585%0D", "#f72585\r"],
     ["an encoded tab before a palette fill", "%09%23f72585", "\t#f72585"],
     ["an encoded LF before fill red", "%0Ared", "\nred"],
     ["an encoded DEL before a palette fill", "%7F%23f72585", "\u007F#f72585"],
   ])(
-    "rejects an icon href carrying %s with the ICON_HREF_CHARS message",
-    (_name, escaped, fill) => {
+    "rejects an icon href carrying %s with the printable-ASCII message",
+    async (_name, escaped, fill) => {
       const raw = encodeURIComponent(GOOD_SVG).replace("%23f72585", escaped);
       expect(decodeURIComponent(raw)).toBe(GOOD_SVG.replace("#f72585", fill));
-      const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
-      expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
-      expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+      const link = rawIconLink(raw);
+      expectOneSvgIconHref(link);
+      await expect(stripIconLink(link)).rejects.toThrow("printable ASCII");
     },
   );
 
-  // 06.4.1-REVIEW WR-01 (fourth pass): validateIconSvg is called directly, past
-  // the href layer above, so the paint check's own whitespace handling is
-  // proven on its own: it must strip only what CSS strips.
+  // 06.4.1-REVIEW WR-01 (fourth pass): checkIconSvg is called directly, past
+  // the byte rule, so the paint check's own whitespace handling is proven on
+  // its own: it must strip only what CSS strips.
   it.each<readonly [string, string]>([
     ["U+00A0 before a palette fill", "<rect width='32' height='32' fill='\u00A0#f72585'/>"],
     ["U+FEFF after a palette fill", "<rect width='32' height='32' fill='#f72585\uFEFF'/>"],
     ["U+3000 before fill='none'", "<circle cx='16' cy='16' r='12' fill='\u3000none'/>"],
   ])("the paint check rejects %s (CSS whitespace is ASCII only)", (_name, fragment) => {
-    expect(() => validateIconSvg(withElement(fragment))).toThrow("paint fill=");
+    expect(() => checkIconSvg(withElement(fragment))).toThrow("paint fill=");
   });
 
-  // 06.4.1-REVIEW WR-01 (fifth pass): a paint value holding a raw LF or CR used
-  // to make no match in the paint check, so it was never read, and the browser
-  // painted it. validateIconSvg is called directly, past the href layer, so the
-  // paint check itself is proven to read values across line breaks. Through
-  // iconLink() the line break is encoded as %0A or %0D, which the href layer
-  // now stops first, with its own message.
+  // 06.4.1-REVIEW WR-01 (fifth pass): a paint value holding a raw LF or CR is
+  // still read (the XML parser turns it into a space) and rejected when the
+  // rest is off-palette. Through iconLink() the line break is encoded as %0A
+  // or %0D, which the byte rule stops first.
   it.each<readonly [string, string, string]>([
     ["fill led by an LF", "<rect width='32' height='32' fill='\nred'/>", "paint fill="],
     ["fill led by a CR", "<rect width='32' height='32' fill='\r#00ff00'/>", "paint fill="],
@@ -922,42 +861,92 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       '<rect width="8" height="8" fill="\ncurrentColor"/>',
       "paint fill=",
     ],
-  ])("the paint check, and the href layer before it, reject a %s", (_name, fragment, rule) => {
-    expect(() => validateIconSvg(withElement(fragment))).toThrow(rule);
+  ])("the paint check, and the byte rule before it, reject a %s", async (_name, fragment, rule) => {
+    expect(() => checkIconSvg(withElement(fragment))).toThrow(rule);
     const link = iconLink(withElement(fragment));
     expect(link).toMatch(/%0[AD]/);
-    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+    await expect(stripIconLink(link)).rejects.toThrow("printable ASCII");
   });
 
-  it("the paint check still strips the ASCII whitespace CSS strips", () => {
+  it("the paint check still strips the ASCII whitespace CSS strips", async () => {
     const fragment = "<rect width='32' height='32' fill=' #f72585 '/>";
-    expect(() => validateIconSvg(withElement(fragment))).not.toThrow();
-    expect(() => stripProceduralIcon(iconLink(withElement(fragment)))).not.toThrow();
-    // LF, CR, tab and FF too, but only called directly: the paint check's own
-    // trim admits them, and the href layer admits no control-character escape.
-    for (const pad of ["\n#f72585\n", "\r\n#f72585\t", "\f#f72585\r"]) {
+    expect(() => checkIconSvg(withElement(fragment))).not.toThrow();
+    await expect(stripIconLink(iconLink(withElement(fragment)))).resolves.toBeTypeOf("string");
+    // Literal LF, CR and tab pads pass directly; through iconLink() they are
+    // encoded, and the byte rule admits no control byte.
+    for (const pad of ["\n#f72585\n", "\r\n#f72585\t"]) {
       const padded = `<rect width='32' height='32' fill='${pad}'/>`;
-      expect(() => validateIconSvg(withElement(padded)), JSON.stringify(pad)).not.toThrow();
+      expect(() => checkIconSvg(withElement(padded)), JSON.stringify(pad)).not.toThrow();
       const link = iconLink(withElement(padded));
-      expect(() => stripProceduralIcon(link), JSON.stringify(pad)).toThrow(
-        "outside ICON_HREF_CHARS",
-      );
+      await expect(stripIconLink(link), JSON.stringify(pad)).rejects.toThrow("printable ASCII");
+    }
+    // A form feed is not an XML 1.0 character, so no browser can render it.
+    const formFeed = "<rect width='32' height='32' fill='\f#f72585\r'/>";
+    expect(() => checkIconSvg(withElement(formFeed))).toThrow("not well-formed XML");
+    // Pads written as XML character references are not attribute-normalized,
+    // so the paint value really holds LF, tab and CR, and the strip removes them.
+    for (const pad of ["&#xA;#f72585&#x9;", "&#xD;#f72585&#x20;"]) {
+      const padded = `<rect width='32' height='32' fill='${pad}'/>`;
+      expect(() => checkIconSvg(withElement(padded)), pad).not.toThrow();
+      await expect(stripIconLink(iconLink(withElement(padded))), pad).resolves.toBeTypeOf("string");
     }
   });
 
-  it("two procedural icon links throw with the count", () => {
+  it("two procedural icon links throw with the count", async () => {
     const two = iconLink(GOOD_SVG) + iconLink(GOOD_SVG);
-    expect(() => stripProceduralIcon(two)).toThrow("found 2");
+    await expect(stripIconLink(two)).rejects.toThrow("found 2");
   });
 
-  it("a second, .ico icon link beside the valid one still trips the icon link pattern", () => {
+  it("a second, .ico icon link beside the valid one is counted", async () => {
     const html = `${iconLink(GOOD_SVG)}\n<link rel="icon" href="favicon.ico">`;
-    expect(scan({ "/x.html": stripProceduralIcon(html) })).toContain("/x.html: icon link");
+    await expect(stripIconLink(html)).rejects.toThrow("found 2");
   });
 
-  it("a .png icon link beside the valid one still trips the gate", () => {
+  it("a .png icon link beside the valid one is counted", async () => {
     const html = `${iconLink(GOOD_SVG)}\n<link rel="icon" type="image/png" href="icon.png">`;
-    expect(scan({ "/x.html": stripProceduralIcon(html) })).toContain("/x.html: icon link");
+    await expect(stripIconLink(html)).rejects.toThrow("found 2");
+  });
+
+  it("an uppercase ICON rel beside the valid one is counted", async () => {
+    const html = `${iconLink(GOOD_SVG)}\n<link rel="ICON" href="icon.png">`;
+    await expect(stripIconLink(html)).rejects.toThrow("found 2");
+  });
+
+  it("a page with no icon link throws with the count", async () => {
+    await expect(stripIconLink("<title>x</title>")).rejects.toThrow("found 0");
+  });
+
+  it("a data:image/png icon link is not admitted and trips both patterns", async () => {
+    const png = '<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">';
+    await expect(stripIconLink(png)).rejects.toThrow("type must be image/svg+xml");
+    const hits = scan({ "/x.html": png });
+    expect(hits).toContain("/x.html: icon link");
+    expect(hits).toContain("/x.html: data: URI asset");
+  });
+
+  it.each<readonly [string, string, string]>([
+    [
+      "an extra onload attribute",
+      `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(GOOD_SVG)}" onload="x" />`,
+      "may carry only rel, type and href",
+    ],
+    [
+      "a second rel token",
+      `<link rel="icon stylesheet" type="image/svg+xml" href="data:image/svg+xml,${encodeURIComponent(GOOD_SVG)}" />`,
+      "rel must be exactly icon",
+    ],
+    [
+      "a file href",
+      '<link rel="icon" type="image/svg+xml" href="favicon.svg" />',
+      "must be a data: URL",
+    ],
+    [
+      "a charset parameter",
+      `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8,${encodeURIComponent(GOOD_SVG)}" />`,
+      "MIME type must be image/svg+xml",
+    ],
+  ])("rejects an icon link with %s", async (_name, html, rule) => {
+    await expect(stripIconLink(html)).rejects.toThrow(rule);
   });
 
   // 06.4.1-REVIEW WR-01 and WR-02: each PoC was accepted by the regex gate.
@@ -1000,11 +989,10 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     await expect(stripIconLink(html)).rejects.toThrow("index.html must hold no noscript element");
   });
 
-  it("a data:image/png icon link is not admitted and trips both patterns", () => {
-    const png = '<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgo=">';
-    expect(() => stripProceduralIcon(png)).toThrow("found 0");
-    const hits = scan({ "/x.html": png });
+  it("a non-icon apple-touch-icon link is left for the pattern scan to catch", async () => {
+    const html = `${iconLink(GOOD_SVG)}\n<link rel="apple-touch-icon" href="icon.png">`;
+    const hits = scan({ "/x.html": await stripIconLink(html) });
     expect(hits).toContain("/x.html: icon link");
-    expect(hits).toContain("/x.html: data: URI asset");
+    expect(hits).toContain("/x.html: image, audio or font file extension");
   });
 });
