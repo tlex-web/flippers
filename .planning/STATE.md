@@ -334,6 +334,7 @@ Recent decisions affecting current work:
 - [Phase 06.4.1]: 06.4.1-02: RND-01 gate admits exactly one <link rel=icon type=image/svg+xml> data URI after validateIconSvg (xmlns prefix, ICON_FORBIDDEN, no http beyond xmlns, palette-only paint and hex); icon link and data: URI patterns kept
 - [Phase 06.4.1]: 06.4.1-03: user approved the bar hint, GAME OVER clearance and favicon on the live build (verbatim "approved"); A1 = A (hint whenever no status shows) and icon = A (bumper) kept as built, nothing tuned
 - [Phase 06.4.1]: 06.4.1-03: 06.4 ledger WR-02 and IN-03 fixed by 06.4.1-01 (48ff6f1), open 8 -> 6; IN-01, WR-01, IN-02, IN-04, IN-05, IN-06 stay open for milestone-close triage
+- [Phase 06.4.1]: review --fix: the favicon gate rejects any `&` in the raw href and the decoded SVG (WR-01, 7ccaad6) and allowlists SVG elements svg/rect/circle/ellipse/path/g (WR-02, bdd0a4c); re-verified 17/17, SECURITY 11/11 closed
 
 ### Pending Todos
 
@@ -357,7 +358,7 @@ Recent decisions affecting current work:
 - [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 6 open info rows (IN-02..IN-07); IN-01 fixed in 06.4-03. IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. ~~CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.~~ Done in 06.4-03.
 - [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 6 open rows (0 critical, 1 warning, 5 info). ~~WR-02 (GAME OVER prompt widening the side panel into the 16 px gap)~~ and ~~IN-03~~ fixed in 06.4.1-01 (48ff6f1); the widening was measured real (271.1 → 280.5 px) and the reserve closes it. WR-01: the boot-call guard in `apply-view.test.ts` can't fail (the dpr handler's `applyView();` also matches). Disposition the rest before the milestone closes.
 - [Phase 06.4]: 06.4-UI-REVIEW.md (21/24) follow-ups, none blocking: ~~bar mode hides the Space/flipper-key hints~~ (06.4.1-01), 11 px labels, ~~`/favicon.ico` 404~~ (06.4.1-02).
-- [Phase 06.4.1]: 06.4.1-REVIEW-DISPOSITION.md has 5 open rows (0 critical, 2 warning, 3 info). WR-01: the favicon validator in `asset-free.test.ts` percent-decodes but does not HTML-entity-decode the href, so an entity-encoded payload passes the RND-01 carve-out; WR-02: SMIL `<set>`/`<animate>` carry off-palette colours past the paint check. Both are gate-robustness gaps (the shipped icon is clean) and mirror SECURITY T-06.4.1-04/-06/-07, open below the high threshold. Fix with `/gsd-code-review 06.4.1 --fix` or disposition at milestone close.
+- [Phase 06.4.1]: 06.4.1-REVIEW-DISPOSITION.md has 5 open rows (0 critical, 2 warning, 3 info) from the re-review of the fix round. ~~First-round WR-01 (entity-encoded href) and WR-02 (SMIL colours)~~ fixed in 7ccaad6/bdd0a4c (recorded in 06.4.1-REVIEW-FIX.md; their ledger rows were dropped because the re-review reused the ids). New WR-01: a raw tab/LF/CR in the href is stripped by the browser's URL parser but not the validator, so split tokens (`st⏎yle=`, `on⏎load=`) pass; new WR-02: attributes are still a denylist, so `filter='… drop-shadow(… red)'` recolours off-palette. Fix: reject `/[\t\n\r]/` in the raw href and add an `ICON_ATTRS` allowlist. Both are gate-robustness gaps (the shipped icon is clean). Fix with `/gsd-code-review 06.4.1 --fix` or disposition at milestone close.
 - [Phase 06.4.1]: 06.4.1-UI-REVIEW.md (20/24) follow-ups, none blocking: under A1 = A the "Hold Space to launch" hint stays during active play (a launch-scoped hint needs a JS change); 11 px labels still open; the hint hides via `.hud-status:not(:empty)`, so a whitespace write to `#hud-status` would hide it for good.
 
 ### Quick Tasks Completed
@@ -384,6 +385,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T20:25:05.152Z
-Stopped at: Phase 06.4.1 complete — all phases complete
+Last session: 2026-11-24T21:35:00.000Z
+Stopped at: Phase 06.4.1 re-verified after review fixes — all v1.0 phases complete, ready for milestone close (2 open 06.4.1 review warnings to triage)
 Resume file: None
