@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: "06.3"
-status: completed
+current_phase: "06.4"
+current_phase_name: "Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording"
+status: Phase 06.4 inserted — not planned yet
 stopped_at: Phase 06.3 complete — all phases complete
-last_updated: "2026-11-24T02:08:50.017Z"
+last_updated: "2026-11-24T16:42:28.973Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.3 complete
-state_head: 8e5b4e81eb6e38e267ecee04cf32559b46c3b657
+state_head: 41badf76dd2c2ef797a7f34443616b6aba3ca778
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 6
-  total_plans: 70
+  total_plans: 74
   completed_plans: 70
-  percent: 67
 milestone_name: milestone
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 ## Current Position
 
-Phase: 06.3
+Phase: 06.4 (Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording) — READY TO EXECUTE
 Plan: Not started
-Status: All phases complete
+Status: Phase 06.4 inserted — not planned yet
 Last activity: 2026-11-24 — Phase 06.3 complete
 
 Progress: [██████████] 100%
@@ -346,6 +346,7 @@ Recent decisions affecting current work:
 - Phase 06.1 inserted after Phase 6: Address tech debt: bat/sling pinch (WR-03) + review hygiene (URGENT)
 - Phase 06.2 inserted after Phase 06.1: Address tech debt: ball-search soft-lock + 06.1 review triage (from v1.0 re-audit) (URGENT)
 - Phase 06.3 inserted after Phase 06.2: Fix slingshot deflection on flipper-root shots (todo 2026-11-23-root-shot-deflects-off-slingshot) (URGENT)
+- Phase 06.4 inserted after Phase 06.3: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording (URGENT)
 
 ## Deferred Items
 
