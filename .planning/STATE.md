@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: "06.4"
-status: completed
+current_phase: 06.4.1
+current_phase_name: "Address tech debt: bar-mode control hints, HUD status min-width, favicon"
+status: executing
 stopped_at: Phase 06.4 complete — all phases complete
-last_updated: "2026-11-24T18:00:13.037Z"
+last_updated: "2026-11-24T18:55:09.305Z"
 last_activity: 2026-11-24
 last_activity_desc: Phase 06.4 complete
-state_head: 2c4d97e988ab3b65236ddd18ab62460a5397ee17
+state_head: 28efff0f8a5433c1a02b09c8cccdb3557fb4f34a
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 10
-  total_plans: 74
+  total_plans: 77
   completed_plans: 74
-  percent: 100
 milestone_name: milestone
 ---
 
@@ -24,13 +24,13 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 — all 10 phases complete (06.4 closed 2026-11-24); next: re-audit and complete the milestone
+**Current focus:** Milestone v1.0 — Phase 06.4.1 inserted (bar-mode control hints, HUD status min-width, favicon); next: /gsd-plan-phase 06.4.1
 
 ## Current Position
 
-Phase: 06.4
+Phase: 06.4.1 (Address tech debt: bar-mode control hints, HUD status min-width, favicon) — READY TO EXECUTE
 Plan: Not started
-Status: All phases complete
+Status: Ready to execute
 Last activity: 2026-11-24 — Phase 06.4 complete
 
 Progress: [██████████] 100% (10/10 phases, 74/74 plans)
@@ -359,6 +359,7 @@ Recent decisions affecting current work:
 - Phase 06.2 inserted after Phase 06.1: Address tech debt: ball-search soft-lock + 06.1 review triage (from v1.0 re-audit) (URGENT)
 - Phase 06.3 inserted after Phase 06.2: Fix slingshot deflection on flipper-root shots (todo 2026-11-23-root-shot-deflects-off-slingshot) (URGENT)
 - Phase 06.4 inserted after Phase 06.3: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording (URGENT)
+- Phase 06.4.1 inserted after Phase 06.4: Address tech debt: bar-mode control hints, HUD status min-width, favicon (URGENT)
 
 ## Deferred Items
 
