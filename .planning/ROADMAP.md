@@ -353,11 +353,11 @@ Plans:
 **Goal:** The HUD never covers the playfield. Wide windows keep today's top-left panel. Wherever that panel would reach the fitted table (768x1024, 375x812, square windows), a measured switch turns it into a constant-height 3-row bar above the table, and the table is fitted under it. Both slingshots show a visible slate rim on their passive faces under the amber kick face. The change is render-only: geometry, physics and feel are untouched. 06.3's D-13 text, the root-shot test titles and the ledgers state the own-sling gate by first sling contact (user ruling A). Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3.
 **Requirements**: TBD
 **Depends on:** Phase 06.3
-**Plans:** 4 plans (2 waves)
+**Plans:** 1/4 plans executed (2 waves)
 
 Plans:
 **Wave 1**
-- [ ] 06.4-01-PLAN.md — Narrow-viewport HUD: measured side/bar switch (`sideHudClears`, `heightUnderBar`), `data-hud` on #sandbox, compact 3-row bar CSS, table fitted under the bar [wave 1]
+- [x] 06.4-01-PLAN.md — Narrow-viewport HUD: measured side/bar switch (`sideHudClears`, `heightUnderBar`), `data-hud` on #sandbox, compact 3-row bar CSS, table fitted under the bar [wave 1]
 - [ ] 06.4-02-PLAN.md — Sling face rim: `SLING_RIM` #7d82a8 at 0.015 m on every non-kick face, under the rubber; contrast and uniqueness tests; render-only proof [wave 1]
 - [ ] 06.4-03-PLAN.md — D-13 wording: first-contact text in 06.3-CONTEXT, root-shot header, FlipResult doc and titles; IN-01 fixed, CR-01 follow-up closed [wave 1]
 

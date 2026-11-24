@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: "06.4"
 current_phase_name: "Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording"
-status: Phase 06.4 inserted — not planned yet
-stopped_at: Phase 06.3 complete — all phases complete
-last_updated: "2026-11-24T16:42:28.973Z"
+status: executing
+stopped_at: Completed 06.4-01-PLAN.md
+last_updated: "2026-11-24T16:59:14.496Z"
 last_activity: 2026-11-24
-last_activity_desc: Phase 06.3 complete
-state_head: 41badf76dd2c2ef797a7f34443616b6aba3ca778
+last_activity_desc: Phase 06.4 execution started
+state_head: 6b78c0b161ab807f96218c6e51b2a179eb832c28
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 74
-  completed_plans: 70
+  completed_plans: 71
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 — all phases complete; ready for milestone audit and close
+**Current focus:** Phase 06.4 — Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording
 
 ## Current Position
 
-Phase: 06.4 (Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording) — READY TO EXECUTE
-Plan: Not started
-Status: Phase 06.4 inserted — not planned yet
-Last activity: 2026-11-24 — Phase 06.3 complete
+Phase: 06.4 (Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-11-24 — Phase 06.4 execution started
 
 Progress: [██████████] 100%
 
@@ -136,6 +136,7 @@ Progress: [██████████] 100%
 | Phase 06.3 P01 | 5min | 2 tasks | 6 files |
 | Phase 06.3 P02 | 8min | 2 tasks | 3 files |
 | Phase 06.3 P03 | 13min | 3 tasks | 3 files |
+| Phase 06.4 P01 | 10 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -313,6 +314,8 @@ Recent decisions affecting current work:
 - [Phase 06.3]: 06.3-02: root-shot gate classifies flips by first sling contact (D-13); 1 cross shot at t = 0.28 ricochets into its own sling and drops, counted under the opposite-sling cap
 - [Phase 06.3]: 06.3-03: user approved the t = 0.28 sling trim on the live build (D-12), verbatim "approved A"
 - [Phase 06.3]: 06.3-03: ruling A - own-sling failures classified by first sling contact; the cross shot that ricochets into its own sling counts under the opposite-sling cap. Literal never-touches reading (B) rejected
+- [Phase 06.4]: 06.4-01: HUD layout switch is measured (sideHudClears on the fitted canvas vs the panel's measured right edge), never a width media query; bar mode = constant-height 3-row grid above the table
+- [Phase 06.4]: 06.4-01: bar mode hides the keyboard list except Mute, the Windows note and #hud-diag; ball/best share one cell with min-height so the bar never changes height
 
 ### Pending Todos
 
@@ -358,6 +361,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24
-Stopped at: Phase 06.3 complete — all v1.0 phases complete, ready to audit and close milestone v1.0
+Last session: 2026-11-24T16:59:06.469Z
+Stopped at: Completed 06.4-01-PLAN.md
 Resume file: None
