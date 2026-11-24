@@ -261,7 +261,7 @@ describe("index.html markup", () => {
   });
 
   it("keeps exactly six controls rows", () => {
-    expect(indexHtml.match(/<dt>/g)?.length).toBe(6);
+    expect(indexHtml.match(/<dt[\s>]/g)?.length).toBe(6);
   });
 
   /** The note paragraph's inner markup. */

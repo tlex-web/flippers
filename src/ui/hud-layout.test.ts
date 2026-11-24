@@ -2,9 +2,11 @@
 import { describe, it, expect, vi } from "vitest";
 
 import indexHtml from "../../index.html?raw";
+import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
 import { FlipperInput } from "../input/flipper-input";
 import { PlungerInput } from "../input/plunger-input";
 import { HUD_BAR_GAP_CSS } from "../render/view-transform";
+import { statusText, type StatusCode } from "./hud";
 
 /**
  * Narrow-viewport HUD bar (06.4, GAME-01): main.ts sets data-hud="bar" on
@@ -25,6 +27,25 @@ const BAR = String.raw`#sandbox\[data-hud="bar"\]`;
 function barRule(sel: string, decl: string): RegExp {
   return new RegExp(String.raw`${BAR}\s+${sel}(?:\s*,[^{]*)?\s*\{[^}]*${decl}`);
 }
+
+/**
+ * The worst-case value for every status code (06.4 WR-02). Exhaustive, so a
+ * new StatusCode fails tsc here until its worst case is listed. Fixed texts
+ * take 0; the skill shot is capped; BONUS has no cap, but 9,999,999,999,999
+ * renders as 23 code points and any reachable bonus is far below it.
+ */
+const WORST: Record<StatusCode, number> = {
+  none: 0,
+  tilt: 0,
+  tiltNoBonus: 0,
+  newHighScore: 0,
+  ballSaved: 0,
+  attract: 0,
+  gameOver: 0,
+  warning: 0,
+  skillShot: SKILL_SHOT_MAX_POINTS,
+  bonus: 9_999_999_999_999,
+};
 
 /** The number of code points in `s` (what a reader counts as characters). */
 const cp = (s: string): number => [...s].length;
@@ -96,11 +117,16 @@ describe("index.html narrow-viewport HUD bar (06.4; GAME-01)", () => {
 
   it("keeps only the Mute row of the controls list, in the mute cell", () => {
     expect(style).toMatch(barRule(String.raw`\.hud-controls`, String.raw`grid-area:\s*mute`));
+    // By class, not by position (06.4 IN-03).
     expect(style).toMatch(
       barRule(
-        String.raw`\.hud-controls\s*>\s*:not\(:nth-last-child\(\s*-n\s*\+\s*2\s*\)\)`,
+        String.raw`\.hud-controls\s*>\s*:not\(\.hud-controls-mute\)`,
         String.raw`display:\s*none`,
       ),
+    );
+    expect(indexHtml.match(/class="hud-controls-mute"/g)?.length).toBe(2);
+    expect(indexHtml).toMatch(
+      /<dt class="hud-controls-mute">Mute<\/dt>\s*<dd class="hud-controls-mute">[\s\S]*?id="hud-mute"[\s\S]*?<\/dd>/,
     );
   });
 
@@ -218,5 +244,42 @@ describe("index.html bar-mode control hint (06.4.1; GAME-01)", () => {
 
   it("styles the hint's caps with the controls kbd rule", () => {
     expect(style).toMatch(/\.hud-controls kbd,[^{]*\.hud-hint kbd\s*[,{]/);
+  });
+});
+
+/**
+ * Side panel status reserve (06.4.1, 06.4 WR-02): applyView measures the side
+ * panel once at boot with an empty status line, so the base .hud-status
+ * reserves the longest status in CSS and the panel is already at its widest.
+ */
+describe("side panel status reserve (06.4.1; 06.4 WR-02)", () => {
+  /** The base (line-anchored, not under #sandbox) .hud-status block. */
+  const BASE_STATUS = /^\s*\.hud-status\s*\{([^}]*)\}/m;
+
+  const widest = Math.max(
+    ...(Object.keys(WORST) as StatusCode[]).map((c) => cp(statusText(c, WORST[c]))),
+  );
+
+  it("finds the widest status at its worst case: 23 code points", () => {
+    expect(widest).toBe(23);
+  });
+
+  it("reserves calc(N * (1ch + Xem)) with N the widest status", () => {
+    const body = BASE_STATUS.exec(style)?.[1] ?? "";
+    const m = /min-width:\s*calc\(\s*(\d+)\s*\*\s*\(\s*1ch\s*\+\s*([\d.]+)em\s*\)\s*\)/.exec(body);
+    expect(m).not.toBeNull();
+    expect(Number(m?.[1])).toBe(widest);
+  });
+
+  it("uses the status letter-spacing as the em factor", () => {
+    const body = BASE_STATUS.exec(style)?.[1] ?? "";
+    const reserveEm = /min-width:\s*calc\([^;]*\+\s*([\d.]+)em/.exec(body)?.[1];
+    const spacingEm = /letter-spacing:\s*([\d.]+)em/.exec(body)?.[1];
+    expect(spacingEm).toBe("0.12");
+    expect(reserveEm).toBe(spacingEm);
+  });
+
+  it("resets the reserve in bar mode", () => {
+    expect(style).toMatch(barRule(String.raw`\.hud-status`, String.raw`min-width:\s*auto`));
   });
 });
