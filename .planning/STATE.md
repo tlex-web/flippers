@@ -21,10 +21,10 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-23)
+See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.3 — Fix slingshot deflection on flipper-root shots
+**Current focus:** Milestone v1.0 — all phases complete; ready for milestone audit and close
 
 ## Current Position
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: All phases complete
 Last activity: 2026-11-24 — Phase 06.3 complete
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -333,6 +333,7 @@ Recent decisions affecting current work:
 - ~~[Phase 6]: The 630 s `npm run soak` gate was not re-run after the review fixes changed `game-session.ts` (its fast variant passes inside `npm test`); run it before release.~~ Resolved in 06.1: soak re-run green (06.1-01, 06.1-02, 06.1-05)
 - ~~[Phase 6]: 06-REVIEW.md has 2 open info findings (a HUD test whose guard check can't fail; `SaveKind` still declared in `ball-save.ts`).~~ Resolved in 06.1-04
 - ~~[Phase 06.1]: 06.1-REVIEW-DISPOSITION.md has 8 open rows (0 critical, 4 warning, 4 info). WR-01, the inlane sensor's wall-side end left at x=0.33 about 0.215 m off the funnel wall, was accepted by eye at 06.1 UAT but its row is still `open`. WR-02 is the missing liveness assertion in the sling-pinch GREEN cases. The other six are fragility and redundancy items. Disposition them before the milestone closes.~~ Resolved in 06.2 (06.2-06: open 0)
+- [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 7 open info rows (IN-01..IN-07). IN-03 is the most substantive: the trimmed obtuse corner acts as a kick zone on the passive lower face, and the `SLING_FACE_TOL` comment is stale. CR-01 is `skipped` per ruling A, with a doc follow-up: amend D-13 in 06.3-CONTEXT.md, and the root-shot test title and `FlipResult` comment, to say first-contact.
 
 ### Quick Tasks Completed
 
@@ -356,6 +357,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T01:52:33.773Z
-Stopped at: Phase 06.3 complete — all phases complete
+Last session: 2026-11-24
+Stopped at: Phase 06.3 complete — all v1.0 phases complete, ready to audit and close milestone v1.0
 Resume file: None
