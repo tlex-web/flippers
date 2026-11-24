@@ -244,11 +244,12 @@ const ICON_TAG_ATTR = /\s+([^\s'"=/>]+)\s*=\s*(?:'[^']*'|"[^"]*")/g;
  * Throws unless `svg` is a static, palette-colored drawing: it starts with the
  * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
  * token and no http beyond that xmlns, every fill, stroke and stop-color value
- * is none or a palette.ts hex, every `#hex` in it is a palette.ts hex, every
- * `<` opens or closes an ICON_ELEMENTS element, every attribute name is in
- * ICON_ATTRS (both allowlists, not denylists), and every ICON_SHAPES element
- * declares its own fill. The element, attribute and fill checks run last so
- * the more specific checks above name their own faults.
+ * is none or a palette.ts hex once CSS whitespace (ASCII only) is stripped
+ * from its ends, every `#hex` in it is a palette.ts hex, every `<` opens or
+ * closes an ICON_ELEMENTS element, every attribute name is in ICON_ATTRS (both
+ * allowlists, not denylists), and every ICON_SHAPES element declares its own
+ * fill. The element, attribute and fill checks run last so the more specific
+ * checks above name their own faults.
  *
  * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
  * the browser reads the SVG, so a reference could spell out any token below
@@ -268,8 +269,12 @@ function validateIconSvg(svg: string): void {
   if (/http/i.test(svg.replace(`xmlns='${SVG_NS}'`, ""))) {
     throw new Error("icon SVG references http outside its xmlns");
   }
+  // 06.4.1-REVIEW WR-01 (fourth pass): strip only CSS whitespace (space, tab,
+  // LF, CR, FF). String.prototype.trim() also strips U+00A0, U+FEFF and the
+  // rest of Unicode's whitespace, which CSS keeps, so the browser rejects such
+  // a value as a color and the shape paints SVG's initial black.
   for (const m of svg.matchAll(/\b(fill|stroke|stop-color)\s*=\s*(['"])(.*?)\2/gi)) {
-    const value = (m[3] ?? "").trim().toLowerCase();
+    const value = (m[3] ?? "").replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, "").toLowerCase();
     if (value !== "none" && !PALETTE_HEX.has(value)) {
       throw new Error(`icon SVG paint ${m[1]}=${m[3]} is not none or a palette.ts hex`);
     }
@@ -657,6 +662,23 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
     },
   );
+
+  // 06.4.1-REVIEW WR-01 (fourth pass): validateIconSvg is called directly, past
+  // the href layer above, so the paint check's own whitespace handling is
+  // proven on its own: it must strip only what CSS strips.
+  it.each<readonly [string, string]>([
+    ["U+00A0 before a palette fill", "<rect width='32' height='32' fill='\u00A0#f72585'/>"],
+    ["U+FEFF after a palette fill", "<rect width='32' height='32' fill='#f72585\uFEFF'/>"],
+    ["U+3000 before fill='none'", "<circle cx='16' cy='16' r='12' fill='\u3000none'/>"],
+  ])("the paint check rejects %s (CSS whitespace is ASCII only)", (_name, fragment) => {
+    expect(() => validateIconSvg(withElement(fragment))).toThrow("paint fill=");
+  });
+
+  it("the paint check still strips the ASCII whitespace CSS strips", () => {
+    const fragment = "<rect width='32' height='32' fill=' #f72585 '/>";
+    expect(() => validateIconSvg(withElement(fragment))).not.toThrow();
+    expect(() => stripProceduralIcon(iconLink(withElement(fragment)))).not.toThrow();
+  });
 
   it("two procedural icon links throw with the count", () => {
     const two = iconLink(GOOD_SVG) + iconLink(GOOD_SVG);
