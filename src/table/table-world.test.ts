@@ -418,8 +418,8 @@ describe("TABLE_SPEC layout", () => {
       { x: 1.16, y: 5.1 },
     ];
     const oldSlingSegments = resolve([
-      { id: 300, kind: "slingshot", path: oldLeftSling, loop: true },
-      { id: 301, kind: "slingshot", path: mirrorPath(oldLeftSling), loop: true },
+      { id: 300, kind: "slingshot", path: oldLeftSling, loop: true, kickFace: 2 },
+      { id: 301, kind: "slingshot", path: mirrorPath(oldLeftSling), loop: true, kickFace: 2 },
     ]).flatMap((el) => el.segments);
 
     for (const target of [0, 1]) {

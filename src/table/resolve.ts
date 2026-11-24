@@ -233,6 +233,18 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
     if ("path" in el) {
       const loop = el.loop ?? false;
       const { vertices, segments } = resolvePolyline(el, loop);
+      if (el.kind === "slingshot" && el.kickFace === undefined) {
+        fail(el, "slingshot needs a kickFace (the segment index of its kick face)");
+      }
+      if (el.kickFace !== undefined) {
+        if (el.kind !== "slingshot") fail(el, "kickFace is only valid on a slingshot");
+        if (!Number.isInteger(el.kickFace) || el.kickFace < 0 || el.kickFace >= segments.length) {
+          fail(
+            el,
+            `kickFace must be an integer segment index in [0, ${segments.length}), got ${el.kickFace}`,
+          );
+        }
+      }
       out.push({
         id: el.id,
         kind: el.kind,
@@ -245,6 +257,7 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
         mount: null,
       });
     } else if ("center" in el) {
+      if (el.kind === "slingshot") fail(el, "a slingshot must be a polyline with a kickFace");
       const center = checkPoint(el, el.center, "center");
       if (!Number.isFinite(el.radius) || el.radius <= 0) {
         fail(el, `radius must be a positive finite number, got ${el.radius}`);

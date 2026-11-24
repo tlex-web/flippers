@@ -21,6 +21,13 @@ function arcPoint(c: Vec2, r: number, a: number): Vec2 {
   return { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
 }
 
+/** A slingshot-sized triangle loop: 3 segments, so a valid kickFace is 0, 1 or 2. */
+const TRIANGLE: readonly Vec2[] = [
+  { x: 0, y: 0 },
+  { x: 0, y: 1 },
+  { x: 1, y: 1 },
+];
+
 /** Index of the vertex equal (within TOL) to `p`, or -1. */
 function indexOfPoint(vs: readonly Vec2[], p: Vec2): number {
   return vs.findIndex((v) => dist(v, p) <= TOL);
@@ -112,6 +119,26 @@ describe("resolve() — shape", () => {
       { id: 0, kind: "flipper", pivot: { x: 0.7, y: 5.4 }, mirror: false, restPose: true },
     ]);
     expect(el?.mount?.restPose).toBe(true);
+  });
+
+  it("carries a slingshot's kickFace through; walls, circles and mounts carry null (06.3 D-09)", () => {
+    const [sling, wall, bumper, mount] = resolve([
+      { id: 1, kind: "slingshot", path: TRIANGLE, loop: true, kickFace: 2 },
+      {
+        id: 2,
+        kind: "wall",
+        path: [
+          { x: 0, y: 3 },
+          { x: 1, y: 3 },
+        ],
+      },
+      { id: 3, kind: "bumper", center: { x: 2, y: 2 }, radius: 0.25 },
+      { id: 4, kind: "flipper", pivot: { x: 0.7, y: 5.4 }, mirror: false },
+    ]);
+    expect(sling?.kickFace).toBe(2);
+    expect(wall?.kickFace).toBeNull();
+    expect(bumper?.kickFace).toBeNull();
+    expect(mount?.kickFace).toBeNull();
   });
 });
 
@@ -248,6 +275,37 @@ describe("resolve() — rejection (throws naming the element id)", () => {
       ],
     ],
     ["a one-vertex polyline", [{ id: 777, kind: "wall", path: [{ x: 0, y: 0 }] }]],
+    ["a slingshot without kickFace", [{ id: 777, kind: "slingshot", path: TRIANGLE, loop: true }]],
+    [
+      "an out-of-range kickFace (3 on a triangle)",
+      [{ id: 777, kind: "slingshot", path: TRIANGLE, loop: true, kickFace: 3 }],
+    ],
+    [
+      "a negative kickFace",
+      [{ id: 777, kind: "slingshot", path: TRIANGLE, loop: true, kickFace: -1 }],
+    ],
+    [
+      "a non-integer kickFace (1.5)",
+      [{ id: 777, kind: "slingshot", path: TRIANGLE, loop: true, kickFace: 1.5 }],
+    ],
+    [
+      "a kickFace on a wall",
+      [
+        {
+          id: 777,
+          kind: "wall",
+          path: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+          ],
+          kickFace: 0,
+        },
+      ],
+    ],
+    [
+      "a circle slingshot (no kickFace possible)",
+      [{ id: 777, kind: "slingshot", center: { x: 1, y: 1 }, radius: 0.2 }],
+    ],
   ];
   for (const [name, spec] of cases) {
     it(`throws on ${name}`, () => {
