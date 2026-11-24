@@ -56,6 +56,8 @@ export interface ResolvedElement {
   readonly circle: { readonly center: Vec2; readonly radius: number } | null;
   /** True for non-solid triggers (drain line, lanes, rollovers). */
   readonly sensor: boolean;
+  /** A slingshot's kick-face segment index (PolylineSpec.kickFace); null for every other element. */
+  readonly kickFace: number | null;
   /**
    * Set for flipper mounts, else null. `restPose` (default false) asks the
    * adapter to build the bat at its droop limit with a zero construction motor.
@@ -239,6 +241,7 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
         segments,
         circle: null,
         sensor: el.sensor ?? false,
+        kickFace: el.kickFace ?? null,
         mount: null,
       });
     } else if ("center" in el) {
@@ -254,6 +257,7 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
         segments: [],
         circle: { center, radius: el.radius },
         sensor: el.sensor ?? false,
+        kickFace: null,
         mount: null,
       });
     } else {
@@ -266,6 +270,7 @@ export function resolve(spec: TableSpec): readonly ResolvedElement[] {
         segments: [],
         circle: null,
         sensor: false,
+        kickFace: null,
         mount: { pivot, mirror: el.mirror, restPose: el.restPose ?? false },
       });
     }

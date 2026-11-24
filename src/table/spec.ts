@@ -63,6 +63,12 @@ export interface PolylineSpec extends ElementBase {
   readonly path: readonly PathNode[];
   readonly loop?: boolean;
   readonly sensor?: boolean;
+  /**
+   * Slingshots only: the index of the kick face in the resolved segments.
+   * Segment i runs vertex i to i + 1; on a loop the last index is the closing
+   * segment. Required on every slingshot (06.3 D-09).
+   */
+  readonly kickFace?: number;
 }
 
 /** A circle collider (bumper, post) or circular sensor (rollover button). */
@@ -290,6 +296,13 @@ const LEFT_SLING: readonly Vec2[] = [
 ];
 
 /**
+ * LEFT_SLING's kick face: segment 2, the closing segment from the lower-right
+ * corner back to the top vertex (the hypotenuse). mirrorPath keeps path order,
+ * so the right sling uses the same index (06.3 D-09).
+ */
+const SLING_KICK_FACE = 2;
+
+/**
  * Open mid-field below the orbit guides and lane guides, around the bumper
  * cluster: the region the 03-03 table soak and the seeded flow proof draw ball
  * drop points from. The left sling's top vertex (0.86, 3.85) and its mirror lie
@@ -383,9 +396,15 @@ export const TABLE_SPEC: TableSpec = [
   { id: 200, kind: "bumper", center: BUMPER_UPPER_LEFT, radius: BUMPER_RADIUS_M },
   { id: 201, kind: "bumper", center: mirrorX(BUMPER_UPPER_LEFT), radius: BUMPER_RADIUS_M },
   { id: 202, kind: "bumper", center: BUMPER_LOWER, radius: BUMPER_RADIUS_M },
-  // Slingshots (D-06: inert solid triangles, no kick this phase).
-  { id: 300, kind: "slingshot", path: LEFT_SLING, loop: true },
-  { id: 301, kind: "slingshot", path: mirrorPath(LEFT_SLING), loop: true },
+  // Slingshots: solid triangles that kick off their named face (kickFace, 06.3 D-09).
+  { id: 300, kind: "slingshot", path: LEFT_SLING, loop: true, kickFace: SLING_KICK_FACE },
+  {
+    id: 301,
+    kind: "slingshot",
+    path: mirrorPath(LEFT_SLING),
+    loop: true,
+    kickFace: SLING_KICK_FACE,
+  },
   // Top rollover sensors, one per lane.
   {
     id: 400,

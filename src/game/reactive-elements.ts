@@ -167,25 +167,19 @@ export interface KickFace {
 }
 
 /**
- * Derive a slingshot's kick face from its resolved polyline (Pattern 3): the
- * longest segment, with the unit normal oriented away from the vertex centroid
- * (dot with midpoint minus centroid is positive). Null when there is no
- * segment. Pure; called once per element at construction.
+ * Derive a slingshot's kick face: the segment the element's spec names
+ * (`ResolvedElement.kickFace`), with the unit normal oriented away from the
+ * vertex centroid (dot with midpoint minus centroid is positive). Null when
+ * the element names no face (bumpers, posts, every non-slingshot) or the face
+ * has zero length. The longest-segment rule was removed in 06.3 (D-09): a
+ * trimmed sling's hypotenuse is shorter than its inlane edge. Pure; called
+ * once per element at construction.
  */
 export function deriveKickFace(el: ResolvedElement): KickFace | null {
-  let best = -1;
-  let bestLen = 0;
-  for (let i = 0; i < el.segments.length; i++) {
-    const s = el.segments[i];
-    if (!s) continue;
-    const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y);
-    if (len > bestLen) {
-      bestLen = len;
-      best = i;
-    }
-  }
-  const face = best >= 0 ? el.segments[best] : undefined;
-  if (!face || bestLen === 0) return null;
+  const face = el.kickFace === null ? undefined : el.segments[el.kickFace];
+  if (!face) return null;
+  const faceLen = Math.hypot(face.b.x - face.a.x, face.b.y - face.a.y);
+  if (faceLen === 0) return null;
 
   let cx = 0;
   let cy = 0;
@@ -201,8 +195,8 @@ export function deriveKickFace(el: ResolvedElement): KickFace | null {
     cy /= n;
   }
 
-  let nx = -(face.b.y - face.a.y) / bestLen;
-  let ny = (face.b.x - face.a.x) / bestLen;
+  let nx = -(face.b.y - face.a.y) / faceLen;
+  let ny = (face.b.x - face.a.x) / faceLen;
   const mx = (face.a.x + face.b.x) / 2;
   const my = (face.a.y + face.b.y) / 2;
   if (nx * (mx - cx) + ny * (my - cy) < 0) {

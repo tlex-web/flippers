@@ -343,6 +343,9 @@ describe("slingshot kick face (ELEM-02 geometry)", () => {
   });
 
   it("the kick face is the named hypotenuse even where it is not the longest segment: sling 300 nx > 0, ny < 0, never the inlane edge; sling 301 mirrors it (06.3 D-09)", () => {
+    expect(tableElement(300).kickFace).toBe(2);
+    expect(tableElement(301).kickFace).toBe(2);
+
     const left = deriveKickFace(slingWithPath(300, TRIMMED_LEFT_SLING));
     if (!left) throw new Error("no face on trimmed sling 300");
     const ends = [`${left.ax},${left.ay}`, `${left.bx},${left.by}`].sort();
