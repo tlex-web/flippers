@@ -32,3 +32,23 @@ Constraints that bound any change:
 - The inlane sensor (LEFT_INLANE) and the sling's lower-left vertex share INLANE_Y.
 
 Plan before v1.0 closes, as a gap plan or a 06.3 insert (user decision, 2026-11-23, option A at the 06.2-03 checkpoint).
+
+## Resolution
+
+Closed 2026-11-24 by phase 06.3 (plans 06.3-01, 06.3-02, 06.3-03) on evidence.
+
+- Mechanism, refined by research: root flips leave at 86-95°, not 67°, and mid-bat flips hit the sling's lower-right corner too (06.3-CONTEXT).
+- Fix:
+  - The kick face is named explicitly: each slingshot carries `kickFace: 2` (the hypotenuse) in TABLE_SPEC, `deriveKickFace` uses it, and `resolve()` fails loudly on a missing or invalid kickFace (D-09). 622cb77 (RED), 55b0a7e, 45160ea.
+  - Both slings were trimmed by sliding the lower-right corner up the hypotenuse to t = 0.28: LEFT_SLING (0.944, 4.102), mirrored (1.956, 4.102) (D-14). 3e8b086 (RED), e2dbf10 (fix), 323dab1 (controls).
+  - The kick normal and speed are unchanged. The kick face went from 0.949 m to 0.266 m.
+- Evidence:
+  - `src/harness/root-shot.test.ts` on TABLE_SPEC with live kicks: gated 94, own-sling failures 0 (knocked down 0), opposite-sling contacts 30 (knocked down 2), timeouts 0, kept inlane 17/17. The pre-trim RED control fails with 61 own-sling contacts, 49 knocked down. The no-sling control clears all 94 gated flips (kept 17/17). The walled-off (BLIND_SPEC) control gates 0 flips and fails the liveness floor, as intended.
+  - Own-sling classification is by first sling contact (D-13). The one t = 0.28 cross shot that ricochets off the opposite sling into its own sling and drops counts as one of the 2 allowed opposite-sling knock-downs. The user confirmed this definition at the D-12 checkpoint (ruling A), over the literal "never touches its own sling" reading.
+  - The sling-pinch proof (`src/harness/sling-pinch.test.ts`, 6 cases) and table-world case (e) are green.
+  - The full gate is green on 61ebed3: `npx vitest run` 63 files / 1331 tests, `tsc --noEmit`, `eslint .`, `npm run soak` 4/4 with 0 `ESCAPE[` lines, `prettier --check .`, `npm run build`.
+  - The user's D-12 verdict on the live build, in their words: "approved A".
+- Scope: this resolves own-side flips from mid-bat to the tip (d in [0.25, 0.45] m), on both bats at every tested timing. It does not resolve two things:
+  - The root strip (d < 0.25 m) stays blocked by the sling's inlane corner (D-03). Measured: 10/139 root flips clear at t = 0.28, against 118/139 with no slings. Deferred to [the bat-to-ball rescale backlog todo](../pending/2026-11-24-rescale-bat-to-ball-for-root-shots.md).
+  - Tip cross shots can graze the opposite sling. They are capped by the gate at 30 contacts and 2 knocked down (D-13).
+- Note: the 'today 0%' figure in 06.3-CONTEXT D-05 was 3/94 on the literal any-sling gate.
