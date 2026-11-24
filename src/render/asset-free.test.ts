@@ -14,9 +14,11 @@ import * as palette from "./palette";
  *
  * One icon is allowed (06.4.1): index.html may carry exactly one
  * `<link rel="icon" type="image/svg+xml">` whose href is an inline SVG data URI
- * drawn only from palette.ts colors. The gate validates that one link's decoded
- * SVG and strips the link before scanning with the unchanged patterns, so every
- * other icon link, icon file and `data:` URI still fails.
+ * drawn only from palette.ts colors, with every shape declaring its own fill
+ * (SVG's default fill is black, which palette.ts does not hold). The gate
+ * validates that one link's decoded SVG and strips the link before scanning
+ * with the unchanged patterns, so every other icon link, icon file and `data:`
+ * URI still fails.
  *
  * The sources are read through Vite's raw imports (the project has no Node
  * typings, and this is the same idiom key-labels.test.ts uses for index.html).
@@ -224,13 +226,29 @@ const ICON_ATTRS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The ICON_ELEMENTS that paint with SVG's initial fill, black, unless they
+ * declare one. palette.ts holds no black, so each must carry its own fill.
+ */
+const ICON_SHAPES: ReadonlySet<string> = new Set(["rect", "circle", "ellipse", "path"]);
+
+/**
+ * One well-formed open tag, read at a `<` (sticky: set lastIndex first): its
+ * name, then its quoted attributes as one group for ICON_TAG_ATTR to split.
+ */
+const ICON_OPEN_TAG = /<([a-z]+)((?:\s+[^\s'"=/>]+\s*=\s*(?:'[^']*'|"[^"]*"))*)\s*\/?>/y;
+
+/** One quoted attribute; the value is consumed whole, so its text is never read as a name. */
+const ICON_TAG_ATTR = /\s+([^\s'"=/>]+)\s*=\s*(?:'[^']*'|"[^"]*")/g;
+
+/**
  * Throws unless `svg` is a static, palette-colored drawing: it starts with the
  * SVG xmlns, holds no XML character or entity reference, no ICON_FORBIDDEN
  * token and no http beyond that xmlns, every fill, stroke and stop-color value
  * is none or a palette.ts hex, every `#hex` in it is a palette.ts hex, every
- * `<` opens or closes an ICON_ELEMENTS element, and every attribute name is in
- * ICON_ATTRS (both allowlists, not denylists). The element and attribute checks
- * run last so the more specific checks above name their own faults.
+ * `<` opens or closes an ICON_ELEMENTS element, every attribute name is in
+ * ICON_ATTRS (both allowlists, not denylists), and every ICON_SHAPES element
+ * declares its own fill. The element, attribute and fill checks run last so
+ * the more specific checks above name their own faults.
  *
  * 06.4.1-REVIEW WR-01: the XML parser decodes `&#x68;`-style references before
  * the browser reads the SVG, so a reference could spell out any token below
@@ -277,6 +295,22 @@ function validateIconSvg(svg: string): void {
     const name = m[1] ?? "";
     if (!ICON_ATTRS.has(name)) {
       throw new Error(`icon SVG attribute ${name} is not allowed`);
+    }
+  }
+  // 06.4.1-REVIEW WR-01 (third pass): the paint checks only read paint that is
+  // written down, and a shape with no fill paints SVG's initial black. So every
+  // shape must declare its own fill (stricter than inheriting one from a <g>).
+  // The tag is read quote-aware, so `fill=` inside another value does not
+  // count, and a tag that does not parse fails rather than being skipped.
+  for (const m of svg.matchAll(/<([a-z]+)/g)) {
+    const name = m[1] ?? "";
+    if (!ICON_SHAPES.has(name)) continue;
+    ICON_OPEN_TAG.lastIndex = m.index;
+    const tag = ICON_OPEN_TAG.exec(svg);
+    if (!tag) throw new Error(`icon SVG <${name}> open tag is malformed`);
+    const attrs = [...(tag[2] ?? "").matchAll(ICON_TAG_ATTR)].map((a) => a[1]);
+    if (!attrs.includes("fill")) {
+      throw new Error(`icon SVG <${name}> has no fill (SVG's initial black is off-palette)`);
     }
   }
 }
@@ -464,7 +498,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   it("admits every allowlisted element with palette paint", () => {
     const svg = withElement(
       "<g><ellipse cx='16' cy='16' rx='3' ry='2' fill='#4cc9f0'/>" +
-        "<path d='M0 0h1v1z' stroke='#f72585'/></g>",
+        "<path d='M0 0h1v1z' fill='none' stroke='#f72585'/></g>",
     );
     expect(() => stripProceduralIcon(iconLink(svg))).not.toThrow();
   });
@@ -528,6 +562,19 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       "an attribute after a quote with no space",
       GOOD_SVG.replace("fill='#0b0420'", "fill='#0b0420'filter='invert(1)'"),
       "attribute filter",
+    ],
+    // 06.4.1-REVIEW WR-01 (third pass): a shape with no fill paints black.
+    ["a rect with no fill", withElement("<rect width='32' height='32'/>"), "<rect> has no fill"],
+    ["a path with no fill", withElement("<path d='M0 0h32v32H0z'/>"), "<path> has no fill"],
+    [
+      "fill= written inside another attribute's value",
+      withElement(`<path d="M0 0h32v32H0z fill='none'"/>`),
+      "<path> has no fill",
+    ],
+    [
+      "a shape tag with an unquoted value",
+      withElement("<rect width=32 height='32' fill='#0b0420'/>"),
+      "<rect> open tag is malformed",
     ],
   ])("rejects an icon SVG with %s", (_name, svg, rule) => {
     expect(() => stripProceduralIcon(iconLink(svg))).toThrow(rule);
