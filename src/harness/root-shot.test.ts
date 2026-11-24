@@ -6,7 +6,7 @@ import { BALL_RADIUS_M, FIXED_DT, FLIPPER_HALF_WIDTH_M } from "../physics/consta
 import { PlanckWorld } from "../physics/planck-world";
 import type { Segment, Vec2 } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
-import { PLAYFIELD_CENTER_X, TABLE_SPEC, mirrorPath } from "../table/spec";
+import { PLAYFIELD_CENTER_X, TABLE_SPEC, mirrorPath, mirrorX } from "../table/spec";
 import type { TableSpec } from "../table/spec";
 
 // Heavy simulation suite: a few hundred short seeded runs per case, so this
@@ -39,7 +39,12 @@ vi.setConfig({ testTimeout: 30_000 });
  * narrowed to dodge them (D-07, D-13).
  *
  * Teeth: the pre-trim sling, rebuilt locally, must fail the own-sling gate, so
- * the gate can see a deflection at all.
+ * the gate can see a deflection at all. A liveness floor (MIN_KEPT_INLANE kept
+ * inlane flips per bat) stops the gate passing blind: the no-sling control must
+ * clear every kept flip and meet the floor, and a walled-off inlane must fall
+ * below it, so a probe whose drop never reaches the bat is seen. The root strip
+ * (d < D_MIN) is measured and printed as the share that clears with no sling
+ * contact, and never gated (D-06, D-03).
  */
 
 /**
@@ -59,6 +64,27 @@ const PRE_TRIM_SPEC: TableSpec = TABLE_SPEC.map((e) => {
   if (e.id === 301) return { ...e, path: mirrorPath(PRE_TRIM_LEFT_SLING) };
   return e;
 });
+
+/** The no-sling control: TABLE_SPEC without slingshots 300/301. */
+const NO_SLING_SPEC: TableSpec = TABLE_SPEC.filter((e) => e.id !== 300 && e.id !== 301);
+
+/**
+ * A wall across the left inlane above the bat: it closes the inlane, so the
+ * drop never reaches the bat and no inlane flip lands in the band. This is the
+ * blind probe of sling-pinch.test.ts (06.1-REVIEW WR-02), kept here as a
+ * permanent RED control for the liveness floor.
+ */
+const BLIND_LEFT_WALL: readonly Vec2[] = [
+  { x: 0.0, y: 4.85 },
+  { x: 0.86, y: 4.85 },
+];
+
+/** TABLE_SPEC with both inlanes walled off above the bats (walls 190/191). */
+const BLIND_SPEC: TableSpec = [
+  ...TABLE_SPEC,
+  { id: 190, kind: "wall", path: BLIND_LEFT_WALL },
+  { id: 191, kind: "wall", path: BLIND_LEFT_WALL.map(mirrorX) },
+];
 
 /** Steps both bats droop before the ball is added. */
 const SETTLE_STEPS = 30;
@@ -82,11 +108,19 @@ const CLEAR_Y = 3.85;
 const WINDOW_STEPS = 60;
 /** Rest-grid contact points along the bat (D-04). */
 const REST_D = [0.25, 0.3, 0.35, 0.4, 0.45];
+/** Rest-grid root strip below D_MIN, measured but never gated (D-06). */
+const ROOT_REST_D = [0.05, 0.1, 0.15, 0.2];
 /** Rest-grid flip steps after the ball is placed (D-04). */
 const REST_K = [0, 2, 4, 6, 8, 10];
 /** The measured cross-shot ceiling at t = 0.28 (06.3-RESEARCH); exceeding it is a regression (D-13). */
 const MAX_OPP_CONTACTS = 30;
 const MAX_OPP_DOWN = 2;
+/**
+ * The measured kept inlane flips per bat (17 L / 17 R at every corner in
+ * 06.3-RESEARCH). The drop path never touches the sling, so the floor does not
+ * move with the trim (D-05).
+ */
+const MIN_KEPT_INLANE = 17;
 /** Rules always live, awards ignored: the kicks fire, the score is not under test. */
 const LIVE: RulesGate = { isLive: () => true, award: () => undefined };
 
@@ -228,6 +262,8 @@ interface GateReport {
   readonly ownDown: number;
   readonly opp: number;
   readonly oppDown: number;
+  readonly rootClear: number;
+  readonly rootTotal: number;
   readonly failures: string[];
   readonly summary: string;
 }
@@ -235,7 +271,9 @@ interface GateReport {
 /**
  * Run the gate on `table`: per bat, the rest grid (when `opts.rest`) and the
  * inlane sweep k in K_MIN..K_MAX, keeping inlane flips whose `along` is in
- * [D_MIN, D_MAX].
+ * [D_MIN, D_MAX]. Flips below D_MIN (the rest-grid root strip and inlane flips
+ * short of the band) are root flips: counted as clear only when they cleared
+ * with no sling contact, and never gated.
  */
 function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
   let gated = 0;
@@ -246,6 +284,8 @@ function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
   let opp = 0;
   let oppDown = 0;
   let timeouts = 0;
+  let rootClear = 0;
+  let rootTotal = 0;
   const failures: string[] = [];
 
   const classify = (id: 0 | 1, label: string, r: FlipResult): void => {
@@ -266,10 +306,18 @@ function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
     }
   };
 
+  const root = (r: FlipResult): void => {
+    rootTotal++;
+    if (r.first === null && r.cleared) rootClear++;
+  };
+
   for (const id of [0, 1] as const) {
     if (opts.rest) {
       for (const d of REST_D) {
         for (const k of REST_K) classify(id, `rest d=${d} k=${k}`, flip(table, id, d, k));
+      }
+      for (const d of ROOT_REST_D) {
+        for (const k of REST_K) root(flip(table, id, d, k));
       }
     }
     for (let k = K_MIN; k <= K_MAX; k++) {
@@ -279,6 +327,8 @@ function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
       } else if (r.along >= D_MIN) {
         kept[id]++;
         classify(id, `inlane k=${k}`, r);
+      } else {
+        root(r);
       }
     }
   }
@@ -286,8 +336,21 @@ function evaluate(table: TableSpec, opts: { rest: boolean }): GateReport {
   const summary =
     `gated ${gated}, own-sling failures ${own} (knocked down ${ownDown}), ` +
     `opposite-sling contacts ${opp} (knocked down ${oppDown}), timeouts ${timeouts}, ` +
-    `kept inlane ${kept[0]}/${kept[1]}, off-tip ${offTip[0]}/${offTip[1]}`;
-  return { gated, kept, offTip, own, ownDown, opp, oppDown, failures, summary };
+    `kept inlane ${kept[0]}/${kept[1]}, off-tip ${offTip[0]}/${offTip[1]}, ` +
+    `root strip (d < ${D_MIN}) clear ${rootClear}/${rootTotal}`;
+  return {
+    gated,
+    kept,
+    offTip,
+    own,
+    ownDown,
+    opp,
+    oppDown,
+    rootClear,
+    rootTotal,
+    failures,
+    summary,
+  };
 }
 
 describe("root and mid-bat shots clear their own sling (06.3 D-04/D-13; FLIP-02, ELEM-02, TBL-01)", () => {
@@ -298,11 +361,30 @@ describe("root and mid-bat shots clear their own sling (06.3 D-04/D-13; FLIP-02,
     expect(r.opp, r.summary).toBeLessThanOrEqual(MAX_OPP_CONTACTS);
     expect(r.oppDown, r.summary).toBeLessThanOrEqual(MAX_OPP_DOWN);
     expect(r.gated).toBeGreaterThan(0);
+    expect(r.kept[0], r.summary).toBeGreaterThanOrEqual(MIN_KEPT_INLANE);
+    expect(r.kept[1], r.summary).toBeGreaterThanOrEqual(MIN_KEPT_INLANE);
   });
 
   it("RED control: the pre-trim sling (corner (1.16, 4.75)) fails the own-sling gate", () => {
     const r = evaluate(PRE_TRIM_SPEC, { rest: true });
     console.info(`[root-shot] PRE_TRIM_SPEC ${r.summary}`);
     expect(r.own, r.summary).toBeGreaterThan(0);
+  });
+
+  it(`control: with no slings every kept flip clears and the inlane sweep keeps at least ${MIN_KEPT_INLANE} flips per bat`, () => {
+    const r = evaluate(NO_SLING_SPEC, { rest: true });
+    console.info(`[root-shot] NO_SLING_SPEC ${r.summary}`);
+    expect(r.failures, `${r.summary}\n${r.failures.join("\n")}`).toEqual([]);
+    expect(r.own, r.summary).toBe(0);
+    expect(r.opp, r.summary).toBe(0);
+    expect(r.kept[0], r.summary).toBeGreaterThanOrEqual(MIN_KEPT_INLANE);
+    expect(r.kept[1], r.summary).toBeGreaterThanOrEqual(MIN_KEPT_INLANE);
+  });
+
+  it(`RED control: a walled-off inlane keeps fewer than ${MIN_KEPT_INLANE} inlane flips per bat, so liveness fails`, () => {
+    const r = evaluate(BLIND_SPEC, { rest: false });
+    console.info(`[root-shot] BLIND_SPEC ${r.summary}`);
+    expect(r.kept[0], r.summary).toBeLessThan(MIN_KEPT_INLANE);
+    expect(r.kept[1], r.summary).toBeLessThan(MIN_KEPT_INLANE);
   });
 });
