@@ -132,4 +132,35 @@ describe("narrow-viewport HUD layout (06.4; GAME-01, RND-02)", () => {
     expect(HUD_SIDE_GAP_CSS).toBe(16);
     expect(HUD_BAR_GAP_CSS).toBe(8);
   });
+
+  it("never lets the panel or the bar overlap the canvas over a viewport grid", () => {
+    /** Estimated bar height (CSS px), 06.4-RESEARCH. */
+    const BAR_H = 102;
+    for (let vw = 320; vw <= 2560; vw += 40) {
+      for (let vh = 320; vh <= 1600; vh += 40) {
+        const at = `${vw}x${vh}`;
+        const full = computeView(bounds, vw, vh, 1);
+        if (sideHudClears(full, vw, PANEL_RIGHT)) {
+          expect((vw - full.cssW) / 2, at).toBeGreaterThanOrEqual(PANEL_RIGHT + HUD_SIDE_GAP_CSS);
+        } else {
+          const v = computeView(bounds, vw, heightUnderBar(vh, BAR_H), 1);
+          expect(BAR_H + HUD_BAR_GAP_CSS + v.cssH, at).toBeLessThanOrEqual(vh);
+          expect(v.cssW, at).toBeLessThanOrEqual(vw);
+        }
+      }
+    }
+  });
+
+  it("keeps the full-viewport canvas size at 375x812 in bar mode (width-bound)", () => {
+    const full = computeView(bounds, 375, 812, 1);
+    const bar = computeView(bounds, 375, heightUnderBar(812, 102), 1);
+    expect(bar.cssW).toBe(full.cssW);
+    expect(bar.cssH).toBe(full.cssH);
+  });
+
+  it("selects the bar for a non-finite panel edge or viewport width", () => {
+    const view = computeView(bounds, 1440, 900, 1);
+    expect(sideHudClears(view, 1440, Number.NaN)).toBe(false);
+    expect(sideHudClears(view, Number.NaN, PANEL_RIGHT)).toBe(false);
+  });
 });
