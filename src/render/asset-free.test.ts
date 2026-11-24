@@ -273,10 +273,15 @@ function validateIconSvg(svg: string): void {
   // LF, CR, FF). String.prototype.trim() also strips U+00A0, U+FEFF and the
   // rest of Unicode's whitespace, which CSS keeps, so the browser rejects such
   // a value as a color and the shape paints SVG's initial black.
-  for (const m of svg.matchAll(/\b(fill|stroke|stop-color)\s*=\s*(['"])(.*?)\2/gi)) {
-    const value = (m[3] ?? "").replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, "").toLowerCase();
+  // 06.4.1-REVIEW WR-01 (fifth pass): the value is read up to its closing quote
+  // with a negated class, not `.`, which stops at LF and CR. With `.`, a value
+  // such as `fill='<LF>red'` made no match at all, so it was never checked, and
+  // the browser turned the LF into a space, trimmed it and painted red.
+  for (const m of svg.matchAll(/\b(fill|stroke|stop-color)\s*=\s*(?:'([^']*)'|"([^"]*)")/gi)) {
+    const raw = m[2] ?? m[3] ?? "";
+    const value = raw.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, "").toLowerCase();
     if (value !== "none" && !PALETTE_HEX.has(value)) {
-      throw new Error(`icon SVG paint ${m[1]}=${m[3]} is not none or a palette.ts hex`);
+      throw new Error(`icon SVG paint ${m[1]}=${raw} is not none or a palette.ts hex`);
     }
   }
   for (const m of svg.matchAll(/#[0-9a-f]+/gi)) {
@@ -674,10 +679,38 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     expect(() => validateIconSvg(withElement(fragment))).toThrow("paint fill=");
   });
 
+  // 06.4.1-REVIEW WR-01 (fifth pass): a paint value holding a raw LF or CR used
+  // to make no match in the paint check, so it was never read, and the browser
+  // painted it. Called directly, past the href layer, so the paint check itself
+  // is proven to read values across line breaks.
+  it.each<readonly [string, string, string]>([
+    ["fill led by an LF", "<rect width='32' height='32' fill='\nred'/>", "paint fill="],
+    ["fill led by a CR", "<rect width='32' height='32' fill='\r#00ff00'/>", "paint fill="],
+    ["fill split by an LF", "<rect width='32' height='32' fill='r\ned'/>", "paint fill="],
+    [
+      "stroke led by an LF",
+      "<circle cx='16' cy='16' r='14' fill='none' stroke='\nyellow'/>",
+      "paint stroke=",
+    ],
+    [
+      "double-quoted fill led by an LF",
+      '<rect width="8" height="8" fill="\ncurrentColor"/>',
+      "paint fill=",
+    ],
+  ])("the paint check rejects a %s", (_name, fragment, rule) => {
+    expect(() => validateIconSvg(withElement(fragment))).toThrow(rule);
+  });
+
   it("the paint check still strips the ASCII whitespace CSS strips", () => {
     const fragment = "<rect width='32' height='32' fill=' #f72585 '/>";
     expect(() => validateIconSvg(withElement(fragment))).not.toThrow();
     expect(() => stripProceduralIcon(iconLink(withElement(fragment)))).not.toThrow();
+    // LF, CR, tab and FF too, called directly so the paint check's own trim is
+    // what admits them.
+    for (const pad of ["\n#f72585\n", "\r\n#f72585\t", "\f#f72585\r"]) {
+      const padded = `<rect width='32' height='32' fill='${pad}'/>`;
+      expect(() => validateIconSvg(withElement(padded)), JSON.stringify(pad)).not.toThrow();
+    }
   });
 
   it("two procedural icon links throw with the count", () => {
