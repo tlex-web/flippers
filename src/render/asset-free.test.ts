@@ -338,8 +338,9 @@ const PROCEDURAL_ICON =
 /**
  * Every character the raw icon href payload may hold: ASCII letters and digits,
  * what encodeURIComponent leaves unescaped (`-_.!~*'()`), the space, `=`, `/`
- * and `:` the real favicon writes literally, and `%` only as an ASCII escape
- * (`%00` to `%7F`), so the decoded SVG holds no non-ASCII character.
+ * and `:` the real favicon writes literally, and `%` only as a printable-ASCII
+ * escape (`%20` to `%7E`), so the decoded SVG holds no non-ASCII character and
+ * no control character.
  * 06.4.1-REVIEW IN-01: a lone `%` (a stray one, or `%zz`) used to get past this
  * and make decodeURIComponent throw a bare URIError that named neither the icon
  * nor the rule. An escape that is not valid UTF-8 (`%FF`, `%C3%28`, an encoded
@@ -348,14 +349,20 @@ const PROCEDURAL_ICON =
  * 06.4.1-REVIEW WR-01 (fourth pass): CSS whitespace is ASCII only, so a fill
  * padded with U+00A0 or U+FEFF is an invalid color and its shape paints black.
  * The favicon needs no non-ASCII, so none may reach the validator.
+ * 06.4.1-REVIEW WR-01 (fifth pass): `%0A` and `%0D` are not removed by the URL
+ * parser (only raw tab, LF and CR are), so they reached the decoded SVG, where
+ * a paint value holding one slipped past the paint check. The favicon needs no
+ * control character, so escapes stop at printable ASCII: `%09`, `%0A`, `%0C`,
+ * `%0D`, `%00` and `%7F` all fail here, and validateIconSvg reads values across
+ * line breaks as well.
  */
-const ICON_HREF_CHARS = /^(?:[A-Za-z0-9\-_.!~*'() =/:]|%[0-7][0-9A-Fa-f])*$/;
+const ICON_HREF_CHARS = /^(?:[A-Za-z0-9\-_.!~*'() =/:]|%(?:[2-6][0-9A-Fa-f]|7[0-9A-Ea-e]))*$/;
 
 /**
  * `html` with its one procedural icon link removed, so the unchanged PATTERNS
  * scan the rest. Throws unless exactly one such link is present, its raw href
  * holds no HTML character reference and only ICON_HREF_CHARS (so it decodes to
- * ASCII and decodeURIComponent cannot throw), and its decoded SVG passes
+ * printable ASCII and decodeURIComponent cannot throw), and its decoded SVG passes
  * validateIconSvg.
  *
  * 06.4.1-REVIEW WR-01: the browser's HTML tokenizer decodes character
@@ -383,7 +390,7 @@ function stripProceduralIcon(html: string): string {
   }
   if (!ICON_HREF_CHARS.test(raw)) {
     throw new Error(
-      "icon href holds a raw character, or a bad or non-ASCII % escape, outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
+      "icon href holds a raw character, or a bad or non-printable-ASCII % escape, outside ICON_HREF_CHARS (the URL parser strips raw tab, LF and CR)",
     );
   }
   validateIconSvg(decodeURIComponent(raw));
@@ -668,6 +675,28 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     },
   );
 
+  // 06.4.1-REVIEW WR-01 (fifth pass): an encoded control character survives the
+  // URL parser and reaches the decoded SVG, so the href layer must stop it. The
+  // first three would pass validateIconSvg (its trim strips them around a
+  // palette hex), and the last two would fail it with the paint message, so
+  // each row throws the ICON_HREF_CHARS message only while that guard holds.
+  it.each<readonly [string, string, string]>([
+    ["an encoded LF before a palette fill", "%0A%23f72585", "\n#f72585"],
+    ["an encoded CR after a palette fill", "%23f72585%0D", "#f72585\r"],
+    ["an encoded tab before a palette fill", "%09%23f72585", "\t#f72585"],
+    ["an encoded LF before fill red", "%0Ared", "\nred"],
+    ["an encoded DEL before a palette fill", "%7F%23f72585", "\u007F#f72585"],
+  ])(
+    "rejects an icon href carrying %s with the ICON_HREF_CHARS message",
+    (_name, escaped, fill) => {
+      const raw = encodeURIComponent(GOOD_SVG).replace("%23f72585", escaped);
+      expect(decodeURIComponent(raw)).toBe(GOOD_SVG.replace("#f72585", fill));
+      const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,${raw}" />`;
+      expect(link.match(PROCEDURAL_ICON)).toHaveLength(1);
+      expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
+    },
+  );
+
   // 06.4.1-REVIEW WR-01 (fourth pass): validateIconSvg is called directly, past
   // the href layer above, so the paint check's own whitespace handling is
   // proven on its own: it must strip only what CSS strips.
@@ -681,8 +710,10 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
 
   // 06.4.1-REVIEW WR-01 (fifth pass): a paint value holding a raw LF or CR used
   // to make no match in the paint check, so it was never read, and the browser
-  // painted it. Called directly, past the href layer, so the paint check itself
-  // is proven to read values across line breaks.
+  // painted it. validateIconSvg is called directly, past the href layer, so the
+  // paint check itself is proven to read values across line breaks. Through
+  // iconLink() the line break is encoded as %0A or %0D, which the href layer
+  // now stops first, with its own message.
   it.each<readonly [string, string, string]>([
     ["fill led by an LF", "<rect width='32' height='32' fill='\nred'/>", "paint fill="],
     ["fill led by a CR", "<rect width='32' height='32' fill='\r#00ff00'/>", "paint fill="],
@@ -697,19 +728,26 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       '<rect width="8" height="8" fill="\ncurrentColor"/>',
       "paint fill=",
     ],
-  ])("the paint check rejects a %s", (_name, fragment, rule) => {
+  ])("the paint check, and the href layer before it, reject a %s", (_name, fragment, rule) => {
     expect(() => validateIconSvg(withElement(fragment))).toThrow(rule);
+    const link = iconLink(withElement(fragment));
+    expect(link).toMatch(/%0[AD]/);
+    expect(() => stripProceduralIcon(link)).toThrow("outside ICON_HREF_CHARS");
   });
 
   it("the paint check still strips the ASCII whitespace CSS strips", () => {
     const fragment = "<rect width='32' height='32' fill=' #f72585 '/>";
     expect(() => validateIconSvg(withElement(fragment))).not.toThrow();
     expect(() => stripProceduralIcon(iconLink(withElement(fragment)))).not.toThrow();
-    // LF, CR, tab and FF too, called directly so the paint check's own trim is
-    // what admits them.
+    // LF, CR, tab and FF too, but only called directly: the paint check's own
+    // trim admits them, and the href layer admits no control-character escape.
     for (const pad of ["\n#f72585\n", "\r\n#f72585\t", "\f#f72585\r"]) {
       const padded = `<rect width='32' height='32' fill='${pad}'/>`;
       expect(() => validateIconSvg(withElement(padded)), JSON.stringify(pad)).not.toThrow();
+      const link = iconLink(withElement(padded));
+      expect(() => stripProceduralIcon(link), JSON.stringify(pad)).toThrow(
+        "outside ICON_HREF_CHARS",
+      );
     }
   });
 
