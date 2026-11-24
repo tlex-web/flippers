@@ -4,6 +4,8 @@ import { resolve, type ResolvedElement } from "../table/resolve";
 import { TABLE_SPEC } from "../table/spec";
 import { buildLampShapes, type LampShape } from "./lamps";
 import {
+  BG_BOTTOM,
+  BG_TOP,
   DROP_SHADOW,
   LAMP_RIM,
   LIGHT_POOL,
@@ -17,6 +19,7 @@ import {
   VIGNETTE_CLEAR,
   VIGNETTE_EDGE,
 } from "./palette";
+import * as palette from "./palette";
 import { bakeStatic, drawUnlitLenses, traceElement } from "./static-layer";
 import {
   createRecordingContext,
@@ -627,5 +630,55 @@ describe("bakeStatic slingshot rim (06.4; ELEM-02, RND-01)", () => {
       expect(next.state.props.get("strokeStyle"), `element ${el.id}`).toBe(SLING_RUBBER);
       expect(next.state.props.get("lineWidth"), `element ${el.id}`).toBe(RUBBER_LINE_M);
     }
+  });
+});
+
+/** WCAG 2.x sRGB channel linearization of an 8-bit value. */
+function linearChannel(c8: number): number {
+  const c = c8 / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG 2.x relative luminance of a `#rrggbb` color. */
+function relLuminance(hex: string): number {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  expect(m, hex).not.toBeNull();
+  if (!m) return NaN;
+  const [r, g, b] = [m[1], m[2], m[3]].map((h) => linearChannel(parseInt(h ?? "", 16)));
+  return 0.2126 * (r ?? NaN) + 0.7152 * (g ?? NaN) + 0.0722 * (b ?? NaN);
+}
+
+/** WCAG 2.x contrast ratio between two `#rrggbb` colors. */
+function contrast(a: string, b: string): number {
+  const la = relLuminance(a);
+  const lb = relLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+describe("SLING_RIM contrast and meaning (06.4; ELEM-02)", () => {
+  it("clears 3:1 against both background gradient stops", () => {
+    expect(contrast(SLING_RIM, BG_TOP)).toBeGreaterThanOrEqual(3);
+    expect(contrast(SLING_RIM, BG_BOTTOM)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("clears 3:1 against the sling's own SLING_BODY fill", () => {
+    expect(contrast(SLING_RIM, SLING_BODY)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("stays below the amber rubber, so the kick face is the brightest sling edge", () => {
+    expect(contrast(SLING_RIM, BG_BOTTOM)).toBeLessThan(contrast(SLING_RUBBER, BG_BOTTOM));
+  });
+
+  it("control: today's unstroked SLING_BODY edge is under 3:1, so the helper tells the two apart", () => {
+    expect(contrast(SLING_BODY, BG_BOTTOM)).toBeLessThan(3);
+  });
+
+  it("is a color no other palette export uses (one meaning per color)", () => {
+    const rim = SLING_RIM.toLowerCase();
+    const clashes = Object.entries(palette)
+      .filter(([k, v]) => k !== "SLING_RIM" && typeof v === "string")
+      .filter(([, v]) => (v as string).toLowerCase() === rim)
+      .map(([k]) => k);
+    expect(clashes).toEqual([]);
   });
 });
