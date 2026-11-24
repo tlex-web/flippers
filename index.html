@@ -57,7 +57,8 @@
          MUTED marker; the status line. Every row keeps one height in every game
          state (ball and best can both be empty in attract), so the bar never
          changes height without a resize and the table never moves. The keyboard
-         list (except Mute), the Windows note and the dev readout are hidden. */
+         list (except the Mute row, kept by its .hud-controls-mute class), the
+         Windows note and the dev readout are hidden. */
       #sandbox[data-hud="bar"] {
         flex-direction: column;
         gap: 8px; /* = HUD_BAR_GAP_CSS */
@@ -95,6 +96,7 @@
       #sandbox[data-hud="bar"] .hud-status {
         grid-area: status;
         line-height: 1.2; /* text height = its min-height: 1.2em */
+        min-width: auto; /* the bar row spans the full width; keep the 06.4 behavior */
       }
       /* Bar-mode control hint (06.4.1, 06.4-UI-REVIEW fix 1): static and not
          announced; it shares the status cell and shows only while the status
@@ -123,7 +125,7 @@
         justify-self: end;
         margin: 0;
       }
-      #sandbox[data-hud="bar"] .hud-controls > :not(:nth-last-child(-n + 2)) {
+      #sandbox[data-hud="bar"] .hud-controls > :not(.hud-controls-mute) {
         display: none;
       }
       #sandbox[data-hud="bar"] .hud-controls-note,
@@ -199,6 +201,12 @@
          jumping when it empties. */
       .hud-status {
         min-height: 1.2em;
+        /* 06.4 WR-02: reserve the longest status ("GAME OVER · PRESS ENTER",
+           23 code points, statusText in src/ui/hud.ts) so the side panel is
+           already full width when applyView measures it at boot with an empty
+           status. Monospace, so each glyph is 1ch plus the letter-spacing.
+           Pinned by src/ui/hud-layout.test.ts. */
+        min-width: calc(23 * (1ch + 0.12em));
         white-space: nowrap;
         font-size: 16px;
         font-weight: 700;
@@ -388,8 +396,8 @@
           <dd><kbd data-code="Slash">/</kbd><kbd>→</kbd><kbd>Right Shift</kbd></dd>
           <dt>Nudge</dt>
           <dd><kbd data-code="KeyX">X</kbd><kbd data-code="Period">.</kbd><kbd>↑</kbd></dd>
-          <dt>Mute</dt>
-          <dd>
+          <dt class="hud-controls-mute">Mute</dt>
+          <dd class="hud-controls-mute">
             <kbd data-code="KeyM">M</kbd>
             <span id="hud-mute" class="hud-mute"></span>
           </dd>
