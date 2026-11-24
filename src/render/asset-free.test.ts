@@ -200,6 +200,9 @@ const ICON_ELEMENTS: ReadonlySet<string> = new Set([
  * unlisted presentation attribute such as `filter='invert(1)'` recolored the
  * icon with no flagged token. Nothing that filters, masks, clips, animates or
  * fetches is listed.
+ * 06.4.1-REVIEW IN-03: opacity, fill-opacity and stroke-opacity are left out on
+ * purpose. Alpha blends palette colors into rendered colors palette.ts does not
+ * hold, so partial opacity is not allowed in the favicon.
  */
 const ICON_ATTRS: ReadonlySet<string> = new Set([
   "xmlns",
@@ -518,6 +521,9 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       "attribute filter",
     ],
     ["an opacity attribute", withAttr("opacity='0.3'"), "attribute opacity"],
+    // 06.4.1-REVIEW IN-03: partial alpha blends palette colors off-palette.
+    ["a fill-opacity attribute", withAttr("fill-opacity='0.5'"), "attribute fill-opacity"],
+    ["a stroke-opacity attribute", withAttr("stroke-opacity='0.5'"), "attribute stroke-opacity"],
     [
       "an attribute after a quote with no space",
       GOOD_SVG.replace("fill='#0b0420'", "fill='#0b0420'filter='invert(1)'"),
