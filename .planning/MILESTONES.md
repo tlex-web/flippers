@@ -9,7 +9,7 @@
 **Stats:**
 
 - Timeline: 2026-07-15 → 2026-11-25 (133 days), 788 commits
-- Git range: `feat(01-02)` 618819e → `fix(06.4.1.1-06)` 0b2c95a; tag `v1.0` at e6ab1a5
+- Git range: `feat(01-02)` 618819e → `fix(06.4.1.1-06)` 0b2c95a; audited at e6ab1a5; tag `v1.0` on the final archive commit
 - Code: 122 files and about 44,600 lines in `src/` + `index.html` (about 15,750 lines of non-test TypeScript; 69 test files, 1,523 tests, soak 4/4)
 - Build: about 311 kB JS (79 kB gzip), zero image, font or audio assets
 
