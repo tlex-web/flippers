@@ -388,7 +388,7 @@ Plans:
 **Goal:** On a narrow window the bar hint "Hold Space to launch · ← → flip" shows only while the ball in play rests on the plunger (including while Space is held) and no status shows, on every serve. A read-only `GameSession.isBallOnPlunger()` getter drives a `data-ready` attribute that HudView writes on change; the `:empty` coupling is gone and the bar keeps one height. No font-size below 12 px remains in `index.html`, guarded by a test. Phase 06.4.1's VERIFICATION, SECURITY and VALIDATION are re-run at HEAD and name jsdom 31.0.1 and the current favicon gate, with the user-approved overrides. `src/physics`, `src/table`, `src/control`, package.json and the lockfile stay byte-identical; determinism replays stay bit-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3; decisions in `06.4.1.1-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.4.1
-**Plans:** 5/7 plans executed (4 waves + gap closure)
+**Plans:** 6/7 plans executed (4 waves + gap closure)
 
 Plans:
 **Wave 1**
@@ -405,5 +405,5 @@ Plans:
 
 **Gap closure** *(06.4.1.1-VERIFICATION CR-01 hint flicker; user decisions D-10 fix it, D-11 fold in the other five findings; 05 and 06 run in parallel)*
 - [x] 06.4.1.1-05-PLAN.md — Settled plunger signal (CR-01, WR-01, IN-01): `PLUNGER_HINT_SETTLE_STEPS` (12) in tuning.ts, a private `restSteps` count in `GameSession.tick()` reset on serve, re-serve and drain, `isBallOnPlunger()` gated on it (add-only vs 9a26577); real-table fall-back at holds 10 and 40 stays ready 60 steps with speed 0; spy-rig edges and the NO_BALL guard case [wave 1]
-- [ ] 06.4.1.1-06-PLAN.md — Presented replay through main.ts's hint sink with the hint write sequence in the tally, HudView reads the hint only with a sink, the unconsumed-read test removed (WR-02); type-floor scan sees a final declaration (IN-02); #hud bounded by markup (IN-03) [wave 1]
+- [x] 06.4.1.1-06-PLAN.md — Presented replay through main.ts's hint sink with the hint write sequence in the tally, HudView reads the hint only with a sink, the unconsumed-read test removed (WR-02); type-floor scan sees a final declaration (IN-02); #hud bounded by markup (IN-03) [wave 1]
 - [ ] 06.4.1.1-07-PLAN.md — Merged-tree gate, boundary, replays and dist; 06.4.1.1-REVIEW-FIX.md and the ledger closed at six fixed, open 0; hand-off to re-verification [wave 2]
