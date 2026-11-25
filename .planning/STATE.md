@@ -21,10 +21,10 @@ milestone_name: milestone
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-24)
+See: .planning/PROJECT.md (updated 2026-11-25)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 06.4.1.1 — Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify
+**Current focus:** Milestone v1.0 close-out — all 12 phases complete; re-verify the now-stale 06.4.1, then audit and close the milestone
 
 ## Current Position
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: All phases complete
 Last activity: 2026-11-25 — Phase 06.4.1.1 complete
 
-Progress: [█████████░] 92% (11/11 phases, 77/77 plans)
+Progress: [██████████] 100% (12/12 phases, 84/84 plans)
 
 ## Performance Metrics
 
@@ -378,7 +378,9 @@ Recent decisions affecting current work:
 - [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 6 open rows (0 critical, 1 warning, 5 info). ~~WR-02 (GAME OVER prompt widening the side panel into the 16 px gap)~~ and ~~IN-03~~ fixed in 06.4.1-01 (48ff6f1); the widening was measured real (271.1 → 280.5 px) and the reserve closes it. WR-01: the boot-call guard in `apply-view.test.ts` can't fail (the dpr handler's `applyView();` also matches). Disposition the rest before the milestone closes.
 - [Phase 06.4]: 06.4-UI-REVIEW.md (21/24) follow-ups, none blocking: ~~bar mode hides the Space/flipper-key hints~~ (06.4.1-01), 11 px labels, ~~`/favicon.ico` 404~~ (06.4.1-02).
 - [Phase 06.4.1]: 06.4.1-REVIEW-DISPOSITION.md has 5 open rows (0 critical, 2 warning, 3 info) from the re-review of the fix round. ~~First-round WR-01 (entity-encoded href) and WR-02 (SMIL colours)~~ fixed in 7ccaad6/bdd0a4c (recorded in 06.4.1-REVIEW-FIX.md; their ledger rows were dropped because the re-review reused the ids). New WR-01: a raw tab/LF/CR in the href is stripped by the browser's URL parser but not the validator, so split tokens (`st⏎yle=`, `on⏎load=`) pass; new WR-02: attributes are still a denylist, so `filter='… drop-shadow(… red)'` recolours off-palette. Fix: reject `/[\t\n\r]/` in the raw href and add an `ICON_ATTRS` allowlist. Both are gate-robustness gaps (the shipped icon is clean). Fix with `/gsd-code-review 06.4.1 --fix` or disposition at milestone close.
-- [Phase 06.4.1]: 06.4.1-UI-REVIEW.md (20/24) follow-ups, none blocking: under A1 = A the "Hold Space to launch" hint stays during active play (a launch-scoped hint needs a JS change); 11 px labels still open; the hint hides via `.hud-status:not(:empty)`, so a whitespace write to `#hud-status` would hide it for good.
+- ~~[Phase 06.4.1]: 06.4.1-UI-REVIEW.md (20/24) follow-ups, none blocking: under A1 = A the "Hold Space to launch" hint stays during active play (a launch-scoped hint needs a JS change); 11 px labels still open; the hint hides via `.hud-status:not(:empty)`, so a whitespace write to `#hud-status` would hide it for good.~~ Resolved in 06.4.1.1 (ready-only `data-ready` hint, 12 px floor, `:empty` coupling removed).
+- [Phase 06.4.1]: 06.4.1-VERIFICATION.md is `stale` again: the 06.4.1.1 gap closure (05, 06) changed covered files `src/game/game-session.ts`, `src/ui/hud.ts`, `src/ui/hud.test.ts`, `src/ui/hud-layout.test.ts` (anticipated by decision 06.4.1.1-04). Run `/gsd-execute-phase 06.4.1` once to re-verify before the milestone audit.
+- [Phase 06.4.1.1]: 06.4.1.1-REVIEW-DISPOSITION.md has 6 open info rows (0 critical, 0 warning) from the gap-closure re-review (26f4c14); CR-01, WR-01, WR-02 carried as `fixed`. Substantive: IN-01 (the reduced-motion hint equality compares only the write count, not the step of each write) and IN-02 (no test pins the new "no sink, no read" rule in HudView). The rest are doc wording (IN-03), a double rest scan in `tick()` (IN-04), two never-needed `restSteps` resets (IN-05, necessity) and a vacuous `not.toMatch` (IN-06). Disposition before the milestone closes. Pending UAT: the 100 ms settle feel at 375x812 (AR-06.4.1.1-02, non-blocking).
 
 ### Quick Tasks Completed
 
@@ -406,6 +408,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-25T15:51:57.563Z
-Stopped at: Phase 06.4.1.1 complete — all phases complete
+Last session: 2026-11-25T16:09:22.000Z
+Stopped at: Phase 06.4.1.1 complete (gap closure re-verified 7/7) — all phases complete; next: /gsd-execute-phase 06.4.1 (stale re-verify), then milestone audit
 Resume file: None
