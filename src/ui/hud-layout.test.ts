@@ -295,3 +295,38 @@ describe("side panel status reserve (06.4.1; 06.4 WR-02)", () => {
     expect(style).toMatch(barRule(String.raw`\.hud-status`, String.raw`min-width:\s*auto`));
   });
 });
+
+/**
+ * Type scale floor (06.4.1.1 D-06, 06.4.1-UI-REVIEW fix 2): no HUD text is set
+ * below 12 px. Every font-size in the style block is a px value (so the floor
+ * is checkable), every font shorthand inherits, and no inline style sets a font.
+ */
+describe("type scale floor (06.4.1.1 D-06)", () => {
+  it("uses no font-size below 12 px (06.4.1.1 D-06)", () => {
+    const sizes = [...style.matchAll(/font-size:\s*([^;]+);/g)].map((m) => m[1]?.trim() ?? "");
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const s of sizes) {
+      expect(s, s).toMatch(/^[\d.]+px$/);
+      expect(Number.parseFloat(s), s).toBeGreaterThanOrEqual(12);
+    }
+    const shorthands = [...style.matchAll(/(?<![\w-])font:\s*([^;]+);/g)].map(
+      (m) => m[1]?.trim() ?? "",
+    );
+    for (const s of shorthands) {
+      expect(s, s).toBe("inherit");
+    }
+    expect(indexHtml).not.toMatch(/style="[^"]*font/);
+  });
+
+  it("sets the three former 11 px labels to 12 px", () => {
+    for (const sel of [
+      String.raw`\.hud-label`,
+      String.raw`\.hud-controls-note`,
+      String.raw`\.hud-bonus-heading`,
+    ]) {
+      expect(style, sel).toMatch(
+        new RegExp(String.raw`^\s*${sel}\s*\{[^}]*font-size:\s*12px`, "m"),
+      );
+    }
+  });
+});
