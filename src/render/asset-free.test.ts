@@ -19,9 +19,11 @@ import * as palette from "./palette";
  * the same routes the browser takes, never a regex over markup:
  *
  * - HTML: jsdom builds the spec HTML tree. Exactly one link may carry the icon
- *   rel token, its rel, type and attribute set are pinned, and no noscript
- *   element may appear (jsdom parses with the scripting flag off and browsers
- *   with it on, which changes how noscript content tokenizes).
+ *   rel token, its rel, type and attribute set are pinned, and no noscript or
+ *   template element may appear (jsdom parses with the scripting flag off and
+ *   browsers with it on, which changes how noscript content tokenizes, and a
+ *   template's contents, where a noscript can hide, are a separate fragment
+ *   that querySelector does not search).
  * - data: URL: Node's WHATWG URL parser and fetch (the fetch spec's data: URL
  *   processor) decode the href; the MIME type must be exactly image/svg+xml and
  *   every byte printable ASCII, so the browser's XML decoder has nothing to
@@ -400,17 +402,23 @@ interface StrippedHtml {
  * and the raw source minus the link's source span. jsdom keeps parse5's
  * source locations (includeNodeLocations), so the span cut from the raw text
  * is exactly the tag the checks below read. Throws unless the document holds
- * exactly one link whose rel tokens include icon, holds no noscript element,
- * and that link's type is exactly image/svg+xml, its rel is exactly the single
- * token icon, its attributes are exactly rel, type and href (nothing else
- * rides on the removed element), and its href decodes (decodeIconHref) to an
- * SVG that passes checkIconSvg.
+ * exactly one link whose rel tokens include icon, holds no noscript or
+ * template element, and that link's type is exactly image/svg+xml, its rel is
+ * exactly the single token icon, its attributes are exactly rel, type and href
+ * (nothing else rides on the removed element), and its href decodes
+ * (decodeIconHref) to an SVG that passes checkIconSvg.
  *
  * JSDOM is built with no runScripts or resources option, so it never runs
  * scripts or loads subresources; that also means it parses with the scripting
  * flag off, while browsers parse with it on, which changes how noscript
  * content tokenizes. index.html needs no noscript, so one is rejected instead
- * of modeled.
+ * of modeled. A template is rejected too: querySelector does not search its
+ * contents (a separate DocumentFragment), so a noscript nested in one would
+ * escape the noscript check, and a browser can close the template from inside
+ * that noscript's raw text and parse what follows as live head markup that
+ * jsdom keeps inside an attribute value (06.4.1-REVIEW WR-02, sixth pass).
+ * index.html needs no template either. A nested template needs no recursion:
+ * the outermost one is a real element of the document tree.
  */
 async function stripIconLink(html: string): Promise<StrippedHtml> {
   const dom = new JSDOM(html, { includeNodeLocations: true });
@@ -420,8 +428,8 @@ async function stripIconLink(html: string): Promise<StrippedHtml> {
   if (icons.length !== 1 || !link) {
     throw new Error(`expected exactly one icon link in index.html, found ${icons.length}`);
   }
-  if (doc.querySelector("noscript")) {
-    throw new Error("index.html must hold no noscript element");
+  if (doc.querySelector("noscript, template")) {
+    throw new Error("index.html must hold no noscript or template element");
   }
   const type = link.getAttribute("type");
   if (type !== "image/svg+xml") {
@@ -1067,7 +1075,45 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
 
   it("a noscript element is rejected (jsdom parses with scripting off, browsers with it on)", async () => {
     const html = `${iconLink(GOOD_SVG)}<noscript><p title="</noscript><link rel=icon href=x.png>"></p></noscript>`;
-    await expect(stripIconLink(html)).rejects.toThrow("index.html must hold no noscript element");
+    await expect(stripIconLink(html)).rejects.toThrow(
+      "index.html must hold no noscript or template element",
+    );
+  });
+
+  // 06.4.1-REVIEW WR-02 (sixth pass): a noscript inside a template. A browser
+  // (scripting on) reads the noscript as raw text up to `</noscript>`, the
+  // `</template>` after it closes the template, and the hidden link is parsed
+  // as live head markup (reviewer-verified in Chrome 158: two icon links in
+  // head); the trailing `<template>` swallows the leftover `"></p>...`. jsdom
+  // (scripting off) keeps the whole link inside the p's title value, so it
+  // counts one icon link. The first row is the reviewer's PoC; its hidden link
+  // is also visible to the raw scan's icon link pattern. The second hides the
+  // link behind a quoted `>`, which that pattern cannot see (and its href is
+  // unquoted, so the data: pattern cannot either): there the template ban is
+  // the only guard. Each row asserts the template ban's rejection.
+  it.each<readonly [string, string, boolean]>([
+    [
+      "the reviewer's PoC (a PNG icon link)",
+      "<link rel=icon type=image/png href=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGP4z8BAEmIY1TCqYfhqAADe3/8R2b3rLAAAAABJRU5ErkJggg==>",
+      true,
+    ],
+    [
+      "a PNG icon link behind a quoted >",
+      "<link title='>' rel=icon type=image/png href=data:image/png;base64,iVBORw0KGgo=>",
+      false,
+    ],
+  ])("a noscript inside a template is rejected: %s", async (_name, hidden, rawPatternSees) => {
+    const poc = `<template><noscript><p title="</noscript></template>${hidden}<template>"></p></noscript></template>`;
+    const html = indexHtml.replace("<style>", `${poc}\n    <style>`);
+    expect(html).not.toBe(indexHtml);
+    // jsdom sees only the real icon link and no noscript in the document tree.
+    expect(iconHrefs(html)).toHaveLength(1);
+    expect(new JSDOM(html).window.document.querySelector("noscript")).toBeNull();
+    expect(byName("icon link").test(hidden)).toBe(rawPatternSees);
+    expect(byName("data: URI asset").test(hidden)).toBe(false);
+    await expect(stripIconLink(html)).rejects.toThrow(
+      "index.html must hold no noscript or template element",
+    );
   });
 
   it("a non-icon apple-touch-icon link is left for the pattern scan to catch", async () => {
