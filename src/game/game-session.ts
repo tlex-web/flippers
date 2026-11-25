@@ -169,6 +169,7 @@ import {
   NUDGE_COOLDOWN_STEPS,
   NUDGE_DIRS,
   NUDGE_IMPULSE,
+  PLUNGER_HINT_SETTLE_STEPS,
   WARNING_FLASH_STEPS,
   type NudgeDir,
 } from "./tuning";
@@ -282,6 +283,13 @@ export class GameSession implements RulesGate, RuleHooks {
 
   /** The plunger phase `tick()` saw on the previous step. */
   private prevPlungerPhase: PlungerPhase = "idle";
+
+  /**
+   * Consecutive ticks the ball in play rested in PLUNGER_ZONE, counted on the
+   * step clock in `tick()` and reset on serve, re-serve and drain. Read only by
+   * `isBallOnPlunger()` (06.4.1.1 D-10), never by the sim.
+   */
+  private restSteps = 0;
 
   /**
    * Lane (inlane) ids that scored on this ball, reused: cleared with
@@ -461,6 +469,7 @@ export class GameSession implements RulesGate, RuleHooks {
     if (this.state === "tilted") this.tally.markForfeit();
     else this.tally.snapshot(this.bonusCounters);
     this.active = NO_BALL;
+    this.restSteps = 0;
     this.bonusStartStep = this.step;
     this.bonusEndsAt = this.step + bonusDurationSteps(this.tally.rows, this.tally.forfeit);
     this.skipRequested = false;
@@ -586,6 +595,7 @@ export class GameSession implements RulesGate, RuleHooks {
    * save with the active ball's x (the chute-exit test), then run the tilted
    * ball search (`ballSearch()`, last, so its kick lands between steps). Call
    * once per fixed step, after the game edges.
+   * It also counts the ball's consecutive resting steps for `isBallOnPlunger()`.
    */
   tick(): void {
     this.step++;
@@ -600,6 +610,8 @@ export class GameSession implements RulesGate, RuleHooks {
     const resting =
       phase === "idle" && this.prevPlungerPhase === "idle" && this.activeRestingInZone();
     this.prevPlungerPhase = phase;
+    // The bar hint's settle count (06.4.1.1 D-10); the skill-shot rest test above keeps its single-step test.
+    this.restSteps = this.activeRestingInZone() ? this.restSteps + 1 : 0;
     this.skill.update(phase, resting);
     this.save.update(this.activeBallX());
     this.ballSearch();
@@ -896,13 +908,15 @@ export class GameSession implements RulesGate, RuleHooks {
   }
 
   /**
-   * Whether the ball in play rests on the plunger: inside PLUNGER_ZONE and
-   * below PLUNGER_REST_SPEED_EPS (the shared isRestingInZone test); false with
-   * no ball. Read-only; the bar hint reads it (06.4.1.1 D-01, D-02). Unlike the
-   * skill-shot rest test in tick() it needs no previous-step-idle guard.
+   * Whether the ball in play is ready on the plunger: it has rested in
+   * PLUNGER_ZONE (the shared isRestingInZone test) for PLUNGER_HINT_SETTLE_STEPS
+   * consecutive ticks and still rests now; false with no ball. The settle rides
+   * out the bounce apexes of a weak-plunge fall-back (06.4.1.1-REVIEW CR-01).
+   * Read-only; the bar hint reads it, and the count is never read by the sim
+   * (06.4.1.1 D-01, D-02, D-10).
    */
   isBallOnPlunger(): boolean {
-    return this.activeRestingInZone();
+    return this.restSteps >= PLUNGER_HINT_SETTLE_STEPS && this.activeRestingInZone();
   }
 
   /** The tilt meter level (read-only; for tests and diagnosis). */
@@ -978,6 +992,7 @@ export class GameSession implements RulesGate, RuleHooks {
     this.bonusCounters.reset();
     this.skipRequested = false;
     this.resetSearch();
+    this.restSteps = 0;
     this.state = "playing";
     this.active = this.world.addBall(this.spawn);
     this.flippers.setEnabled(true);
@@ -994,6 +1009,7 @@ export class GameSession implements RulesGate, RuleHooks {
    */
   private reServe(): void {
     this.resetSearch();
+    this.restSteps = 0;
     this.active = this.world.addBall(this.spawn);
     this.skill.disarm();
   }
