@@ -330,3 +330,57 @@ describe("type scale floor (06.4.1.1 D-06)", () => {
     }
   });
 });
+
+/**
+ * Side panel width after the 12 px floor (06.4.1.1 D-07): none of the three
+ * raised declarations can set the side panel's width, so the panel stays as
+ * wide as the status reserve and the vh 900 side/bar switch point holds. The
+ * pixel re-measure is the 06.4.1.1-03 UAT; this pins why it cannot move.
+ */
+describe("side panel width after the 12 px floor (06.4.1.1 D-07)", () => {
+  /** The base (line-anchored, not under #sandbox) .hud-status block. */
+  const BASE_STATUS = /^\s*\.hud-status\s*\{([^}]*)\}/m;
+
+  /** The markup after the style block (no CSS selectors). */
+  const markup = indexHtml.slice(indexHtml.indexOf("</style>"));
+
+  it("keeps the SCORE label narrower than the 23ch status reserve for any monospace ch", () => {
+    const label = /<div class="hud-label">([^<]*)<\/div>/.exec(markup)?.[1] ?? "";
+    expect(cp(label)).toBeGreaterThan(0);
+    const labelPx = num(/^\s*\.hud-label\s*\{[^}]*font-size:\s*([\d.]+)px/m);
+    const labelEm = num(/^\s*\.hud-label\s*\{[^}]*letter-spacing:\s*([\d.]+)em/m);
+
+    const status = BASE_STATUS.exec(style)?.[1] ?? "";
+    const statusPx = Number(/font-size:\s*([\d.]+)px/.exec(status)?.[1]);
+    const reserveN = Number(/min-width:\s*calc\(\s*(\d+)\s*\*/.exec(status)?.[1]);
+    const statusEm = Number(/letter-spacing:\s*([\d.]+)em/.exec(status)?.[1]);
+
+    for (const v of [labelPx, labelEm, statusPx, reserveN, statusEm]) {
+      expect(v).toBeGreaterThan(0);
+    }
+    // A monospace ch is about 0.5em to 0.7em of its font-size.
+    for (const r of [0.5, 0.6, 0.7]) {
+      const labelWidth = cp(label) * (r * labelPx + labelEm * labelPx);
+      const reserve = reserveN * (r * statusPx + statusEm * statusPx);
+      expect(labelWidth, `ch = ${r}em`).toBeLessThan(reserve);
+    }
+  });
+
+  it("keeps the Windows note out of the panel's intrinsic width (contain: inline-size)", () => {
+    expect(style).toMatch(/^\s*\.hud-controls-note\s*\{[^}]*contain:\s*inline-size/m);
+  });
+
+  it("keeps the BONUS heading in the #hud-bonus overlay, not the #hud side panel", () => {
+    const heading = markup.indexOf('class="hud-bonus-heading"');
+    const bonus = markup.indexOf('id="hud-bonus"');
+    expect(bonus).toBeGreaterThan(-1);
+    expect(heading).toBeGreaterThan(bonus);
+
+    const hudStart = markup.indexOf('<div id="hud" class="hud">');
+    const hudEnd = markup.indexOf("<!-- End-of-ball bonus");
+    expect(hudStart).toBeGreaterThan(-1);
+    expect(hudEnd).toBeGreaterThan(hudStart);
+    expect(bonus).toBeGreaterThan(hudEnd);
+    expect(markup.slice(hudStart, hudEnd)).not.toMatch(/hud-bonus-heading/);
+  });
+});
