@@ -414,6 +414,8 @@ function main(): void {
   // Game HUD: the DOM overlay (score, ball, high score, status), each line
   // written only when its own inputs change. #hud-best is both the best line's
   // text sink and the attribute sink for its new-best pulse (data-new).
+  // #hud-hint is the attribute sink for the bar hint's data-ready flag
+  // (06.4.1.1 D-03): set only while the ball rests on the plunger, no status.
   const hudBest = requireElement("hud-best");
   const hudView = new HudView(
     requireTextSink("hud-score"),
@@ -421,6 +423,7 @@ function main(): void {
     requireTextSink("hud-status"),
     hudBest,
     hudBest,
+    requireElement("hud-hint"),
   );
   // End-of-ball bonus overlay (06-UI-SPEC, D-12): the tally row by row, shown
   // only in the bonus state; each row, label, value and TOTAL written only when

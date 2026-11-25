@@ -895,6 +895,16 @@ export class GameSession implements RulesGate, RuleHooks {
     return this.state === "playing" && this.step < this.warningUntilStep;
   }
 
+  /**
+   * Whether the ball in play rests on the plunger: inside PLUNGER_ZONE and
+   * below PLUNGER_REST_SPEED_EPS (the shared isRestingInZone test); false with
+   * no ball. Read-only; the bar hint reads it (06.4.1.1 D-01, D-02). Unlike the
+   * skill-shot rest test in tick() it needs no previous-step-idle guard.
+   */
+  isBallOnPlunger(): boolean {
+    return this.activeRestingInZone();
+  }
+
   /** The tilt meter level (read-only; for tests and diagnosis). */
   getTiltLevel(): number {
     return this.tilt.getLevel();

@@ -29,6 +29,9 @@
  *   `StatusCode`, `statusText`). It is the only HUD line announced to assistive tech;
  *   the score changes too often to announce. The mute announcer (`MuteView`'s
  *   second sink, a visually hidden live region) is the page's other one.
+ * - hint (optional, 06.4.1.1 D-01, D-03): no text; an `AttrSink` on the bar
+ *   hint that gets `data-ready="true"` (`HINT_READY_ATTR`) only while playing
+ *   with no status and the ball in play resting on the plunger.
  *
  * Write-on-change, per line: `HudView.update()` runs every render frame but
  * caches the inputs of each line and rebuilds and writes a line only when its
@@ -86,7 +89,16 @@ export interface HudSource {
   isNewBest(): boolean;
   /** `getStep()` at the most recent game over (-1 before any). */
   getGameOverStep(): number;
+  /** The ball in play rests on the plunger: the bar hint's ready signal (06.4.1.1 D-02). */
+  isBallOnPlunger(): boolean;
 }
+
+/**
+ * The attribute HudView sets to "true" on the bar hint while it is ready (the
+ * ball in play rests on the plunger and no status shows). index.html shows the
+ * hint on it; hud-layout.test.ts pins the CSS to this name.
+ */
+export const HINT_READY_ATTR = "data-ready";
 
 /** Built once: en-US thousands grouping, integers only. */
 const SCORE_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -202,6 +214,8 @@ export class HudView {
   /** The best line and its `data-new` attribute (optional: older compositions omit them). */
   private readonly best: TextSink | null;
   private readonly bestAttr: AttrSink | null;
+  /** The bar hint's `data-ready` attribute sink (optional: older compositions omit it). */
+  private readonly hint: AttrSink | null;
 
   /** Whether any line has been written; false so the first update writes all three. */
   private written = false;
@@ -219,6 +233,8 @@ export class HudView {
   /** The best-line inputs last written (with `lastState`). */
   private lastBest = 0;
   private lastNewBest = false;
+  /** The bar hint's ready flag last written. */
+  private lastReady = false;
 
   constructor(
     score: TextSink,
@@ -226,12 +242,14 @@ export class HudView {
     status: TextSink,
     best: TextSink | null = null,
     bestAttr: AttrSink | null = null,
+    hint: AttrSink | null = null,
   ) {
     this.score = score;
     this.ball = ball;
     this.status = status;
     this.best = best;
     this.bestAttr = bestAttr;
+    this.hint = hint;
   }
 
   /**
@@ -338,6 +356,15 @@ export class HudView {
       this.status.textContent = statusText(code, value);
     }
 
+    // Bar hint (06.4.1.1 D-01, D-03): ready only while the ball in play rests
+    // on the plunger and no status shows, so the status always wins. Read
+    // every update (no layout read, no allocation), written only on change.
+    const ready = state === "playing" && code === "none" && src.isBallOnPlunger();
+    if (this.hint !== null && (first || ready !== this.lastReady)) {
+      if (ready) this.hint.setAttribute(HINT_READY_ATTR, "true");
+      else this.hint.removeAttribute(HINT_READY_ATTR);
+    }
+
     this.written = true;
     this.lastScore = score;
     this.lastBall = ball;
@@ -346,6 +373,7 @@ export class HudView {
     this.lastValue = value;
     this.lastBest = best;
     this.lastNewBest = newBest;
+    this.lastReady = ready;
   }
 }
 
