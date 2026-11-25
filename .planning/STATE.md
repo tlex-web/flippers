@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06.4.1.1
 current_phase_name: "Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify"
 status: executing
-stopped_at: Completed 06.4.1.1-01-PLAN.md
-last_updated: "2026-11-25T12:36:18.089Z"
+stopped_at: Completed 06.4.1.1-02-PLAN.md
+last_updated: "2026-11-25T12:42:35.079Z"
 last_activity: 2026-11-25
 last_activity_desc: Phase 06.4.1.1 execution started
-state_head: 0c710bd36165d5777b15684d3bba1466383ab45b
+state_head: 77eb6562bff73b9e140e43e1472e2c57c7660fd5
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 81
-  completed_plans: 78
+  completed_plans: 79
 milestone_name: milestone
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 ## Current Position
 
 Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-11-25 — Phase 06.4.1.1 execution started
 
@@ -146,6 +146,7 @@ Progress: [██████████] 100% (11/11 phases, 77/77 plans)
 | Phase 06.4.1 P02 | 30min | 2 tasks | 2 files |
 | Phase 06.4.1 P03 | 11min | 3 tasks | 1 files |
 | Phase 06.4.1.1 P01 | 6 min | 3 tasks | 8 files |
+| Phase 06.4.1.1 P02 | 3 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -338,6 +339,7 @@ Recent decisions affecting current work:
 - [Phase 06.4.1]: review --fix: the favicon gate rejects any `&` in the raw href and the decoded SVG (WR-01, 7ccaad6) and allowlists SVG elements svg/rect/circle/ellipse/path/g (WR-02, bdd0a4c); re-verified 17/17, SECURITY 11/11 closed
 - [Phase 06.4.1.1]: 06.4.1.1-01: bar hint ready = playing && status none && GameSession.isBallOnPlunger(); plain rest test holds through a held charge (no charging term)
 - [Phase 06.4.1.1]: 06.4.1.1-01: data-ready (HINT_READY_ATTR) lives on #hud-hint, CSS hidden by default; :empty sibling coupling removed
+- [Phase 06.4.1.1]: 06.4.1.1-02: last three 11 px HUD labels raised to 12 px; floor guarded (px only, >=12, shorthands inherit, no inline font); D-07 side panel width proven unchanged by construction, pixel re-measure is the 06.4.1.1-03 UAT
 
 ### Pending Todos
 
@@ -390,6 +392,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-25T12:36:11.905Z
-Stopped at: Completed 06.4.1.1-01-PLAN.md
+Last session: 2026-11-25T12:42:29.120Z
+Stopped at: Completed 06.4.1.1-02-PLAN.md
 Resume file: None
