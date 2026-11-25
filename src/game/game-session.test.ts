@@ -1667,10 +1667,17 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
 });
 
 describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
-  it("is false before onStart (no ball in play)", () => {
-    const r = makeRig(NO_SAVE);
+  it("is false before onStart, even with a resting ball that carries the NO_BALL id (06.4.1.1-REVIEW IN-01)", () => {
+    // Before onStart() no spy ball exists, so without this ball the loop in
+    // activeRestingInZone() falls through and the case never reached the
+    // NO_BALL guard. -1 is the only id that can match activeBallId while no
+    // ball is in play, so this resting ball at SPAWN pins the guard itself.
+    const r = makeRig(NO_SAVE, [-1]);
     r.setBallX(SPAWN.x);
     r.setBallY(SPAWN.y);
+    r.setBallVx(0);
+    expect(r.session.activeBallId).toBe(-1);
+    r.tick(2 * PLUNGER_HINT_SETTLE_STEPS);
     expect(r.session.isBallOnPlunger()).toBe(false);
   });
 
@@ -1685,15 +1692,17 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
     expect(r.session.isBallOnPlunger()).toBe(true);
   });
 
-  it("is false while the ball moves (vx 1) and out of the zone (y 0)", () => {
+  it("is false while the ball moves (vx 1) and out of the zone (y 0), over PLUNGER_HINT_SETTLE_STEPS ticks (D-10)", () => {
     const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.setBallX(SPAWN.x);
     r.setBallY(SPAWN.y);
     r.setBallVx(1);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
     expect(r.session.isBallOnPlunger()).toBe(false);
     r.setBallVx(0);
     r.setBallY(0);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
     expect(r.session.isBallOnPlunger()).toBe(false);
   });
 
@@ -1732,5 +1741,104 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
     expect(r.impulses.length).toBe(impulses);
     expect(r.gate.length).toBe(gate);
     expect(r.session.getStep()).toBe(step);
+  });
+});
+
+/**
+ * The bar hint's settle window (06.4.1.1 D-10, 06.4.1.1-REVIEW CR-01): the
+ * ready signal waits PLUNGER_HINT_SETTLE_STEPS consecutive resting ticks, so a
+ * bounce apex (at most 3 resting ticks on the real table) never reads true. The
+ * spy ball sits at SPAWN, inside PLUNGER_ZONE, with vx 0 unless a case moves it.
+ */
+describe("GameSession isBallOnPlunger settle window (06.4.1.1 D-10, CR-01)", () => {
+  /** A started game with the served spy ball at rest at SPAWN. */
+  function servedAtSpawn(options: GameSessionOptions = NO_SAVE): Rig {
+    const r = makeRig(options);
+    r.session.onStart();
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    r.setBallVx(0);
+    return r;
+  }
+
+  it("boundary: false after PLUNGER_HINT_SETTLE_STEPS - 1 resting ticks, true after one more (D-10)", () => {
+    const r = servedAtSpawn();
+    r.tick(PLUNGER_HINT_SETTLE_STEPS - 1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(1);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+  });
+
+  it("live term: once true, a moving ball reads false before the next tick (D-10)", () => {
+    const r = servedAtSpawn();
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+    r.setBallVx(1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+  });
+
+  it("restart: one moving tick restarts the count (D-10)", () => {
+    const r = servedAtSpawn();
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+    r.setBallVx(1);
+    r.tick(1);
+    r.setBallVx(0);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS - 1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(1);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+  });
+
+  it("apex windows: 20 rest windows of PLUNGER_HINT_SETTLE_STEPS - 1 ticks never read true (D-10)", () => {
+    const r = servedAtSpawn();
+    for (let cycle = 0; cycle < 20; cycle++) {
+      r.setBallVx(0);
+      for (let i = 0; i < PLUNGER_HINT_SETTLE_STEPS - 1; i++) {
+        r.tick(1);
+        expect(r.session.isBallOnPlunger(), `cycle ${cycle} rest tick ${i}`).toBe(false);
+      }
+      r.setBallVx(1);
+      r.tick(1);
+      expect(r.session.isBallOnPlunger(), `cycle ${cycle} moving tick`).toBe(false);
+    }
+  });
+
+  it("reads do not count: 100 reads leave it false and change nothing (D-10)", () => {
+    const r = servedAtSpawn();
+    r.tick(PLUNGER_HINT_SETTLE_STEPS - 1);
+    const calls = r.calls.length;
+    const impulses = r.impulses.length;
+    const gate = r.gate.length;
+    const step = r.session.getStep();
+    for (let i = 0; i < 100; i++) expect(r.session.isBallOnPlunger()).toBe(false);
+    expect(r.calls.length).toBe(calls);
+    expect(r.impulses.length).toBe(impulses);
+    expect(r.gate.length).toBe(gate);
+    expect(r.session.getStep()).toBe(step);
+    r.tick(1);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+  });
+
+  it("re-serve restarts the count: a backstopped drain reads false until a fresh settle (D-10)", () => {
+    const r = makeRig(); // the default save
+    r.setBallX(0);
+    r.session.onStart();
+    r.tick(1); // the ball left the chute: the save starts
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    r.setBallVx(0);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+    const before = r.session.activeBallId;
+    r.step(drainOf(before));
+    expect(r.session.getState()).toBe("playing");
+    expect(r.session.activeBallId).not.toBe(before);
+    expect(r.session.getSaveCount()).toBe(1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS - 1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(1);
+    expect(r.session.isBallOnPlunger()).toBe(true);
   });
 });
