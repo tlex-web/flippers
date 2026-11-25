@@ -114,10 +114,7 @@ class FakeSource implements HudSource {
   getGameOverStep(): number {
     return this.gameOverStep;
   }
-  /** How many times HudView read isBallOnPlunger() (the null-sink read case). */
-  onPlungerReads = 0;
   isBallOnPlunger(): boolean {
-    this.onPlungerReads++;
     return this.onPlunger;
   }
 }
@@ -1287,21 +1284,5 @@ describe("HudView bar hint ready flag (06.4.1.1 D-01, D-03)", () => {
     src.ball = 3;
     src.onPlunger = true;
     expectWrite("true");
-  });
-
-  it("reads isBallOnPlunger() even with no hint sink, so the presented replay exercises it (D-02)", () => {
-    const view = new HudView(
-      new CountingSink(),
-      new CountingSink(),
-      new CountingSink(),
-      new CountingSink(),
-      new FakeAttrSink(),
-    );
-    const src = new FakeSource();
-    src.state = "playing";
-    src.ball = 1;
-    src.onPlunger = true;
-    view.update(src);
-    expect(src.onPlungerReads).toBeGreaterThan(0);
   });
 });

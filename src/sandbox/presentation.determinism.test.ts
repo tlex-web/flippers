@@ -26,7 +26,7 @@ import { createRecordingContext, RecordingLayerFactory } from "../render/test/re
 import { computeView, tableBounds } from "../render/view-transform";
 import { FixedStepLoop } from "../sim/loop";
 import { PLUNGER_REST, PLUNGER_ZONE } from "../table/spec";
-import { BonusView, HudView, type AttrSink, type TextSink } from "../ui/hud";
+import { BonusView, HINT_READY_ATTR, HudView, type AttrSink, type TextSink } from "../ui/hud";
 import { PresentationObserver } from "./presentation-observer";
 
 // Heavy simulation suite: the 5 s default timeout is too tight under load, so
@@ -50,7 +50,8 @@ vi.setConfig({ testTimeout: 30_000 });
  * fx), the LampTracker over the reactive elements and the session, an
  * AudioEngine over a FakeAudioContext (unlocked before the first frame), a
  * TableRenderer over a recording context, and HudView (score, ball, status,
- * best, best attribute) and BonusView over counting text and attribute sinks.
+ * best, best attribute, hint attribute) and BonusView over counting text and
+ * attribute sinks.
  * `onPostStep` runs main.ts's order (dispatch, reactive.service,
  * session.service, observer.observe, lamps.update, effects.tick, flash.tick).
  * Every frame then tallies the queued cue kinds, flushes them to audio,
@@ -65,7 +66,7 @@ vi.setConfig({ testTimeout: 30_000 });
  * ballSave, bonusTick, nudge and highScore cues, started voices, emitted
  * particles, lit a lamp above level 0.5, sampled a nonzero shake offset in some
  * frame, drew the static layer once per frame, wrote the HUD and the bonus
- * overlay, dropped no cue and ended muted; the reduced-motion run blitted the
+ * overlay, set and cleared the bar hint, dropped no cue and ended muted; the reduced-motion run blitted the
  * static layer only at offset (0, 0).
  */
 
@@ -142,6 +143,20 @@ class CountingElement extends CountingSink implements AttrSink {
   }
 }
 
+/**
+ * The #hud-hint stand-in: keeps every attribute write in order, `name=value`
+ * for a set and `-name` for a removal (06.4.1.1 WR-02).
+ */
+class RecordingAttrSink implements AttrSink {
+  readonly writes: string[] = [];
+  setAttribute(name: string, value: string): void {
+    this.writes.push(`${name}=${value}`);
+  }
+  removeAttribute(name: string): void {
+    this.writes.push(`-${name}`);
+  }
+}
+
 interface FlipperSample {
   readonly id: number;
   readonly angle: number;
@@ -164,6 +179,8 @@ interface PresentationTally {
   readonly bestAttrWrites: number;
   /** Bonus overlay attribute and text writes. */
   readonly bonusWrites: number;
+  /** The bar hint's attribute writes in order, through main.ts's #hud-hint sink (06.4.1.1 WR-02). */
+  readonly hint: readonly string[];
   readonly dropped: number;
   readonly mutedAtEnd: boolean;
 }
@@ -279,7 +296,10 @@ function play(frameMs: number, presented: boolean, reducedMotion = false): Outco
   const hudBall = new CountingSink();
   const hudStatus = new CountingSink();
   const hudBest = new CountingElement();
-  const hudView = presented ? new HudView(hudScore, hudBall, hudStatus, hudBest, hudBest) : null;
+  const hudHint = new RecordingAttrSink();
+  const hudView = presented
+    ? new HudView(hudScore, hudBall, hudStatus, hudBest, hudBest, hudHint)
+    : null;
   const bonusOverlay = new CountingElement();
   const bonusRows = [new CountingElement(), new CountingElement(), new CountingElement()];
   const bonusLabels = [new CountingElement(), new CountingElement(), new CountingElement()];
@@ -543,6 +563,7 @@ function play(frameMs: number, presented: boolean, reducedMotion = false): Outco
             hudWrites: hudScore.writes + hudBall.writes + hudStatus.writes + hudBest.writes,
             bestAttrWrites: hudBest.attrWrites,
             bonusWrites,
+            hint: hudHint.writes,
             dropped: cues.dropped,
             mutedAtEnd: audio.isMuted(),
           }
@@ -616,6 +637,11 @@ describe("the presentation layer is read-only (RND-02, T-05-18, D-23)", () => {
       expect(p.staticBlits).toBe(p.frames);
       expect(p.dropped).toBe(0);
       expect(p.mutedAtEnd).toBe(true);
+      // The bar hint was set and cleared through main.ts's sink, written only
+      // on change (06.4.1.1 WR-02).
+      expect(p.hint).toContain(`${HINT_READY_ATTR}=true`);
+      expect(p.hint).toContain(`-${HINT_READY_ATTR}`);
+      for (let i = 1; i < p.hint.length; i++) expect(p.hint[i]).not.toBe(p.hint[i - 1]);
     }
   });
 
@@ -646,5 +672,6 @@ describe("the presentation layer is read-only (RND-02, T-05-18, D-23)", () => {
     expect(p.staticBlits).toBe(p.frames);
     expect(p.shakenFrames).toBe(0);
     expect(p.cues).toEqual(q.cues);
+    expect(p.hint).toEqual(q.hint);
   });
 });

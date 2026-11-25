@@ -357,9 +357,11 @@ export class HudView {
     }
 
     // Bar hint (06.4.1.1 D-01, D-03): ready only while the ball in play rests
-    // on the plunger and no status shows, so the status always wins. Read
-    // every update (no layout read, no allocation), written only on change.
-    const ready = state === "playing" && code === "none" && src.isBallOnPlunger();
+    // on the plunger and no status shows, so the status always wins. Read only
+    // when a hint sink is wired (main.ts and the presented replay pass
+    // #hud-hint), with no layout read and no allocation; written only on change.
+    const ready =
+      this.hint !== null && state === "playing" && code === "none" && src.isBallOnPlunger();
     if (this.hint !== null && (first || ready !== this.lastReady)) {
       if (ready) this.hint.setAttribute(HINT_READY_ATTR, "true");
       else this.hint.removeAttribute(HINT_READY_ATTR);
