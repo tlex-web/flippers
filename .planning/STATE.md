@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 06.4.1.1
 current_phase_name: "Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify"
-status: Phase 06.4.1.1 inserted, not planned
-stopped_at: Phase 06.4.1.1 context gathered
-last_updated: "2026-11-25T12:21:55.518Z"
+status: executing
+stopped_at: Completed 06.4.1.1-01-PLAN.md
+last_updated: "2026-11-25T12:36:18.089Z"
 last_activity: 2026-11-25
-last_activity_desc: Phase 06.4.1 complete
-state_head: d52753d7dd815a79196224c2ebd1235e744a0392
+last_activity_desc: Phase 06.4.1.1 execution started
+state_head: 0c710bd36165d5777b15684d3bba1466383ab45b
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 81
-  completed_plans: 77
+  completed_plans: 78
 milestone_name: milestone
 ---
 
@@ -24,14 +24,14 @@ milestone_name: milestone
 See: .planning/PROJECT.md (updated 2026-11-24)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Milestone v1.0 — all 11 phases complete; next is the milestone audit and close
+**Current focus:** Phase 06.4.1.1 — Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify
 
 ## Current Position
 
-Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — READY TO EXECUTE
-Plan: Not started
-Status: Phase 06.4.1.1 inserted, not planned
-Last activity: 2026-11-25 - Completed quick task 261125-0es: Replace regex favicon validation with jsdom parsers (closes 06.4.1 WR-01/WR-02)
+Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-11-25 — Phase 06.4.1.1 execution started
 
 Progress: [██████████] 100% (11/11 phases, 77/77 plans)
 
@@ -145,6 +145,7 @@ Progress: [██████████] 100% (11/11 phases, 77/77 plans)
 | Phase 06.4.1 P01 | 9 min | 2 tasks | 4 files |
 | Phase 06.4.1 P02 | 30min | 2 tasks | 2 files |
 | Phase 06.4.1 P03 | 11min | 3 tasks | 1 files |
+| Phase 06.4.1.1 P01 | 6 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -335,6 +336,8 @@ Recent decisions affecting current work:
 - [Phase 06.4.1]: 06.4.1-03: user approved the bar hint, GAME OVER clearance and favicon on the live build (verbatim "approved"); A1 = A (hint whenever no status shows) and icon = A (bumper) kept as built, nothing tuned
 - [Phase 06.4.1]: 06.4.1-03: 06.4 ledger WR-02 and IN-03 fixed by 06.4.1-01 (48ff6f1), open 8 -> 6; IN-01, WR-01, IN-02, IN-04, IN-05, IN-06 stay open for milestone-close triage
 - [Phase 06.4.1]: review --fix: the favicon gate rejects any `&` in the raw href and the decoded SVG (WR-01, 7ccaad6) and allowlists SVG elements svg/rect/circle/ellipse/path/g (WR-02, bdd0a4c); re-verified 17/17, SECURITY 11/11 closed
+- [Phase 06.4.1.1]: 06.4.1.1-01: bar hint ready = playing && status none && GameSession.isBallOnPlunger(); plain rest test holds through a held charge (no charging term)
+- [Phase 06.4.1.1]: 06.4.1.1-01: data-ready (HINT_READY_ATTR) lives on #hud-hint, CSS hidden by default; :empty sibling coupling removed
 
 ### Pending Todos
 
@@ -387,6 +390,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-25T11:36:52.464Z
-Stopped at: Phase 06.4.1.1 context gathered
-Resume file: .planning/phases/06.4.1.1-address-tech-debt-ready-only-bar-hint-11px-type-06-4-1-re-ve/06.4.1.1-CONTEXT.md
+Last session: 2026-11-25T12:36:11.905Z
+Stopped at: Completed 06.4.1.1-01-PLAN.md
+Resume file: None

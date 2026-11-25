@@ -388,11 +388,11 @@ Plans:
 **Goal:** On a narrow window the bar hint "Hold Space to launch · ← → flip" shows only while the ball in play rests on the plunger (including while Space is held) and no status shows, on every serve. A read-only `GameSession.isBallOnPlunger()` getter drives a `data-ready` attribute that HudView writes on change; the `:empty` coupling is gone and the bar keeps one height. No font-size below 12 px remains in `index.html`, guarded by a test. Phase 06.4.1's VERIFICATION, SECURITY and VALIDATION are re-run at HEAD and name jsdom 31.0.1 and the current favicon gate, with the user-approved overrides. `src/physics`, `src/table`, `src/control`, package.json and the lockfile stay byte-identical; determinism replays stay bit-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3; decisions in `06.4.1.1-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.4.1
-**Plans:** 4 plans (4 waves)
+**Plans:** 1/4 plans executed (4 waves)
 
 Plans:
 **Wave 1**
-- [ ] 06.4.1.1-01-PLAN.md — Ready-only bar hint end to end: `isBallOnPlunger()` getter, HudView `data-ready` sink wired in main.ts, attribute CSS replacing the `:empty` rule; ready x status matrix, serve sequence, spy-rig and real-table charge/fall-back tests [wave 1]
+- [x] 06.4.1.1-01-PLAN.md — Ready-only bar hint end to end: `isBallOnPlunger()` getter, HudView `data-ready` sink wired in main.ts, attribute CSS replacing the `:empty` rule; ready x status matrix, serve sequence, spy-rig and real-table charge/fall-back tests [wave 1]
 
 **Wave 2** *(blocked on Wave 1: shares index.html and hud-layout.test.ts)*
 - [ ] 06.4.1.1-02-PLAN.md — 12 px type floor: the three 11 px labels to 12 px with a floor guard test, and a test that the side panel width stays set by the status reserve (D-07) [wave 2]
