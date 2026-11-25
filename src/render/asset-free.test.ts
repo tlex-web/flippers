@@ -241,8 +241,13 @@ const ICON_ATTRS: ReadonlySet<string> = new Set([
  */
 const ICON_SHAPES: ReadonlySet<string> = new Set(["rect", "circle", "ellipse", "path"]);
 
-/** The paint attributes whose values must be none or a palette.ts hex. */
-const PAINT_ATTRS: ReadonlySet<string> = new Set(["fill", "stroke", "stop-color"]);
+/**
+ * The paint attributes whose values must be none or a palette.ts hex. Each
+ * must also be an ICON_ATTRS member, or the attribute allowlist rejects it
+ * first and the paint check never reads it (stop-color is not listed: no
+ * gradient element is allowed, 06.4.1-REVIEW IN-01).
+ */
+const PAINT_ATTRS: ReadonlySet<string> = new Set(["fill", "stroke"]);
 
 /** `s` with only ASCII A-Z lowercased (HTML and CSS keywords are ASCII case-insensitive). */
 function asciiLower(s: string): string {
@@ -277,13 +282,13 @@ function errorDetail(e: unknown): string {
  * drawing, checked in preorder (each element before its children): the
  * element is an ICON_ELEMENTS member in the SVG namespace; every attribute is
  * a null-namespace ICON_ATTRS member or the bare `xmlns` declaration (so
- * `xmlns:*`, `xlink:*` and `xml:*` fail); every fill, stroke and stop-color
- * value is none or a palette.ts hex once CSS whitespace (ASCII only) is
- * stripped from its ends; every ICON_SHAPES element carries its own fill
- * (SVG's initial fill is black, which palette.ts does not hold); and the
- * element holds only element children (no text, CDATA, comment or processing
- * instruction). Node kinds are compared by count and numeric nodeType, since
- * the global `Node` constant does not exist in the node test environment.
+ * `xmlns:*`, `xlink:*` and `xml:*` fail); every fill and stroke value is none
+ * or a palette.ts hex once CSS whitespace (ASCII only) is stripped from its
+ * ends; every ICON_SHAPES element carries its own fill (SVG's initial fill is
+ * black, which palette.ts does not hold); and the element holds only element
+ * children (no text, CDATA, comment or processing instruction). Node kinds are
+ * compared by count and numeric nodeType, since the global `Node` constant does
+ * not exist in the node test environment.
  */
 function checkIconElement(el: Element): void {
   if (el.namespaceURI !== SVG_NS || !ICON_ELEMENTS.has(el.localName)) {
@@ -603,6 +608,10 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     expect(byName("data: URI asset").test(indexHtml)).toBe(true);
   });
 
+  it("every paint attribute is allowlisted, so the paint check can read it (06.4.1-REVIEW IN-01)", () => {
+    for (const attr of PAINT_ATTRS) expect(ICON_ATTRS.has(attr), attr).toBe(true);
+  });
+
   it("PALETTE_HEX holds the favicon's three colors and no rgba value", () => {
     for (const hex of [palette.BG_BOTTOM, palette.WALL, palette.BUMPER_CAP]) {
       expect(PALETTE_HEX.has(hex), hex).toBe(true);
@@ -685,6 +694,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       "paint fill=red",
     ],
     ["off-palette stroke", withAttr("stroke='#123456'"), "paint stroke=#123456"],
+    // No gradient element is allowed, so a stop-color never reaches the paint check.
     ["off-palette stop-color", withElement("<stop stop-color='#abcdef'/>"), "element <stop>"],
     ["off-palette hex in text", withElement("<text>#ff0000</text>"), "element <text>"],
     [
