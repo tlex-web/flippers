@@ -1,15 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import type {
-  BallId,
-  BallState,
-  CollisionEvent,
-  FlipperState,
-  PhysicsWorld,
-  Segment,
-  Vec2,
-} from "../physics/types";
-import { FlipperController } from "./flipper-controller";
+import type { FlipperState } from "../physics/types";
+import { FlipperController, type FlipperWorld } from "./flipper-controller";
 
 /**
  * Unit proof for the engine-agnostic flipper FSM (D-05). It drives the
@@ -25,8 +17,8 @@ interface MotorCall {
   readonly direction: number;
 }
 
-/** A spy world implementing the interface; only flippers/motor matter here. */
-class SpyWorld implements PhysicsWorld {
+/** A spy world implementing the FSM's interface slice (flippers + motor only). */
+class SpyWorld implements FlipperWorld {
   readonly motorCalls: MotorCall[] = [];
   private readonly flippers: {
     id: number;
@@ -36,9 +28,11 @@ class SpyWorld implements PhysicsWorld {
     length: number;
     halfWidth: number;
     tipRadius: number;
+    restLimitAngle: number;
   }[] = [];
 
-  constructor(ids: readonly { id: number; angle: number }[]) {
+  /** `restLimitAngle` defaults to the entry's initial angle (it starts at rest). */
+  constructor(ids: readonly { id: number; angle: number; restLimitAngle?: number }[]) {
     for (const f of ids) {
       this.flippers.push({
         id: f.id,
@@ -48,6 +42,7 @@ class SpyWorld implements PhysicsWorld {
         length: 0.5,
         halfWidth: 0.07,
         tipRadius: 0.07,
+        restLimitAngle: f.restLimitAngle ?? f.angle,
       });
     }
   }
@@ -77,25 +72,6 @@ class SpyWorld implements PhysicsWorld {
   setFlipperMotor(id: number, direction: number): void {
     this.motorCalls.push({ id, direction });
   }
-
-  // --- Unused stubs (the FSM never calls these; params omitted deliberately) ---
-  step(): void {}
-  addBall(): BallId {
-    return 0;
-  }
-  removeBall(): void {}
-  getBalls(): readonly BallState[] {
-    return [];
-  }
-  getBoundarySegments(): readonly Segment[] {
-    return [];
-  }
-  drainEvents(): CollisionEvent[] {
-    return [];
-  }
-  getContactPoints(): readonly Vec2[] {
-    return [];
-  }
 }
 
 // Left flipper sweeps around angle 0; a MOTION ramp from rest to up and back.
@@ -118,7 +94,13 @@ function sweep(
 }
 
 /** Hold the angle constant for `n` updates so the FSM sees it as settled. */
-function hold(world: SpyWorld, ctrl: FlipperController, id: number, angle: number, n: number): void {
+function hold(
+  world: SpyWorld,
+  ctrl: FlipperController,
+  id: number,
+  angle: number,
+  n: number,
+): void {
   for (let i = 0; i < n; i++) {
     world.setAngle(id, angle);
     ctrl.update();
@@ -136,13 +118,13 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.lastMotor(0)).toBe(1);
   });
 
-  it("reaches held-up at the upper limit and STILL commands +1 every update (never 0) — D-06(1)", () => {
+  it("reaches held-up at the raise limit and STILL commands +1 every update (never 0) — D-06(1)", () => {
     const world = new SpyWorld([{ id: 0, angle: L_REST }]);
     const ctrl = new FlipperController(world);
 
     ctrl.onPressEdge(0);
     sweep(world, ctrl, 0, L_REST, L_UP, 4); // bat sweeps up
-    hold(world, ctrl, 0, L_UP, 2); // pinned at the upper limit -> settles to held-up
+    hold(world, ctrl, 0, L_UP, 2); // pinned at the raise limit -> settles to held-up
     expect(ctrl.getPhase(0)).toBe("held-up");
 
     // The cradle: every further update must re-assert +1, and NEVER release to 0.
@@ -154,7 +136,7 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.motorCalls.some((c) => c.direction === 0)).toBe(false);
   });
 
-  it("a release edge -> returning (-1), and settling at the lower limit -> resting (0)", () => {
+  it("a release edge -> returning (-1), and settling at the rest limit -> resting (0)", () => {
     const world = new SpyWorld([{ id: 0, angle: L_REST }]);
     const ctrl = new FlipperController(world);
 
@@ -169,7 +151,7 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     expect(world.lastMotor(0)).toBe(-1);
 
     sweep(world, ctrl, 0, L_UP, L_REST, 4); // bat returns down
-    hold(world, ctrl, 0, L_REST, 2); // pinned at the lower limit -> resting
+    hold(world, ctrl, 0, L_REST, 2); // pinned at the rest limit -> resting
     expect(ctrl.getPhase(0)).toBe("resting");
     expect(world.lastMotor(0)).toBe(0);
   });
@@ -247,6 +229,298 @@ describe("FlipperController — resting -> flipping-up -> held-up -> returning (
     // Unknown id must not throw and must record no motor call.
     world.clearMotorCalls();
     ctrl.onPressEdge(99);
+    expect(world.motorCalls.length).toBe(0);
+  });
+});
+
+/** Press, sweep up and settle: the bat ends in held-up. */
+function raise(world: SpyWorld, ctrl: FlipperController, id: number): void {
+  ctrl.onPressEdge(id);
+  sweep(world, ctrl, id, L_REST, L_UP, 4);
+  hold(world, ctrl, id, L_UP, 2);
+}
+
+describe("FlipperController enable gate (GAME-03, R11, Pitfall 5)", () => {
+  it("a fresh controller is enabled and issued exactly one motor-0 command per flipper", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    expect(ctrl.isEnabled()).toBe(true);
+    expect(world.motorCalls).toEqual([
+      { id: 0, direction: 0 },
+      { id: 1, direction: 0 },
+    ]);
+  });
+
+  it("setEnabled(false) from held-up drops the bat: returning with motor -1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.isEnabled()).toBe(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls).toEqual([{ id: 0, direction: -1 }]);
+  });
+
+  it("setEnabled(false) from flipping-up drops the bat too", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    sweep(world, ctrl, 0, L_REST, 0, 2); // part-way up
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+  });
+
+  it("setEnabled(false) from resting issues no motor command and stays resting", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("setEnabled(false) on a bat already returning issues no new motor command", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getPhase(0)).toBe("returning");
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("while disabled, onPressEdge issues no +1 and leaves the phase unchanged (resting and returning)", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 1);
+    ctrl.setEnabled(false);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(ctrl.getPhase(1)).toBe("returning");
+
+    world.clearMotorCalls();
+    ctrl.onPressEdge(0);
+    ctrl.onPressEdge(1);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(ctrl.getPhase(1)).toBe("returning");
+    expect(world.motorCalls).toEqual([]);
+  });
+
+  it("while disabled and returning, update() still settles the bat to resting with motor 0", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.setEnabled(false);
+
+    sweep(world, ctrl, 0, L_UP, L_REST, 4); // the dropped bat falls
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+    hold(world, ctrl, 0, L_REST, 2); // pinned at the rest limit
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("setEnabled(true) issues no motor command; the next press gives flipping-up with +1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.setEnabled(false);
+
+    world.clearMotorCalls();
+    ctrl.setEnabled(true);
+    expect(ctrl.isEnabled()).toBe(true);
+    expect(world.motorCalls).toEqual([]);
+    expect(ctrl.getPhase(0)).toBe("resting");
+
+    ctrl.onPressEdge(0);
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+    expect(world.motorCalls).toEqual([{ id: 0, direction: 1 }]);
+  });
+});
+
+describe("FlipperController enters resting only at the rest limit (G-04-10)", () => {
+  it("a bat that drifts and stops short of rest keeps being driven down (-1, never 0)", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.onReleaseEdge(0);
+    hold(world, ctrl, 0, L_UP - 0.04, 1); // limit position-correction drift
+    hold(world, ctrl, 0, L_UP - 0.045, 4); // then "settled", but nowhere near rest
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.motorCalls.length).toBeGreaterThan(0);
+    for (const c of world.motorCalls) expect(c.direction).toBe(-1);
+
+    sweep(world, ctrl, 0, L_UP - 0.045, L_REST, 4);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("the drift guard is mirror-safe (right bat around +pi)", () => {
+    const R_REST = Math.PI - 0.4;
+    const R_UP = Math.PI + 0.4;
+    const world = new SpyWorld([{ id: 1, angle: R_REST, restLimitAngle: R_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(1);
+    sweep(world, ctrl, 1, R_REST, R_UP, 4);
+    hold(world, ctrl, 1, R_UP, 2);
+    expect(ctrl.getPhase(1)).toBe("held-up");
+
+    world.clearMotorCalls();
+    ctrl.onReleaseEdge(1);
+    hold(world, ctrl, 1, R_UP - 0.04, 1);
+    hold(world, ctrl, 1, R_UP - 0.045, 4);
+    expect(ctrl.getPhase(1)).toBe("returning");
+    for (const c of world.motorCalls) expect(c.direction).toBe(-1);
+
+    sweep(world, ctrl, 1, R_UP - 0.045, R_REST, 4);
+    hold(world, ctrl, 1, R_REST, 2);
+    expect(ctrl.getPhase(1)).toBe("resting");
+    expect(world.lastMotor(1)).toBe(0);
+  });
+
+  it("the first observation after a release is not enough to enter resting", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    hold(world, ctrl, 0, L_REST + 0.05, 1); // a hair off rest
+    ctrl.onReleaseEdge(0);
+
+    hold(world, ctrl, 0, L_REST + 0.05, 1); // post-release refresh reads delta 0
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+
+    hold(world, ctrl, 0, L_REST + 0.08, 1); // still moving
+    expect(ctrl.getPhase(0)).toBe("returning");
+    expect(world.lastMotor(0)).toBe(-1);
+
+    sweep(world, ctrl, 0, L_REST + 0.08, L_REST, 4);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+
+  it("a tap released before the bat moved settles to resting (motor 0) at the rest limit", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onReleaseEdge(0);
+    hold(world, ctrl, 0, L_REST, 2);
+    expect(ctrl.getPhase(0)).toBe("resting");
+    expect(world.lastMotor(0)).toBe(0);
+  });
+});
+
+describe("FlipperController coil counters (05-05, AUD-01): read-only, no motor command", () => {
+  it("a press from resting raises the on count to 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    expect(ctrl.getCoilOnCount(0)).toBe(0);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a second press while flipping-up or held-up leaves the on count at 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onPressEdge(0); // still flipping-up
+    expect(ctrl.getPhase(0)).toBe("flipping-up");
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    sweep(world, ctrl, 0, L_REST, L_UP, 4);
+    hold(world, ctrl, 0, L_UP, 2);
+    expect(ctrl.getPhase(0)).toBe("held-up");
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+  });
+
+  it("a release from up raises the off count to 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(1);
+  });
+
+  it("a release while resting leaves the off count at 0", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("setEnabled(false) raises an up bat's off count by 1 and leaves a resting bat's alone", () => {
+    const world = new SpyWorld([
+      { id: 0, angle: L_REST },
+      { id: 1, angle: L_REST },
+    ]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 1);
+    ctrl.setEnabled(false);
+    expect(ctrl.getCoilOffCount(1)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a press while disabled changes neither count", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.setEnabled(false);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(0);
+    expect(ctrl.getCoilOffCount(0)).toBe(0);
+  });
+
+  it("a press then a release in the same step gives on 1 and off 1", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    ctrl.onReleaseEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(1);
+    expect(ctrl.getCoilOffCount(0)).toBe(1);
+  });
+
+  it("a press during returning raises the on count again", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    raise(world, ctrl, 0);
+    ctrl.onReleaseEdge(0);
+    sweep(world, ctrl, 0, L_UP, 0, 2);
+    expect(ctrl.getPhase(0)).toBe("returning");
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(0)).toBe(2);
+  });
+
+  it("an unknown id reads 0 for both counts", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    ctrl.onPressEdge(0);
+    expect(ctrl.getCoilOnCount(99)).toBe(0);
+    expect(ctrl.getCoilOffCount(99)).toBe(0);
+  });
+
+  it("reading the counters issues no motor command", () => {
+    const world = new SpyWorld([{ id: 0, angle: L_REST }]);
+    const ctrl = new FlipperController(world);
+    world.clearMotorCalls();
+    ctrl.getCoilOnCount(0);
+    ctrl.getCoilOffCount(0);
     expect(world.motorCalls.length).toBe(0);
   });
 });

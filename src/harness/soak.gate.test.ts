@@ -40,36 +40,32 @@ function envNumber(name: string, fallback: number): number {
 }
 
 describe("soak gate — >=10-minute tunnel-proof soak (CCD on)", () => {
-  it(
-    "runs >=600s of simulated fixed-step sweep and the ball never escapes",
-    () => {
-      const durationSeconds = envNumber("SOAK_DURATION", DEFAULT_DURATION_SECONDS);
-      const cases = envNumber("SOAK_CASES", DEFAULT_CASES);
-      const maxLaunchSpeed = envNumber("SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
-      const seed = envNumber("SOAK_SEED", DEFAULT_SEED);
+  it("runs >=600s of simulated fixed-step sweep and the ball never escapes", () => {
+    const durationSeconds = envNumber("SOAK_DURATION", DEFAULT_DURATION_SECONDS);
+    const cases = envNumber("SOAK_CASES", DEFAULT_CASES);
+    const maxLaunchSpeed = envNumber("SOAK_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
+    const seed = envNumber("SOAK_SEED", DEFAULT_SEED);
 
-      // The configured sweep must cover at least the 10-minute simulated floor.
-      expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    // The configured sweep must cover at least the 10-minute simulated floor.
+    expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
 
-      const config: SoakConfig = {
-        seed,
-        durationSeconds,
-        maxLaunchSpeed,
-        cases,
-        bullet: true,
-      };
+    const config: SoakConfig = {
+      seed,
+      durationSeconds,
+      maxLaunchSpeed,
+      cases,
+      bullet: true,
+    };
 
-      const result = runSoak(config);
+    const result = runSoak(config);
 
-      // Print replayable seeds on any escape so CI logs are actionable.
-      for (const failure of result.failures) {
-        console.error(describeFailure(failure));
-      }
+    // Print replayable seeds on any escape so CI logs are actionable.
+    for (const failure of result.failures) {
+      console.error(describeFailure(failure));
+    }
 
-      expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
-      expect(result.failures).toEqual([]);
-      expect(result.passed).toBe(true);
-    },
-    900_000,
-  );
+    expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(result.failures).toEqual([]);
+    expect(result.passed).toBe(true);
+  }, 900_000);
 });

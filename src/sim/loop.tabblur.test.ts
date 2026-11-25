@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { FIXED_DT, MAX_FRAME_MS } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld, Segment } from "../physics/types";
 import { FixedStepLoop } from "./loop";
 
@@ -40,7 +41,7 @@ const FRAME_60_HZ = 1000 / 60;
 const START = { x: 1.0, y: 0.4 } as const;
 
 function makeRig(): { loop: FixedStepLoop; world: PhysicsWorld } {
-  const world: PhysicsWorld = new PlanckWorld();
+  const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
   world.addBall(START);
   return { loop: new FixedStepLoop(world), world };
 }
@@ -142,5 +143,40 @@ describe("FixedStepLoop tab-blur / large-dt clamp (threat T-01-02)", () => {
       expect(ball.y - ball.radius).toBeGreaterThanOrEqual(minY - eps);
       expect(ball.y + ball.radius).toBeLessThanOrEqual(maxY + eps);
     }
+  });
+});
+
+describe("a throwing post-step hook leaves the accumulator consistent (03-REVIEW WR-04)", () => {
+  it("the step that ran is subtracted and counted before onPostStep throws", () => {
+    const world = new PlanckWorld({ table: PROOF_BOX_SPEC });
+    world.addBall({ x: 1, y: 1 });
+    const loop = new FixedStepLoop(world);
+    const throwing = (): void => {
+      throw new Error("consumer failed");
+    };
+    expect(() => loop.advance(STEP_MS * 1.5, undefined, throwing)).toThrow("consumer failed");
+    expect(loop.totalSteps).toBe(1);
+    expect(loop.accumulatorMs).toBeCloseTo(STEP_MS * 0.5, 9);
+    // The next frame does not re-run the step: with half a step pending, one
+    // more frame's step runs exactly one (it would be two had the thrown step
+    // been left on the accumulator).
+    expect(loop.advance(STEP_MS)).toBe(1);
+    expect(loop.totalSteps).toBe(2);
+  });
+});
+
+describe("FixedStepLoop negative delta (05-REVIEW IN-02)", () => {
+  it("a negative or NaN delta runs no step and keeps alpha in [0, 1)", () => {
+    const { loop } = makeRig();
+    expect(loop.advance(STEP_MS / 2)).toBe(0);
+    const before = loop.alpha;
+    for (const delta of [-5, -1000, Number.NaN]) {
+      expect(loop.advance(delta)).toBe(0);
+      expect(loop.alpha).toBe(before);
+      expect(loop.alpha).toBeGreaterThanOrEqual(0);
+      expect(loop.alpha).toBeLessThan(1);
+    }
+    // The next real frame still steps normally from the untouched accumulator.
+    expect(loop.advance(STEP_MS / 2)).toBe(1);
   });
 });

@@ -1,0 +1,166 @@
+import { describe, it, expect } from "vitest";
+
+import { PIXELS_PER_METER } from "../physics/constants";
+import { resolve } from "../table/resolve";
+import { TABLE_SPEC } from "../table/spec";
+import {
+  computeView,
+  heightUnderBar,
+  HUD_BAR_GAP_CSS,
+  HUD_SIDE_GAP_CSS,
+  sideHudClears,
+  tableBounds,
+  VIEW_FILL,
+  VIEW_PAD_CSS,
+  type ViewTransform,
+} from "./view-transform";
+
+/**
+ * RND-02 backing-store sizing (research Finding 1, T-05-06): the CSS fit comes
+ * first and the backing follows the display.
+ */
+
+const bounds = tableBounds(resolve(TABLE_SPEC));
+
+/** The debug renderer's old backing formula: world box at 400 px/m times dpr. */
+function oldBackingArea(dpr: number): number {
+  const boxWpx = (bounds.maxX - bounds.minX) * PIXELS_PER_METER + VIEW_PAD_CSS * 2;
+  const boxHpx = (bounds.maxY - bounds.minY) * PIXELS_PER_METER + VIEW_PAD_CSS * 2;
+  return Math.round(boxWpx * dpr) * Math.round(boxHpx * dpr);
+}
+
+function sameView(a: ViewTransform, b: ViewTransform): void {
+  expect(a.backingW).toBe(b.backingW);
+  expect(a.backingH).toBe(b.backingH);
+  expect(a.cssW).toBe(b.cssW);
+  expect(a.cssH).toBe(b.cssH);
+  expect(a.scale).toBe(b.scale);
+  expect(a.offX).toBe(b.offX);
+  expect(a.offY).toBe(b.offY);
+  expect(a.dpr).toBe(1);
+}
+
+describe("computeView (RND-02)", () => {
+  const v = computeView(bounds, 1280, 684, 1.5);
+
+  it("sizes the backing to css * dpr, never more than one pixel over", () => {
+    expect(v.backingW).toBeLessThanOrEqual(v.cssW * 1.5 + 1);
+    expect(v.backingH).toBeLessThanOrEqual(v.cssH * 1.5 + 1);
+  });
+
+  it("fills under a tenth of the old 400 px/m backing at 1280x684 dpr 1.5", () => {
+    expect(v.backingW * v.backingH).toBeLessThan(oldBackingArea(1.5) / 10);
+  });
+
+  it("keeps the aspect ratio within one pixel", () => {
+    expect(Math.abs(v.backingH - (v.backingW * v.cssH) / v.cssW)).toBeLessThanOrEqual(1);
+  });
+
+  it("fits inside 96% of the viewport with one axis binding", () => {
+    expect(v.cssW).toBeLessThanOrEqual(VIEW_FILL * 1280 + 1e-9);
+    expect(v.cssH).toBeLessThanOrEqual(VIEW_FILL * 684 + 1e-9);
+    const bindsW = Math.abs(v.cssW - VIEW_FILL * 1280) < 1e-6;
+    const bindsH = Math.abs(v.cssH - VIEW_FILL * 684) < 1e-6;
+    expect(bindsW || bindsH).toBe(true);
+  });
+
+  it("maps every bounds corner inside the backing store", () => {
+    const xs = [bounds.minX, bounds.maxX];
+    const ys = [bounds.minY, bounds.maxY];
+    for (const x of xs) {
+      for (const y of ys) {
+        const px = x * v.scale + v.offX;
+        const py = y * v.scale + v.offY;
+        expect(px).toBeGreaterThanOrEqual(0);
+        expect(px).toBeLessThanOrEqual(v.backingW);
+        expect(py).toBeGreaterThanOrEqual(0);
+        expect(py).toBeLessThanOrEqual(v.backingH);
+      }
+    }
+  });
+
+  it("treats dpr NaN, 0 and -2 exactly like dpr 1", () => {
+    const one = computeView(bounds, 1280, 684, 1);
+    sameView(computeView(bounds, 1280, 684, Number.NaN), one);
+    sameView(computeView(bounds, 1280, 684, 0), one);
+    sameView(computeView(bounds, 1280, 684, -2), one);
+  });
+
+  it("gives a 0 x 0 viewport a finite scale and a backing of at least 1 x 1", () => {
+    const z = computeView(bounds, 0, 0, 1);
+    expect(Number.isFinite(z.scale)).toBe(true);
+    expect(Number.isFinite(z.offX)).toBe(true);
+    expect(Number.isFinite(z.offY)).toBe(true);
+    expect(z.backingW).toBeGreaterThanOrEqual(1);
+    expect(z.backingH).toBeGreaterThanOrEqual(1);
+  });
+
+  it("doubles the backing at dpr 2, within one pixel per axis", () => {
+    const one = computeView(bounds, 1280, 684, 1);
+    const two = computeView(bounds, 1280, 684, 2);
+    expect(Math.abs(two.backingW - one.backingW * 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(two.backingH - one.backingH * 2)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("narrow-viewport HUD layout (06.4; GAME-01, RND-02)", () => {
+  /** Side panel right edge (CSS px): 16 px inset + 268 px panel (06.2-UI-REVIEW). */
+  const PANEL_RIGHT = 284;
+
+  /** The layout applyView would pick for a vw x vh viewport at dpr 1. */
+  function layoutAt(vw: number, vh: number): "side" | "bar" {
+    return sideHudClears(computeView(bounds, vw, vh, 1), vw, PANEL_RIGHT) ? "side" : "bar";
+  }
+
+  it("keeps the side panel at 1920x1080, 1440x900 and 1024x768", () => {
+    expect(layoutAt(1920, 1080), "1920x1080").toBe("side");
+    expect(layoutAt(1440, 900), "1440x900").toBe("side");
+    expect(layoutAt(1024, 768), "1024x768").toBe("side");
+  });
+
+  it("switches to the top bar at 1080x1080, 768x1024 and 375x812", () => {
+    expect(layoutAt(1080, 1080), "1080x1080").toBe("bar");
+    expect(layoutAt(768, 1024), "768x1024").toBe("bar");
+    expect(layoutAt(375, 812), "375x812").toBe("bar");
+  });
+
+  it("leaves the viewport height minus the bar and its gap under the bar", () => {
+    expect(heightUnderBar(812, 102)).toBe(702);
+  });
+
+  it("uses a 16 px side gap and an 8 px bar gap", () => {
+    expect(HUD_SIDE_GAP_CSS).toBe(16);
+    expect(HUD_BAR_GAP_CSS).toBe(8);
+  });
+
+  it("never lets the panel or the bar overlap the canvas over a viewport grid", () => {
+    /** Estimated bar height (CSS px), 06.4-RESEARCH. */
+    const BAR_H = 102;
+    for (let vw = 320; vw <= 2560; vw += 40) {
+      for (let vh = 320; vh <= 1600; vh += 40) {
+        const at = `${vw}x${vh}`;
+        const full = computeView(bounds, vw, vh, 1);
+        if (sideHudClears(full, vw, PANEL_RIGHT)) {
+          expect((vw - full.cssW) / 2, at).toBeGreaterThanOrEqual(PANEL_RIGHT + HUD_SIDE_GAP_CSS);
+        } else {
+          const v = computeView(bounds, vw, heightUnderBar(vh, BAR_H), 1);
+          expect(BAR_H + HUD_BAR_GAP_CSS + v.cssH, at).toBeLessThanOrEqual(vh);
+          expect(v.cssW, at).toBeLessThanOrEqual(vw);
+        }
+      }
+    }
+  });
+
+  it("keeps the full-viewport canvas size at 375x812 in bar mode (width-bound)", () => {
+    const full = computeView(bounds, 375, 812, 1);
+    const bar = computeView(bounds, 375, heightUnderBar(812, 102), 1);
+    expect(bar.cssW).toBe(full.cssW);
+    expect(bar.cssH).toBe(full.cssH);
+  });
+
+  it("selects the bar for a non-finite panel edge or viewport width", () => {
+    const view = computeView(bounds, 1440, 900, 1);
+    expect(sideHudClears(view, 1440, Number.NaN)).toBe(false);
+    expect(sideHudClears(view, Number.NaN, PANEL_RIGHT)).toBe(false);
+  });
+});

@@ -54,40 +54,36 @@ function envNumber(name: string, fallback: number): number {
 }
 
 describe("FLIP-04 gate — >=10-minute flipper-primary peak-ω soak (sub-stepping ON)", () => {
-  it(
-    "runs >=600s of simulated peak-ω sweep and the fast bat never passes through the ball",
-    () => {
-      const durationSeconds = envNumber("FLIP04_DURATION", DEFAULT_DURATION_SECONDS);
-      const cases = envNumber("FLIP04_CASES", DEFAULT_CASES);
-      const maxLaunchSpeed = envNumber("FLIP04_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
-      const seed = envNumber("FLIP04_SEED", DEFAULT_SEED);
+  it("runs >=600s of simulated peak-ω sweep and the fast bat never passes through the ball", () => {
+    const durationSeconds = envNumber("FLIP04_DURATION", DEFAULT_DURATION_SECONDS);
+    const cases = envNumber("FLIP04_CASES", DEFAULT_CASES);
+    const maxLaunchSpeed = envNumber("FLIP04_MAXSPEED", DEFAULT_MAX_LAUNCH_SPEED);
+    const seed = envNumber("FLIP04_SEED", DEFAULT_SEED);
 
-      // The configured sweep must cover at least the 10-minute simulated floor.
-      expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    // The configured sweep must cover at least the 10-minute simulated floor.
+    expect(cases * durationSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
 
-      const config: SoakConfig = {
-        seed,
-        durationSeconds,
-        maxLaunchSpeed,
-        cases,
-        bullet: true, // CCD on — the shipping configuration
-        subStepping: true, // adaptive angular sub-stepping on (D-01) — the gate's star
-        flipperNegativeControl: true, // flipper-primary drive at peak ω (boundary isolated)
-      };
+    const config: SoakConfig = {
+      seed,
+      durationSeconds,
+      maxLaunchSpeed,
+      cases,
+      bullet: true, // CCD on — the shipping configuration
+      subStepping: true, // adaptive angular sub-stepping on (D-01) — the gate's star
+      flipperNegativeControl: true, // flipper-primary drive at peak ω (boundary isolated)
+    };
 
-      const result = runSoak(config);
+    const result = runSoak(config);
 
-      // Print replayable seeds on any escape so CI logs are actionable.
-      for (const failure of result.failures) {
-        console.error(describeFailure(failure));
-      }
+    // Print replayable seeds on any escape so CI logs are actionable.
+    for (const failure of result.failures) {
+      console.error(describeFailure(failure));
+    }
 
-      expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
-      expect(result.failures).toEqual([]);
-      expect(result.passed).toBe(true);
-      // Non-vacuous: the full dense sweep actually ran.
-      expect(result.casesRun).toBe(cases);
-    },
-    900_000,
-  );
+    expect(result.simulatedSeconds).toBeGreaterThanOrEqual(MIN_SIMULATED_SECONDS);
+    expect(result.failures).toEqual([]);
+    expect(result.passed).toBe(true);
+    // Non-vacuous: the full dense sweep actually ran.
+    expect(result.casesRun).toBe(cases);
+  }, 900_000);
 });

@@ -4,11 +4,13 @@
  * talks to physics exclusively through `PhysicsWorld` from `./types`, so the
  * engine stays swappable and the headless proof (D-05) is engine-independent.
  *
- * This first cut is one dynamic bullet ball falling under tilted-playfield
- * gravity inside a bounded box built from chain/edge static walls (including one
- * deliberately thin interior wall as a future tunneling target). Snapshots are
- * read out of pre-allocated pooled arrays that `step()` mutates — no per-frame
- * allocation on the render read path.
+ * The world is built from ONE resolved table spec (`src/table`, D-01/D-02): a
+ * single static body carries one fixture per wall/chute/drain/bumper element,
+ * each tagged with its spec `{ kind, id }`, and each spec flipper mount becomes
+ * a motorized capsule bat. The same resolve output backs `getBoundarySegments()`
+ * and `getElements()`, so the colliders and every consumer's geometry are the
+ * same vertices by construction. Snapshots are read out of pre-allocated pooled
+ * arrays that `step()` mutates — no per-frame allocation on the render read path.
  */
 
 import {
@@ -20,9 +22,11 @@ import {
   Vec2,
   World,
   WorldManifold,
+  type Contact,
 } from "planck";
 
 import {
+  BALL_DENSITY,
   BALL_FRICTION,
   BALL_LINEAR_DAMPING,
   BALL_RADIUS_M,
@@ -45,66 +49,25 @@ import type {
   BallState,
   CollisionEvent,
   CollisionEventType,
+  CollisionPartnerKind,
   FlipperState,
   PhysicsWorld,
   Segment,
   Vec2 as Vec2Value,
 } from "./types";
+import { resolve, type ResolvedElement } from "../table/resolve";
+import { TABLE_SPEC, type ElementKind, type TableSpec } from "../table/spec";
 
 // --- Solver tuning (Box2D defaults; crank up only if bounces feel mushy). ---
 const VELOCITY_ITERATIONS = 8;
 const POSITION_ITERATIONS = 3;
 
-// --- Ball material (density is a solver param, not a feel constant). ---
-const BALL_DENSITY = 1;
-
 // --- Wall material: low grip so the ball slides along walls like real steel. ---
 const WALL_FRICTION = 0.1;
 
-// --- Bounded play box (meters). Test scaffold only — the real table
-//     geometry is Phase 3. Sized so a 0.2 m ball is comfortably inside. ---
-const WIDTH_M = 2;
-const HEIGHT_M = 3;
-
-// --- One deliberately THIN interior wall segment (a zero-width edge = the
-//     thinnest possible wall). Placed OFF the ball's fall column so it is a
-//     standing tunneling target for later stress plans without trapping the
-//     ball here. ---
-const THIN_WALL = { ax: 0.2, ay: 2.0, bx: 0.8, by: 2.0 } as const;
-
-// Stable id for the (single) static walls body used in collision events.
-const WALL_ID = -1;
-
-// --- Two mirrored FEEL flippers on the throwaway 2×3 m test rig (D-11). Their
-//     placement is test-scaffold geometry (a replaceable local const like the
-//     Phase-1 single flipper), NOT real table layout — that is
-//     Phase 3. Feel/torque/angle values live in constants.ts; only the pivots +
-//     capsule shape live here.
-//
-//     SYMMETRIC by construction (human-checkpoint fix): both pivots share ONE y
-//     and are mirrored in x about the box centre (x = WIDTH_M/2 = 1.0), so the
-//     pair reads as a level, mirror-image classic-pinball layout — left pivot
-//     lower-left, right pivot lower-right, both bats angling up toward the centre
-//     with a gap between the tips that a fed ball rests in and can be flipped from
-//     (the ball-feed drops onto the centre of the pair; see src/sandbox/main.ts).
-//
-//     FLIPPER_HALF_SEP is chosen so the two bats never overlap at ANY angle in
-//     their [−π/8, +π/8] limits. The tips reach FURTHEST toward centre at LEVEL
-//     (joint 0, cos 0 = 1), so the minimum centre-to-centre tip gap is
-//     2·HALF_SEP − 2·FLIPPER_LENGTH_M = 2·0.65 − 1.0 = 0.30 m — i.e. 0.16 m of
-//     clear air between the two tip circles (radius FLIPPER_TIP_RADIUS_M = 0.07
-//     each); at the droop/raise limits the gap only widens (cos π/8 < 1). The left
-//     pivot keeps its Phase-1 x/y (0.35, 2.6) so every harness proof that reads
-//     getFlippers()[0] is unaffected; the right pivot is its exact mirror (it was
-//     the asymmetric (1.55, 2.35), which sat lopsided in the bottom-right corner —
-//     the "not on the same height" / "balls roll off the right side" report). ---
-const BOX_CENTER_X = WIDTH_M / 2;
-const FLIPPER_HALF_SEP = 0.65;
-const FLIPPER_PIVOT_Y = 2.6;
-const FLIPPER_PIVOT_L = { x: BOX_CENTER_X - FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
-const FLIPPER_PIVOT_R = { x: BOX_CENTER_X + FLIPPER_HALF_SEP, y: FLIPPER_PIVOT_Y } as const;
-const FLIPPER_ID_L = 0;
-const FLIPPER_ID_R = 1;
+// --- Flipper bat material. Placement (pivot + mirror) comes from the table
+//     spec's flipper mounts; feel/torque/angle values live in constants.ts; only
+//     the capsule shape lives here. ---
 const FLIPPER_DENSITY = 1;
 
 // --- Capsule bat geometry (local body frame, meters; D-07). The pivot is at
@@ -131,10 +94,7 @@ const SUB_STEP_TRAVEL_LIMIT = 0.5 * BALL_RADIUS_M;
 
 /** Sub-step count for a given peak flipper angular speed ω (rad/s). */
 function subStepsFor(omega: number): number {
-  return Math.max(
-    1,
-    Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / SUB_STEP_TRAVEL_LIMIT),
-  );
+  return Math.max(1, Math.ceil((omega * FLIPPER_LENGTH_M * FIXED_DT) / SUB_STEP_TRAVEL_LIMIT));
 }
 
 // Secondary cap (D-02): the D-01 count clamped to the bound derived from the
@@ -162,12 +122,20 @@ interface MutableVec2 {
 }
 
 /** Internal, mutable collision event — pooled and mutated in place (never re-allocated per step). */
-interface MutableCollisionEvent {
-  type: CollisionEventType;
-  aId: number;
-  bId: number;
+interface MutableCollisionEvent extends ContactIdentity {
   point: MutableVec2;
   normalImpulse: number;
+}
+
+/**
+ * The normalized identity of one contact, written by `normalizeContact`: the
+ * coarse type, the ball side, and the element side (D-12).
+ */
+export interface ContactIdentity {
+  type: CollisionEventType;
+  ballId: BallId;
+  elementKind: CollisionPartnerKind;
+  elementId: number;
 }
 
 /** Internal, mutable view of a flipper snapshot (returned read-only as FlipperState). */
@@ -179,46 +147,74 @@ interface MutableFlipperState {
   length: number;
   halfWidth: number;
   tipRadius: number;
+  restLimitAngle: number;
 }
 
-/** Identity stamped onto each Planck body's userData for event classification. */
+/**
+ * Identity stamped onto Planck userData for event classification: on each
+ * static table FIXTURE (spec `{ kind, id }`) and on ball / flipper BODIES.
+ */
 interface BodyTag {
-  kind: "ball" | "wall" | "flipper";
+  kind: "ball" | ElementKind;
   id: number;
 }
 
 type PlanckBody = ReturnType<World["createDynamicBody"]>;
 
 function asTag(userData: unknown): BodyTag | null {
-  if (
-    typeof userData === "object" &&
-    userData !== null &&
-    "kind" in userData &&
-    "id" in userData
-  ) {
+  if (typeof userData === "object" && userData !== null && "kind" in userData && "id" in userData) {
     return userData as BodyTag;
   }
   return null;
 }
 
-function classifyContact(
-  a: BodyTag["kind"],
-  b: BodyTag["kind"],
-): CollisionEventType | null {
-  // Direct pair comparison — no per-contact `new Set`/array literal (this runs
+function classifyContact(a: BodyTag["kind"], b: BodyTag["kind"]): CollisionEventType | null {
+  // Direct comparisons — no per-contact `new Set`/array literal (this runs
   // inside `world.step()` on the 60fps path; steady-state zero allocation).
-  if ((a === "ball" && b === "wall") || (a === "wall" && b === "ball")) {
-    return "ball-wall";
-  }
-  if ((a === "ball" && b === "flipper") || (a === "flipper" && b === "ball")) {
-    return "ball-flipper";
-  }
+  // Coarse on purpose: any non-ball, non-flipper element reads as "ball-wall".
   if (a === "ball" && b === "ball") return "ball-ball";
+  if (a === "ball") return b === "flipper" ? "ball-flipper" : "ball-wall";
+  if (b === "ball") return a === "flipper" ? "ball-flipper" : "ball-wall";
   return null;
 }
 
-function segment(ax: number, ay: number, bx: number, by: number): Segment {
-  return { a: { x: ax, y: ay }, b: { x: bx, y: by } };
+/**
+ * Normalize one contact pair into `out` (D-12), independent of which fixture the
+ * engine reported as A or B. The ball side is the tag whose kind is `"ball"`;
+ * for ball-ball the smaller id is `ballId` and the larger is `elementId`, with
+ * `elementKind` `"ball"`. Returns false, writing nothing, when neither side is
+ * a ball. Pure and allocation-free; exported for the order-independence tests.
+ */
+export function normalizeContact(
+  out: ContactIdentity,
+  a: { readonly kind: BodyTag["kind"]; readonly id: number },
+  b: { readonly kind: BodyTag["kind"]; readonly id: number },
+): boolean {
+  const type = classifyContact(a.kind, b.kind);
+  if (!type) return false;
+  out.type = type;
+  if (type === "ball-ball") {
+    out.ballId = a.id < b.id ? a.id : b.id;
+    out.elementKind = "ball";
+    out.elementId = a.id < b.id ? b.id : a.id;
+  } else if (a.kind === "ball") {
+    out.ballId = a.id;
+    out.elementKind = b.kind;
+    out.elementId = b.id;
+  } else {
+    out.ballId = b.id;
+    out.elementKind = a.kind;
+    out.elementId = a.id;
+  }
+  return true;
+}
+
+/** Fixture tag first (static table elements), body tag as the fallback. */
+function tagOf(fixture: {
+  getUserData(): unknown;
+  getBody(): { getUserData(): unknown };
+}): BodyTag | null {
+  return asTag(fixture.getUserData()) ?? asTag(fixture.getBody().getUserData());
 }
 
 /** Construction options for the Planck adapter. */
@@ -252,6 +248,15 @@ export interface PlanckWorldOptions {
    * ball's translational `setBullet` CCD is unaffected either way.
    */
   readonly subStepping?: boolean;
+
+  /**
+   * The table to build (D-01/D-05). Every static collider and both flipper
+   * mounts come from this one spec via a single `resolve()`. Defaults to
+   * `TABLE_SPEC`, our original playfield with its two spec-placed flippers.
+   * Harness proofs calibrated against the throwaway rig pass `PROOF_BOX_SPEC`
+   * by name, so this default never moves a calibrated proof.
+   */
+  readonly table?: TableSpec;
 }
 
 export class PlanckWorld implements PhysicsWorld {
@@ -290,8 +295,18 @@ export class PlanckWorld implements PhysicsWorld {
     joint: RevoluteJoint;
     /** Motor-speed sign that RAISES this bat (tip toward -y). See buildFlipper. */
     raiseSign: number;
+    /**
+     * Last normalized command (-1, 0, +1) given to setFlipperMotor; NaN until
+     * the first command, so that first command always counts as a change. See
+     * the limit-impulse reset in setFlipperMotor.
+     */
+    lastDirection: number;
   }[] = [];
 
+  /** The one resolve output (D-01): fixtures, segments and getElements() all read it. */
+  private readonly elements: readonly ResolvedElement[];
+
+  /** Solid (non-sensor) segments of `elements`, same object references. */
   private readonly segments: readonly Segment[];
 
   // Collision-event pool: grow-only, mutated in place. `eventCount` is the live
@@ -314,6 +329,17 @@ export class PlanckWorld implements PhysicsWorld {
   // during `world.step()`, sync runs after it returns).
   private readonly scratchWm = new WorldManifold();
 
+  /**
+   * True only inside `primeBallCcd`'s hidden `world.step` (03-REVIEW WR-01).
+   * Solid (post-solve) events from that step are discarded: the priming
+   * impulse is thrown away with the restored spawn state, and any contact that
+   * persists is reported again by the next real step, so keeping them would
+   * merge a fake or duplicate report into that step's batch. Sensor
+   * begin-contacts are KEPT: a begin fires once per overlap, and the contact
+   * outlives the prime step, so dropping it would lose the overlap for good.
+   */
+  private priming = false;
+
   constructor(options?: PlanckWorldOptions) {
     // CCD defaults ON; the soak's negative control passes { bullet: false }.
     this.bulletEnabled = options?.bullet ?? true;
@@ -328,61 +354,124 @@ export class PlanckWorld implements PhysicsWorld {
       gravity: Vec2(0, IN_PLANE_GRAVITY),
       continuousPhysics: this.bulletEnabled,
     });
-    this.segments = this.buildBoundary();
-    // Two mirrored capsule flippers (D-07/D-11). N flippers is additive: the
-    // joint/pool registries are index-iterated in step().
-    this.buildFlipper(FLIPPER_ID_L, FLIPPER_PIVOT_L, false);
-    this.buildFlipper(FLIPPER_ID_R, FLIPPER_PIVOT_R, true);
+    // ONE resolve (D-01): validates the spec (throws before any body exists on a
+    // malformed descriptor) and is the single origin of every collider below.
+    this.elements = resolve(options?.table ?? TABLE_SPEC);
+    this.segments = this.buildTable(this.elements);
+    // Solid contacts are reported once per solve with their summed normal
+    // impulse (a hit-strength proxy).
     this.world.on("post-solve", (contact, impulse) => {
-      const a = asTag(contact.getFixtureA().getBody().getUserData());
-      const b = asTag(contact.getFixtureB().getBody().getUserData());
-      if (!a || !b) return;
-      const type = classifyContact(a.kind, b.kind);
-      if (!type) return;
+      if (this.priming) return;
       let normalImpulse = 0;
-      for (const value of impulse.normalImpulses) normalImpulse += value;
-      const wm = contact.getWorldManifold(this.scratchWm);
-      const first = wm && wm.pointCount > 0 ? wm.points[0] : undefined;
-      // Reuse a pooled event record + its nested point vector (no per-contact
-      // object/point allocation on the step hot path).
-      const evt = this.nextEventSlot();
-      evt.type = type;
-      evt.aId = a.id;
-      evt.bId = b.id;
-      evt.point.x = first?.x ?? 0;
-      evt.point.y = first?.y ?? 0;
-      evt.normalImpulse = normalImpulse;
+      const impulses = impulse.normalImpulses;
+      for (let i = 0; i < impulses.length; i++) normalImpulse += impulses[i] ?? 0;
+      this.emitContact(contact, normalImpulse);
+    });
+    // Sensors (lanes, rollovers, the drain) are never solved, so they never
+    // fire post-solve: report them once, when the overlap begins, with impulse
+    // 0. Solid contacts are left to post-solve so each is reported exactly once
+    // per solve with its real impulse (03-RESEARCH Pitfall 1).
+    this.world.on("begin-contact", (contact) => {
+      if (contact.getFixtureA().isSensor() || contact.getFixtureB().isSensor()) {
+        this.emitContact(contact, 0);
+      }
     });
   }
 
-  /** Build the bounded box from a chain loop + one thin interior edge (static). */
-  private buildBoundary(): readonly Segment[] {
-    const w = WIDTH_M;
-    const h = HEIGHT_M;
+  /**
+   * Shared emit path for every reported contact: read both tags (fixture tag
+   * first, body tag as the fallback), and only when one side is a ball reserve
+   * a pooled slot and fill it through `normalizeContact`, so non-ball pairs
+   * consume nothing. The point is the first manifold point; a contact with no
+   * manifold points (a sensor overlap) uses the ball body's center instead.
+   * Zero allocation per contact: pooled slot, shared `scratchWm`, and the
+   * body's own position vector read in place.
+   */
+  private emitContact(contact: Contact, normalImpulse: number): void {
+    const fa = contact.getFixtureA();
+    const fb = contact.getFixtureB();
+    const a = tagOf(fa);
+    const b = tagOf(fb);
+    if (!a || !b) return;
+    if (!classifyContact(a.kind, b.kind)) return;
+    const evt = this.nextEventSlot();
+    normalizeContact(evt, a, b);
+    evt.normalImpulse = normalImpulse;
+    // Check the contact's OWN manifold first (03-REVIEW CR-02): for a 0-point
+    // manifold (every sensor overlap) Planck's `getWorldManifold` returns the
+    // shared `scratchWm` untouched, still holding the last solid contact's
+    // point, so its `pointCount` cannot be trusted here.
+    const first =
+      contact.getManifold().pointCount > 0
+        ? contact.getWorldManifold(this.scratchWm)?.points[0]
+        : undefined;
+    if (first) {
+      evt.point.x = first.x;
+      evt.point.y = first.y;
+    } else {
+      // The ball side's body: for ball-ball, the one whose id is `ballId`.
+      const ballFixture = a.kind === "ball" && a.id === evt.ballId ? fa : fb;
+      const center = ballFixture.getBody().getPosition();
+      evt.point.x = center.x;
+      evt.point.y = center.y;
+    }
+  }
+
+  /**
+   * Build the table from the resolved spec. ONE static body receives, in spec
+   * order, one fixture per non-mount element: a two-vertex open polyline becomes
+   * an Edge, any longer or looped polyline a Chain of its vertices, a circle a
+   * Circle offset to its center. Each fixture is tagged with its spec
+   * `{ kind, id }` and takes `isSensor` from the element. Flipper mounts are
+   * built after every static fixture, in spec order, so the body/fixture
+   * creation order for a given spec is fixed (the calibrated proofs depend on
+   * it). Returns the solid boundary segments: the concatenated `segments` of
+   * every non-sensor, non-mount element, same object references.
+   */
+  private buildTable(elements: readonly ResolvedElement[]): readonly Segment[] {
     const walls = this.world.createBody(); // static by default
-    const wallTag: BodyTag = { kind: "wall", id: WALL_ID };
-    walls.setUserData(wallTag);
-
-    // Perimeter as a closed chain of edges (chain shape, loop = true).
-    const corners = [Vec2(0, 0), Vec2(w, 0), Vec2(w, h), Vec2(0, h)];
-    walls.createFixture(new Chain(corners, true), { friction: WALL_FRICTION });
-
-    // One deliberately thin interior wall (edge shape) — future tunneling target.
-    walls.createFixture(
-      new Edge(
-        Vec2(THIN_WALL.ax, THIN_WALL.ay),
-        Vec2(THIN_WALL.bx, THIN_WALL.by),
-      ),
-      { friction: WALL_FRICTION },
-    );
-
-    return [
-      segment(0, 0, w, 0),
-      segment(w, 0, w, h),
-      segment(w, h, 0, h),
-      segment(0, h, 0, 0),
-      segment(THIN_WALL.ax, THIN_WALL.ay, THIN_WALL.bx, THIN_WALL.by),
-    ];
+    const solid: Segment[] = [];
+    for (const el of elements) {
+      if (el.mount) continue;
+      const fixtureOpts = {
+        friction: WALL_FRICTION,
+        isSensor: el.sensor,
+        userData: { kind: el.kind, id: el.id } satisfies BodyTag,
+      };
+      if (el.circle) {
+        const c = el.circle;
+        walls.createFixture(new Circle(Vec2(c.center.x, c.center.y), c.radius), fixtureOpts);
+      } else {
+        const v = el.vertices;
+        const first = v[0];
+        const second = v[1];
+        if (!el.loop && v.length === 2 && first && second) {
+          walls.createFixture(
+            new Edge(Vec2(first.x, first.y), Vec2(second.x, second.y)),
+            fixtureOpts,
+          );
+        } else {
+          walls.createFixture(
+            new Chain(
+              v.map((p) => Vec2(p.x, p.y)),
+              el.loop,
+            ),
+            fixtureOpts,
+          );
+        }
+      }
+      if (!el.sensor) {
+        for (const seg of el.segments) solid.push(seg);
+      }
+    }
+    // Flipper mounts (D-05): N flippers is additive — the joint/pool registries
+    // are index-iterated in step().
+    for (const el of elements) {
+      if (el.mount) {
+        this.buildFlipper(el.id, el.mount.pivot, el.mount.mirror, el.mount.restPose);
+      }
+    }
+    return solid;
   }
 
   /**
@@ -411,11 +500,23 @@ export class PlanckWorld implements PhysicsWorld {
    * `+1 = raise` command by it, so BOTH bats sweep their tip UP on +1 and drive to
    * the SAME symmetric limits: +1 → each bat's raised/up limit (held-up cradle),
    * −1 → each bat's rest/down limit. The controller stays engine-agnostic (D-05).
+   *
+   * REST POSE (`restPose`, playfield mounts only, D-05). The joint geometry is
+   * identical either way: the bat is still created level, so referenceAngle and
+   * the limits are unchanged. With `restPose` the joint's construction motor
+   * speed is 0 (nothing drives into a limit, the Phase-2 startup limit-jam) and,
+   * right after the joint exists, the bat is placed at its DROOP limit — the one
+   * opposite its raise direction: +FLIPPER_UPPER_ANGLE on the left (raiseSign
+   * −1), FLIPPER_LOWER_ANGLE on the mirrored right (raiseSign +1) — so the pair
+   * starts as a resting, mirror-symmetric inverted-V. Without `restPose` (the
+   * harness proof box) the exact pre-existing path runs, construction motor
+   * included, which keeps the FLIP-04 calibration byte-identical.
    */
   private buildFlipper(
     id: number,
     pivot: { readonly x: number; readonly y: number },
     mirror: boolean,
+    restPose: boolean,
   ): void {
     const px = pivot.x;
     const py = pivot.y;
@@ -448,31 +549,24 @@ export class PlanckWorld implements PhysicsWorld {
       fixtureOpts,
     );
     // Rounded tip (the fast, tunnel-prone end) at local x = CAP_TIP_X.
-    bat.createFixture(
-      new Circle(Vec2(CAP_TIP_X, 0), FLIPPER_TIP_RADIUS_M),
-      fixtureOpts,
-    );
+    bat.createFixture(new Circle(Vec2(CAP_TIP_X, 0), FLIPPER_TIP_RADIUS_M), fixtureOpts);
     // Rounded hinge end so a cradling ball cannot catch the pivot corner (D-07).
-    bat.createFixture(
-      new Circle(Vec2(CAP_BASE_X, 0), FLIPPER_TIP_RADIUS_M),
-      fixtureOpts,
-    );
+    bat.createFixture(new Circle(Vec2(CAP_BASE_X, 0), FLIPPER_TIP_RADIUS_M), fixtureOpts);
     const tag: BodyTag = { kind: "flipper", id };
     bat.setUserData(tag);
 
-    // Motorized revolute joint: motor ON (default drives toward the rest/upper
-    // limit), high max torque, bounded ~45° arc. The limits are reference-
-    // relative (referenceAngle = restAngle), so the mirror reuses them. The idle
-    // pose the human sees is NOT this default speed — the sandbox composition root
-    // constructs the FlipperController (which commands motor 0) BEFORE the first
-    // ball, so both bats freeze at their symmetric construction angle (level, joint
-    // 0) rather than drifting one prime-step apart (main.ts, "not on the same
-    // height" fix). Left unchanged here so the FLIP-04 soak/teeth calibration — which
-    // reads flipper[0]'s post-prime angle — is byte-for-byte preserved.
+    // Motorized revolute joint: motor ON, high max torque, bounded ~45° arc. The
+    // limits are reference-relative (referenceAngle = restAngle), so the mirror
+    // reuses them. Construction motor speed: 0 for a rest-pose mount (posed at
+    // its droop limit below); otherwise the default FLIPPER_UP_SPEED, left
+    // unchanged so the FLIP-04 soak/teeth calibration — which reads flipper[0]'s
+    // post-prime angle on the proof box — is byte-for-byte preserved. Either way
+    // the composition root constructs the FlipperController (motor 0) before the
+    // first ball, so the idle pose is the construction pose.
     const joint = new RevoluteJoint(
       {
         enableMotor: true,
-        motorSpeed: FLIPPER_UP_SPEED,
+        motorSpeed: restPose ? 0 : FLIPPER_UP_SPEED,
         maxMotorTorque: FLIPPER_MAX_MOTOR_TORQUE,
         enableLimit: true,
         lowerAngle: FLIPPER_LOWER_ANGLE,
@@ -484,7 +578,18 @@ export class PlanckWorld implements PhysicsWorld {
     );
     this.world.createJoint(joint);
 
-    this.flipperJoints.push({ id, body: bat, joint, raiseSign });
+    // Droop limit = the limit opposite the raise direction (joint angle is body
+    // angle minus the level referenceAngle `restAngle`). Its body angle is the
+    // static rest-limit angle every spec reports (FlipperState.restLimitAngle).
+    const droop = raiseSign < 0 ? FLIPPER_UPPER_ANGLE : FLIPPER_LOWER_ANGLE;
+    const restLimitAngle = restAngle + droop;
+    if (restPose) {
+      bat.setTransform(Vec2(px, py), restLimitAngle);
+    }
+
+    // lastDirection NaN: the construction motor speed is not a commanded
+    // direction, so the first setFlipperMotor call always resets the limit.
+    this.flipperJoints.push({ id, body: bat, joint, raiseSign, lastDirection: NaN });
     this.flipperPool.push({
       id,
       pivotX: px,
@@ -493,6 +598,7 @@ export class PlanckWorld implements PhysicsWorld {
       length: FLIPPER_LENGTH_M,
       halfWidth: FLIPPER_HALF_WIDTH_M,
       tipRadius: FLIPPER_TIP_RADIUS_M,
+      restLimitAngle,
     });
   }
 
@@ -582,7 +688,16 @@ export class PlanckWorld implements PhysicsWorld {
     // One direct sub-step: the broad+narrow phase creates the ball↔primer
     // contact and puts the ball in a solver island, arming its CCD. The primer
     // has no BodyTag, so `post-solve` ignores it → no spurious collision event.
-    this.world.step(FIXED_DT, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    // The step runs the WHOLE world (load-bearing: the FLIP-04 calibration reads
+    // flipper[0]'s post-prime angle), so its solid events — the new ball on the
+    // floor, any other ball's contacts — are suppressed (see `priming`); the
+    // caller runs addBall at a fixed-step boundary (sandbox: `onPostStep`).
+    this.priming = true;
+    try {
+      this.world.step(FIXED_DT, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
+    } finally {
+      this.priming = false;
+    }
 
     this.world.destroyBody(primer);
 
@@ -627,8 +742,7 @@ export class PlanckWorld implements PhysicsWorld {
     // contact points sync ONCE, after the last sub-step (below).
     const subDt = dtSeconds / subSteps;
     for (let i = 0; i < subSteps; i++) {
-      const stepDt =
-        i === subSteps - 1 ? dtSeconds - subDt * (subSteps - 1) : subDt;
+      const stepDt = i === subSteps - 1 ? dtSeconds - subDt * (subSteps - 1) : subDt;
       this.world.step(stepDt, VELOCITY_ITERATIONS, POSITION_ITERATIONS);
     }
 
@@ -664,6 +778,10 @@ export class PlanckWorld implements PhysicsWorld {
     let n = 0;
     for (let c = this.world.getContactList(); c; c = c.getNext()) {
       if (!c.isTouching()) continue;
+      // A sensor overlap is touching but has no manifold points, and Planck
+      // would hand back the stale shared `scratchWm` for it (03-REVIEW CR-02).
+      if (c.getFixtureA().isSensor() || c.getFixtureB().isSensor()) continue;
+      if (c.getManifold().pointCount === 0) continue;
       const wm = c.getWorldManifold(this.scratchWm);
       if (!wm) continue;
       for (let k = 0; k < wm.pointCount; k++) {
@@ -691,24 +809,83 @@ export class PlanckWorld implements PhysicsWorld {
     return this.flipperPool;
   }
 
+  /**
+   * Sign-only flipper drive (D-05), with a limit-impulse reset on every change
+   * of commanded direction (G-04-10).
+   *
+   * WHY THE RESET. Planck 1.5's RevoluteJoint warm-starts its accumulated
+   * impulses from one step to the next. A bat driven into a joint limit at
+   * FLIPPER_MAX_MOTOR_TORQUE saturates both: the motor impulse sits at its clamp
+   * (+dt·maxTorque) and the limit impulse grows to cancel it. The limit impulse
+   * is the one that pins the bat: on a reversal the motor's own stale warm start
+   * is cancelled inside its first velocity iteration (its clamp range always
+   * covers it), but the stale limit impulse stays as a reserve the new motor
+   * drive must unwind first, and the bat sits still for ~15 fixed steps
+   * (~130 ms) before it moves. That was the "flipper ignores my release / TILT
+   * pauses" dead time from UAT.
+   *
+   * THE FIX, through the public API only. `RevoluteJoint.enableLimit(flag)`
+   * clears the accumulated limit impulse whenever the flag changes, so toggling
+   * it off and back on before the new motor speed is Planck's public way to
+   * drop that reserve. The limit is re-enabled in the same call, before the
+   * next step, so the bat never runs without its limits. Measured on TABLE_SPEC
+   * through the real FSM: release after a 60-step hold 16 → 1 step, press after
+   * a 240-step rest 5 → 1 (adapter-level 11 → 1). Same-sign repeats (the held-up
+   * +1 re-asserted every step, the resting 0) never reset, so a held cradle
+   * keeps its warm-started limit impulse and stays pinned. The joint's internal
+   * impulse fields are deliberately never written: only the public toggle is
+   * used, and src/physics/flipper-response.test.ts pins the behavior it relies
+   * on for planck@1.5.0. (Toggling the MOTOR in the same call does nothing:
+   * Planck zeroes the motor impulse only when the motor is disabled at step
+   * time.)
+   *
+   * MAPPING. The engine-agnostic command (+1 = RAISE toward the up/held-up
+   * limit, −1 = RETURN toward the rest/down limit, 0 = hold; NaN = 0) maps to
+   * the FEEL speeds — a snappy raise and a softer return — times THIS bat's
+   * physical raise sign. The mirrored right bat counter-rotates, so raising it
+   * needs the opposite motor sign from the left; folding `raiseSign` in here
+   * (not in the controller) keeps the FSM engine-agnostic and makes +1 raise
+   * BOTH bats toward their own up limit (see buildFlipper).
+   *
+   * Indexed lookup (structural twin of applyImpulse): this runs per flipper on
+   * every 120 Hz step, so it allocates nothing.
+   */
   setFlipperMotor(id: number, direction: number): void {
-    const entry = this.flipperJoints.find((f) => f.id === id);
-    if (!entry) return;
-    // Sign-only hook (D-05): map the engine-agnostic command (+1 = RAISE toward the
-    // up/held-up limit, −1 = RETURN toward the rest/down limit, 0 = hold) to the
-    // FEEL speeds — a snappy raise and a softer return — then apply THIS bat's
-    // physical raise sign. The mirrored right bat counter-rotates, so raising it
-    // needs the opposite motor sign from the left; folding `raiseSign` in here (not
-    // in the controller) keeps the FSM engine-agnostic and makes +1 raise BOTH bats
-    // toward their own up limit (see buildFlipper). Uniform magnitude, per-bat sign.
-    const speed =
-      direction > 0
-        ? FLIPPER_UP_SPEED
-        : direction < 0
-          ? -FLIPPER_RETURN_SPEED
-          : 0;
-    entry.joint.setMotorSpeed(speed * entry.raiseSign);
-    entry.body.setAwake(true);
+    for (let i = 0; i < this.flipperJoints.length; i++) {
+      const entry = this.flipperJoints[i];
+      if (!entry || entry.id !== id) continue;
+      const sign = direction > 0 ? 1 : direction < 0 ? -1 : 0;
+      if (sign !== entry.lastDirection) {
+        // Clear the warm-started limit impulse (see the doc block above).
+        entry.joint.enableLimit(false);
+        entry.joint.enableLimit(true);
+        entry.lastDirection = sign;
+      }
+      const speed = sign > 0 ? FLIPPER_UP_SPEED : sign < 0 ? -FLIPPER_RETURN_SPEED : 0;
+      entry.joint.setMotorSpeed(speed * entry.raiseSign);
+      entry.body.setAwake(true);
+      return;
+    }
+  }
+
+  applyImpulse(ballId: BallId, ix: number, iy: number): void {
+    // Structural twin of setFlipperMotor: find by id, no-op when absent. A
+    // non-finite component is rejected too (threat T-03-10/T-03-13), so a bad
+    // caller can never inject NaN/Infinity into the solver. Called only between
+    // fixed steps, so the velocity change lands cleanly on the next step.
+    if (!Number.isFinite(ix) || !Number.isFinite(iy)) return;
+    for (let i = 0; i < this.balls.length; i++) {
+      const entry = this.balls[i];
+      if (!entry || entry.id !== ballId) continue;
+      // At the world center of mass -> purely linear, no torque; wake = true so
+      // a ball asleep on the plunger responds.
+      entry.body.applyLinearImpulse(Vec2(ix, iy), entry.body.getWorldCenter(), true);
+      return;
+    }
+  }
+
+  getElements(): readonly ResolvedElement[] {
+    return this.elements;
   }
 
   getBoundarySegments(): readonly Segment[] {
@@ -728,8 +905,9 @@ export class PlanckWorld implements PhysicsWorld {
     if (!slot) {
       slot = {
         type: "ball-wall",
-        aId: 0,
-        bId: 0,
+        ballId: 0,
+        elementKind: "wall",
+        elementId: 0,
         point: { x: 0, y: 0 },
         normalImpulse: 0,
       };
@@ -739,7 +917,7 @@ export class PlanckWorld implements PhysicsWorld {
     return slot;
   }
 
-  drainEvents(): CollisionEvent[] {
+  drainEvents(): readonly CollisionEvent[] {
     // Refill the reused view with the live pooled records and truncate it, then
     // reset the count so the pool is recycled (and stays BOUNDED) next cycle —
     // no new-array allocation per drain (mirrors the contact-point pool). The

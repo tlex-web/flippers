@@ -103,10 +103,13 @@ export const MAX_FRAME_MS = 250;
  * ------------------------------------------------------------------------- */
 
 /**
- * Flipper bat length (meters) from pivot to the tip of the capsule. Sized for
- * the 2×3 m test rig; long enough that the tip carries real linear speed at the
- * raise rate below (tip speed = FLIPPER_UP_SPEED · FLIPPER_LENGTH_M ≈ 15 m/s),
- * which is what makes the `v = ω × r` tip-vs-base difference read (FLIP-02).
+ * Flipper bat length (meters) from pivot to the tip of the capsule: 2.5 ×
+ * BALL_RADIUS_M, i.e. a bat a little over one ball diameter beyond the hinge.
+ * TABLE_SPEC mounts two of these as its inverted-V bats (left and mirrored
+ * right) above the drain gap. Long enough that the tip carries real linear
+ * speed at the raise rate below (tip speed = FLIPPER_UP_SPEED ·
+ * FLIPPER_LENGTH_M ≈ 15 m/s), which is what makes the `v = ω × r` tip-vs-base
+ * difference read (FLIP-02).
  */
 export const FLIPPER_LENGTH_M = 0.5;
 
@@ -176,9 +179,12 @@ export const FLIPPER_MAX_MOTOR_TORQUE = 500;
 export const FLIPPER_LOWER_ANGLE = -Math.PI / 8;
 
 /**
- * Upper revolute-joint angle limit (radians) — the rest/droop stop. At +π/8 (tip
- * slightly below level) the bat rests here under gravity + the default motor.
- * Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE = π/4 ≈ 45° (D-07).
+ * Upper revolute-joint angle limit (radians). +π/8 (tip slightly below level)
+ * is the LEFT bat's droop limit. The reference-angle-mirrored right bat droops
+ * to the opposite joint limit (FLIPPER_LOWER_ANGLE in its joint frame, world
+ * angle 7π/8). TABLE_SPEC builds both bats at their droop limit through
+ * `MountSpec.restPose`. Raise sweep = FLIPPER_UPPER_ANGLE − FLIPPER_LOWER_ANGLE
+ * = π/4 ≈ 45° (D-07).
  */
 export const FLIPPER_UPPER_ANGLE = Math.PI / 8;
 
@@ -201,3 +207,78 @@ export const FLIPPER_UPPER_ANGLE = Math.PI / 8;
  * cap never engages in normal play; it is purely the pathological-ω backstop.
  */
 export const FLIPPER_MAX_ANGULAR_SPEED = 96;
+
+/* ------------------------------------------------------------------------- *
+ * PLUNGER (Phase 3, D-07/D-08). Our design is IMPULSE-ON-RELEASE: holding the
+ * launch key accumulates a scalar charge once per fixed 120 Hz step, and the
+ * release applies ONE linear impulse along the chute axis to the ball resting
+ * on the plunger. There is no spring body and no moving plunger body, so the
+ * launch power is directly readable from the charge, the launch is
+ * deterministic, and the ball's existing setBullet CCD against the static chute
+ * covers it with no extra anti-tunnel work.
+ *
+ * Impulse -> speed: the ball mass is m = BALL_DENSITY · π · BALL_RADIUS_M² =
+ * 1 · π · 0.04 ≈ 0.126 kg, so the launch speed is v = impulse / m. Climb height
+ * under linear damping k = BALL_LINEAR_DAMPING and in-plane gravity
+ * g = IN_PLANE_GRAVITY is h(v) = v/k − (g/k²) · ln(1 + k·v/g). The chute is
+ * ≈ 4.3 m from PLUNGER_REST (y 6.2) to its top (y 1.9), so clearing it needs
+ * v ≳ 8 m/s. Every launch stays far below the 60 m/s soak ceiling.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Charge rate (normalized charge per second while the key is held). At 1.5/s a
+ * full charge takes 1 / 1.5 ≈ 0.67 s (80 fixed steps): long enough to read the
+ * meter and pick a power, short enough that a full plunge never feels sluggish.
+ * The charge advances by PLUNGER_CHARGE_RATE · FIXED_DT per step, never by
+ * wall-clock, so the same hold always yields the same charge.
+ */
+export const PLUNGER_CHARGE_RATE = 1.5;
+
+/** Charge cap. Holding past it clamps; the normalized meter reads exactly 1. */
+export const PLUNGER_MAX_CHARGE = 1;
+
+/**
+ * Impulse (kg·m/s) of an immediate release at zero charge: v ≈ 0.4 / 0.126 ≈
+ * 3.2 m/s, a ≈ 0.9 m dribble that falls back onto the plunger. A tap always
+ * moves the ball, so a press is never a silent no-op.
+ */
+export const PLUNGER_MIN_IMPULSE = 0.4;
+
+/**
+ * Impulse (kg·m/s) of a full-charge release: v ≈ 1.5 / 0.126 ≈ 12 m/s, a
+ * ≈ 9 m damped climb, so a full plunge clears the 4.3 m chute with margin and
+ * rides the top-right arc onto the playfield. Charge maps linearly between
+ * PLUNGER_MIN_IMPULSE and this cap (threat T-03-10: the impulse is bounded).
+ */
+export const PLUNGER_MAX_IMPULSE = 1.5;
+
+/**
+ * Launch direction: the unit vector up the vertical chute (world −y is up the
+ * table). The impulse is purely along this axis, so a launch adds no sideways
+ * velocity and no spin.
+ */
+export const PLUNGER_AXIS = { x: 0, y: -1 } as const;
+
+/* ------------------------------------------------------------------------- *
+ * BALL MASS (Phase 4). One density source for every consumer that turns a
+ * velocity change into an impulse: the rules' bumper/sling kick math, the
+ * sandbox kinetic-energy readout and the adapter's ball fixture.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Ball solver density (kg/m²). The 2D solver integrates mass over the circle's
+ * area, so this is an areal density. The adapter (planck-world.ts) imports
+ * it for the ball fixture, so solver mass and kick math share one value.
+ */
+export const BALL_DENSITY = 1;
+
+/**
+ * Ball mass (kg) for a given radius: m = BALL_DENSITY · π · r². At
+ * `BALL_RADIUS_M` (0.2 m) that is π · 0.04 ≈ 0.1257 kg. This is the single
+ * density source shared by the adapter's ball fixture, the sandbox KE
+ * readout and the rules' kick math, so an impulse j = m · Δv lands exactly the
+ * velocity change it was computed for.
+ */
+export function ballMass(radius: number): number {
+  return BALL_DENSITY * Math.PI * radius * radius;
+}

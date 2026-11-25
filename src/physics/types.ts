@@ -13,6 +13,9 @@
  * All quantities are SI: meters, meters/second, radians.
  */
 
+import type { ResolvedElement } from "../table/resolve";
+import type { ElementKind } from "../table/spec";
+
 /** A plain 2D value (meters). Not a Planck `Vec2`; deliberately engine-free. */
 export interface Vec2 {
   readonly x: number;
@@ -56,15 +59,20 @@ export interface BallState {
 }
 
 /**
- * A read-only snapshot of one flipper. No real flippers exist yet (Phase 2); the
- * accessor returns an empty pooled array today, but the shape is fixed now so
- * downstream wiring is additive.
+ * A read-only snapshot of one flipper. The pooled snapshot holds one entry per
+ * flipper mount in the active table spec (TABLE_SPEC mounts 0 and 1: the left
+ * and right bats), refreshed in place by every `step()`.
  */
 export interface FlipperState {
   readonly id: number;
   readonly pivotX: number;
   readonly pivotY: number;
   readonly angle: number;
+  /**
+   * Pivot to the tip EXTREME (meters), not to the tip circle's center: the
+   * collider spans local x ∈ [0, length], with the hinge circle centred at
+   * `tipRadius` and the tip circle at `length - tipRadius`.
+   */
   readonly length: number;
   readonly halfWidth: number;
   /**
@@ -76,22 +84,64 @@ export interface FlipperState {
    * variant only has to split `halfWidth` — this field stays meaningful.
    */
   readonly tipRadius: number;
+  /**
+   * World-frame body angle of this bat's rest (droop) joint limit, in the same
+   * frame as `angle` (left bat ≈ 0.39, mirrored right bat ≈ 2.75 on TABLE_SPEC).
+   * Static geometry: never changes after construction. The engine may settle a
+   * resting bat slightly past it (Planck's angular slop is ≈ 0.035 rad). The
+   * flipper FSM reads it to enter `resting` only at the real rest limit (G-04-10).
+   */
+  readonly restLimitAngle: number;
 }
 
-/** Kind of contact that produced a collision event. */
+/**
+ * Coarse kind of contact that produced a collision event (D-12). Deliberately
+ * coarse and never exploded into a per-pair enum:
+ * - `"ball-wall"`: a ball against any static table element, sensors included
+ *   (wall, chute, drain, bumper, slingshot, lane, rollover);
+ * - `"ball-flipper"`: a ball against a flipper bat;
+ * - `"ball-ball"`: two balls; `elementKind` is then `"ball"` and `elementId` is
+ *   the other ball's id.
+ * Consumers switch on `elementKind` + `elementId`, not on this field.
+ */
 export type CollisionEventType = "ball-wall" | "ball-ball" | "ball-flipper";
+
+/**
+ * What the non-ball side of a contact is: a spec `ElementKind`, or `"ball"`
+ * only when `type` is `"ball-ball"`.
+ */
+export type CollisionPartnerKind = ElementKind | "ball";
 
 /**
  * A one-way collision notification. Events are produced by `step()` and read out
  * via `drainEvents()` — they are drained, never pushed back into the engine.
+ *
+ * Normalized (D-12): `ballId` always names the ball side and
+ * `elementKind`/`elementId` the element side, whichever fixture the engine
+ * reported first. Element identity comes from the one table spec, so an event
+ * names exactly the element that was drawn. For a ball-ball contact `ballId` is
+ * the smaller id and `elementId` the larger.
+ *
+ * Records are POOLED and mutated in place on the next step: treat every field as
+ * read-only and copy out anything retained past the next `step()`.
  */
 export interface CollisionEvent {
   readonly type: CollisionEventType;
-  readonly aId: number;
-  readonly bId: number;
-  /** World contact point (meters). */
+  /** The ball side of the contact. */
+  readonly ballId: BallId;
+  /** The element side: a spec `ElementKind`, or `"ball"` for ball-ball. */
+  readonly elementKind: CollisionPartnerKind;
+  /** Spec element id (or the other ball's id for ball-ball). */
+  readonly elementId: number;
+  /**
+   * World contact point (meters). For a sensor (no manifold points) this is the
+   * ball's center at the moment the overlap began.
+   */
   readonly point: Vec2;
-  /** Solver normal impulse magnitude (kg·m/s) — proxy for hit strength. */
+  /**
+   * Solver normal impulse magnitude (kg·m/s), a proxy for hit strength. Always
+   * 0 for a sensor contact: sensors are never solved.
+   */
   readonly normalImpulse: number;
 }
 
@@ -117,7 +167,10 @@ export interface PhysicsWorld {
   removeBall(id: BallId): void;
   /** Pooled, id-keyed snapshot of every live ball. */
   getBalls(): readonly BallState[];
-  /** Pooled snapshot of every flipper (a max-speed test flipper this phase). */
+  /**
+   * Pooled snapshot of every flipper the adapter built from the table spec's
+   * flipper mounts, in mount order (one entry per bat).
+   */
   getFlippers(): readonly FlipperState[];
   /**
    * Drive a flipper's motor (engine-agnostic hook, D-04/D-05). `direction > 0`
@@ -129,10 +182,38 @@ export interface PhysicsWorld {
    * opposite motor signs). No-op for an unknown id.
    */
   setFlipperMotor(id: number, direction: number): void;
-  /** Static boundary/wall segments (built once; for debug-draw + containment). */
+  /**
+   * Apply a world-space linear impulse `(ix, iy)` in kg·m/s at a ball's center of
+   * mass (engine-agnostic hook, D-09). Purely linear: it changes the ball's
+   * velocity by impulse / mass and adds no spin, and it wakes the ball. Call it
+   * only BETWEEN fixed steps (the top-of-step hook), never inside `step()`.
+   * No-op for an unknown id or a non-finite component. It is generic, not
+   * plunger-specific: the plunger launch uses it today and the Phase 4 nudge
+   * reuses it.
+   */
+  applyImpulse(ballId: BallId, ix: number, iy: number): void;
+  /**
+   * The id-keyed resolved table, built ONCE at construction from the table spec
+   * (D-01/D-02). Returns the SAME array on every call. It is the single source
+   * both the renderer and the containment harness derive from: the engine's
+   * colliders were built from it, the renderer draws it, and the containment
+   * boundary below is its solid subset, so what is hit and what is drawn
+   * cannot drift.
+   */
+  getElements(): readonly ResolvedElement[];
+  /**
+   * Back-compat shim over `getElements()`: the solid (non-sensor) segments of
+   * that same resolve, as the SAME object references (no second copy). This is
+   * what the swept-containment invariant and the soak gates read.
+   */
   getBoundarySegments(): readonly Segment[];
-  /** Drain collision events accumulated since the last drain. */
-  drainEvents(): CollisionEvent[];
+  /**
+   * Drain collision events accumulated since the last drain. The batch is a
+   * reused view the adapter refills on the next drain: consumers read it and
+   * never mutate it (no push, splice or reassignment), which the readonly
+   * return type enforces (03-REVIEW IN-05).
+   */
+  drainEvents(): readonly CollisionEvent[];
   /** Pooled snapshot of active contact points this step (for debug-draw). */
   getContactPoints(): readonly Vec2[];
 }

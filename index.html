@@ -3,31 +3,446 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Physics Sandbox — Flippers</title>
+    <title>Flippers</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0420'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%234cc9f0' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23f72585'/%3E%3C/svg%3E"
+    />
     <style>
+      /* Space theme (D-01): the HUD is DOM text over the procedural table, styled
+         with CSS only (gradients and shadows only; no image or font file).
+         Colors echo src/render/palette.ts: cyan frames and accents (the walls),
+         magenta for the status line (the bumper caps), light text. */
+      :root {
+        --space-center: #0b0420;
+        --space-edge: #03040a;
+        --panel-bg: rgba(8, 10, 32, 0.78);
+        --frame: rgba(76, 201, 240, 0.35);
+        --frame-glow: rgba(76, 201, 240, 0.18);
+        --inner-glow: rgba(76, 201, 240, 0.08);
+        --text: #e8f7ff;
+        --text-soft: #c3cbe6;
+        --text-muted: #8892b0;
+        --label: #7f8bd6;
+        --status: #f72585;
+        /* WALL (#4cc9f0) at 0.45: the score glow and the bonus TOTAL glow. */
+        --accent-glow: rgba(76, 201, 240, 0.45);
+        --mono: ui-monospace, Menlo, Consolas, monospace;
+      }
       html,
       body {
         margin: 0;
         height: 100%;
-        background: #05060d;
+        background: radial-gradient(
+            ellipse at center,
+            var(--space-center) 0%,
+            var(--space-edge) 100%
+          )
+          fixed var(--space-edge);
       }
       #sandbox {
         display: flex;
         align-items: center;
         justify-content: center;
         min-height: 100vh;
+        min-height: 100dvh; /* mobile: vh is lvh, which hides the apron behind the URL bar */
       }
       #stage {
+        flex: none; /* never let flex shrink the explicitly sized canvas */
         display: block;
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--frame);
+        box-shadow:
+          0 0 24px var(--frame-glow),
+          0 0 60px rgba(0, 0, 0, 0.6);
+      }
+      /* Narrow layout (06.4): main.ts sets data-hud="bar" when the side panel
+         would cover the canvas. The HUD becomes a 3-row bar above the table:
+         SCORE label and ball or high score; the score and the Mute key with its
+         MUTED marker; the status line. Every row keeps one height in every game
+         state (ball and best can both be empty in attract), so the bar never
+         changes height without a resize and the table never moves. The keyboard
+         list (except the Mute row, kept by its .hud-controls-mute class), the
+         Windows note and the dev readout are hidden. */
+      #sandbox[data-hud="bar"] {
+        flex-direction: column;
+        gap: 8px; /* = HUD_BAR_GAP_CSS */
+      }
+      #sandbox[data-hud="bar"] .hud {
+        position: static;
+        order: -1; /* above the canvas; DOM and reading order unchanged */
+        align-self: stretch;
+        margin: 0 8px;
+        padding: 8px 12px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+          "label aux"
+          "score mute"
+          "status status";
+        column-gap: 12px;
+        row-gap: 4px;
+        align-items: center;
+      }
+      #sandbox[data-hud="bar"] .hud-label {
+        grid-area: label;
+      }
+      #sandbox[data-hud="bar"] .hud-score {
+        grid-area: score;
+      }
+      #sandbox[data-hud="bar"] .hud-ball,
+      #sandbox[data-hud="bar"] .hud-best {
+        grid-area: aux;
+        justify-self: end;
+        margin-top: 0;
+        line-height: 1.25;
+        min-height: 1.25em;
+      }
+      #sandbox[data-hud="bar"] .hud-status {
+        grid-area: status;
+        line-height: 1.2; /* text height = its min-height: 1.2em */
+        min-width: auto; /* the bar row spans the full width; keep the 06.4 behavior */
+      }
+      /* Bar-mode control hint (06.4.1; ready-only per 06.4.1.1 D-01, D-03):
+         static and not announced; it shares the status cell, is hidden by
+         default and shows only while HudView marks it data-ready (the ball in
+         play rests on the plunger and no status shows). visibility, not
+         display, keeps the row height constant. Side mode shows the full
+         controls list instead. */
+      .hud-hint {
+        display: none;
+      }
+      #sandbox[data-hud="bar"] .hud-hint {
+        display: block;
+        grid-area: status; /* shares the status cell */
+        min-width: 0; /* never widens the grid (320 px) */
+        margin: 0; /* a p's default 1em margins would grow the status row */
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 12px;
+        line-height: 1.6; /* 12 px x 1.6 = 19.2 px = the status row's 16 px x 1.2 */
+        color: var(--text-muted);
+        visibility: hidden;
+      }
+      #sandbox[data-hud="bar"] .hud-hint[data-ready="true"] {
+        visibility: visible;
+      }
+      #sandbox[data-hud="bar"] .hud-controls {
+        grid-area: mute;
+        justify-self: end;
+        margin: 0;
+      }
+      #sandbox[data-hud="bar"] .hud-controls > :not(.hud-controls-mute) {
+        display: none;
+      }
+      #sandbox[data-hud="bar"] .hud-controls-note,
+      #sandbox[data-hud="bar"] .hud-diag {
+        display: none;
+      }
+      /* Score HUD (GAME-01): system-font DOM text, crisp at any canvas fit. */
+      .hud {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        padding: 12px 16px;
+        background: var(--panel-bg);
+        border: 1px solid var(--frame);
+        border-radius: 8px;
+        box-shadow:
+          inset 0 0 12px var(--inner-glow),
+          0 0 16px rgba(76, 201, 240, 0.1);
+        color: var(--text);
+        font-family: var(--mono);
+        pointer-events: none;
+      }
+      .hud-label {
+        font-size: 12px;
+        letter-spacing: 0.28em;
+        color: var(--label);
+      }
+      .hud-score {
+        font-size: 32px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--text);
+        text-shadow: 0 0 10px var(--accent-glow);
+      }
+      .hud-ball {
+        margin-top: 4px;
+        font-size: 16px;
+        color: var(--text-soft);
+      }
+      /* High score (PLSH-08): HIGH SCORE <best> in game over, empty otherwise.
+         nowrap: past 8 digits the left-anchored panel grows rightward. */
+      .hud-best {
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--text-soft);
+      }
+      /* A new best: the glow pulses three times at 1.5 Hz (peaks 0.667 s
+         apart, 2 s total) and ends steady on the third peak. Kept under
+         reduced motion: it is a flash, not motion. */
+      .hud-best[data-new="true"] {
+        text-shadow: 0 0 12px var(--accent-glow);
+        animation: hud-best-pulse 2s ease-in-out 1;
+      }
+      @keyframes hud-best-pulse {
+        0%,
+        33.333%,
+        66.667% {
+          text-shadow: 0 0 0 var(--accent-glow);
+        }
+        16.667%,
+        50%,
+        83.333%,
+        100% {
+          text-shadow: 0 0 12px var(--accent-glow);
+        }
+      }
+      /* Game status (GAME-02/03): the announced game line (the mute announcer
+         below is the only other live region); min-height keeps the panel from
+         jumping when it empties. */
+      .hud-status {
+        min-height: 1.2em;
+        /* 06.4 WR-02: reserve the longest status ("GAME OVER · PRESS ENTER",
+           23 code points, statusText in src/ui/hud.ts) so the side panel is
+           already full width when applyView measures it at boot with an empty
+           status. Monospace, so each glyph is 1ch plus the letter-spacing.
+           Pinned by src/ui/hud-layout.test.ts. */
+        min-width: calc(23 * (1ch + 0.12em));
+        white-space: nowrap;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--status);
+        text-shadow: 0 0 8px rgba(247, 37, 133, 0.35);
+      }
+      /* Controls hint (G-04-6, 04-UI-REVIEW #6): a static key/action list, not
+         announced. Each row's key caps stay on one line. */
+      .hud-controls {
+        display: grid;
+        grid-template-columns: auto auto;
+        column-gap: 12px;
+        row-gap: 4px;
+        margin: 10px 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--text-muted);
+      }
+      .hud-controls dt {
+        margin: 0;
+      }
+      .hud-controls dd {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+      }
+      .hud-controls kbd,
+      .hud-controls-note kbd,
+      .hud-hint kbd {
+        font: inherit;
+        min-width: 1.2em;
+        padding: 0 4px;
+        text-align: center;
+        border: 1px solid rgba(76, 201, 240, 0.4);
+        border-radius: 3px;
+        background: var(--inner-glow);
+        color: var(--text-soft);
+      }
+      /* Mute marker (05-REVIEW IN-03): the status magenta, so a silenced game
+         reads at a glance next to its key. Empty (and zero-width) when on. */
+      .hud-mute {
+        margin-left: 4px; /* plus the row's 4px gap */
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--status);
+        text-shadow: 0 0 8px rgba(247, 37, 133, 0.35);
+      }
+      .hud-mute:empty {
+        display: none;
+      }
+      /* Mute announcer (05-REVIEW IN-02): a visually hidden live region that
+         reads "Muted" / "Sound on" on each toggle, so unmuting is announced
+         too (clearing a live region announces nothing). */
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+      }
+      /* Windows reliability note (G-04-17, UAT 18 decision A). contain:
+         inline-size drops it from the panel's intrinsic width, so it wraps at
+         the width the six rows set and never widens the panel over the table. */
+      .hud-controls-note {
+        contain: inline-size;
+        margin: 8px 0 0;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--text-muted);
+      }
+      /* Diagnosis readout (G-04-6): DOM text, legible at any canvas fit. A
+         developer readout, so it is hidden from assistive tech. */
+      .hud-diag {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        padding: 6px 10px;
+        background: var(--panel-bg);
+        border: 1px solid var(--frame);
+        border-radius: 6px;
+        box-shadow: inset 0 0 8px var(--inner-glow);
+        color: var(--text-muted);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      /* End-of-ball bonus overlay (06-UI-SPEC, D-11, D-12): centered over the
+         table while the drained ball's tally runs; the .hud frame. Hidden from
+         assistive tech (the status line announces BONUS n once). Rows are
+         subgrids of one two-column grid, so labels and values line up. Every
+         included row is laid out from the first step and only made visible on
+         its reveal, so the panel never resizes during the tally; nowrap and
+         tabular-nums make a long value widen the panel instead of wrapping. */
+      .hud-bonus {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 24px;
+        row-gap: 4px;
+        min-width: 240px;
+        padding: 16px 24px;
+        background: var(--panel-bg);
+        border: 1px solid var(--frame);
+        border-radius: 8px;
+        box-shadow:
+          inset 0 0 12px var(--inner-glow),
+          0 0 16px rgba(76, 201, 240, 0.1);
+        color: var(--text);
+        font-family: var(--mono);
+        line-height: 1.5;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      .hud-bonus[hidden],
+      .hud-bonus-row[hidden] {
+        display: none;
+      }
+      .hud-bonus-heading {
+        grid-column: 1 / -1;
+        margin-bottom: 8px;
+        font-size: 12px;
+        letter-spacing: 0.28em;
+        color: var(--label);
+      }
+      .hud-bonus-row {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        align-items: baseline;
+        font-size: 16px;
+        color: var(--text-soft);
+      }
+      .hud-bonus-row[data-revealed="false"] {
+        visibility: hidden;
+      }
+      .hud-bonus-value {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .hud-bonus-total {
+        border-top: 1px solid var(--frame);
+        padding-top: 8px;
+        margin-top: 8px;
+        font-weight: 700;
+        color: var(--text);
+      }
+      .hud-bonus-total .hud-bonus-value {
+        font-size: 32px;
+        line-height: 1.2;
+        text-shadow: 0 0 10px var(--accent-glow);
       }
     </style>
   </head>
   <body>
-    <!-- Throwaway diagnosis sandbox (D-06/D-07): live interpolated ball + HUD.
-         The real procedural renderer is Phase 5; do not build on this. -->
+    <!-- The canvas is the procedural table and paints no text. Per D-01 the HUD
+         is DOM text restyled to the space theme; ROADMAP SC1's "HUD on Canvas"
+         is met in intent (procedural, zero image assets). -->
     <main id="sandbox">
-      <canvas id="stage"></canvas>
+      <canvas id="stage" role="img" aria-label="Flippers pinball table"></canvas>
+      <div id="hud" class="hud">
+        <div class="hud-label">SCORE</div>
+        <div id="hud-score" class="hud-score">0</div>
+        <div id="hud-ball" class="hud-ball"></div>
+        <div id="hud-best" class="hud-best"></div>
+        <div id="hud-status" class="hud-status" role="status" aria-live="polite"></div>
+        <p id="hud-hint" class="hud-hint">
+          Hold <kbd>Space</kbd> to launch · <kbd>←</kbd> <kbd>→</kbd> flip
+        </p>
+        <dl id="hud-controls" class="hud-controls">
+          <dt>Start</dt>
+          <dd><kbd>Enter</kbd></dd>
+          <dt>Launch</dt>
+          <dd><kbd>Space</kbd> hold, release</dd>
+          <dt>Left flipper</dt>
+          <dd><kbd data-code="KeyZ">Z</kbd><kbd>←</kbd><kbd>Left Shift</kbd></dd>
+          <dt>Right flipper</dt>
+          <dd><kbd data-code="Slash">/</kbd><kbd>→</kbd><kbd>Right Shift</kbd></dd>
+          <dt>Nudge</dt>
+          <dd><kbd data-code="KeyX">X</kbd><kbd data-code="Period">.</kbd><kbd>↑</kbd></dd>
+          <dt class="hud-controls-mute">Mute</dt>
+          <dd class="hud-controls-mute">
+            <kbd data-code="KeyM">M</kbd>
+            <span id="hud-mute" class="hud-mute"></span>
+          </dd>
+        </dl>
+        <span id="hud-mute-live" class="visually-hidden" role="status" aria-live="polite"></span>
+        <p class="hud-controls-note">
+          On Windows, <kbd>←</kbd> <kbd>→</kbd
+          ><span data-layout-only hidden>
+            <kbd data-code="KeyZ">Z</kbd> <kbd data-code="Slash">/</kbd></span
+          >
+          are the most reliable flipper keys. Shift can stick.
+        </p>
+      </div>
+      <!-- End-of-ball bonus tally (06-UI-SPEC): BonusView fills the rows and
+           toggles hidden / data-revealed; text only, never markup. -->
+      <div id="hud-bonus" class="hud-bonus" hidden aria-hidden="true">
+        <div class="hud-bonus-heading">BONUS</div>
+        <div id="hud-bonus-row-0" class="hud-bonus-row" hidden data-revealed="false">
+          <span id="hud-bonus-label-0"></span>
+          <span id="hud-bonus-value-0" class="hud-bonus-value"></span>
+        </div>
+        <div id="hud-bonus-row-1" class="hud-bonus-row" hidden data-revealed="false">
+          <span id="hud-bonus-label-1"></span>
+          <span id="hud-bonus-value-1" class="hud-bonus-value"></span>
+        </div>
+        <div id="hud-bonus-row-2" class="hud-bonus-row" hidden data-revealed="false">
+          <span id="hud-bonus-label-2"></span>
+          <span id="hud-bonus-value-2" class="hud-bonus-value"></span>
+        </div>
+        <div id="hud-bonus-total-row" class="hud-bonus-row hud-bonus-total" data-revealed="false">
+          <span>TOTAL</span>
+          <span id="hud-bonus-total" class="hud-bonus-value"></span>
+        </div>
+      </div>
+      <div id="hud-diag" class="hud-diag" aria-hidden="true"></div>
     </main>
     <script type="module" src="/src/sandbox/main.ts"></script>
   </body>

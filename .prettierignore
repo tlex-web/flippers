@@ -1,0 +1,6 @@
+# Planning, agent and instruction files: Prettier must not rewrite them (`npm run format` is `prettier --write .`).
+# .gitignore is honored as well, so its entries (node_modules/, dist/, ...) are not repeated here.
+.planning/
+.gsd/
+.claude/
+CLAUDE.md

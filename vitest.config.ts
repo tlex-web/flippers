@@ -15,5 +15,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/*.gate.test.ts"],
     passWithNoTests: true,
+    // The 5 s default testTimeout stays, so a hung fast unit test fails fast.
+    // The heavy simulation suites (determinism, e2e, soak, loop-flipper) raise
+    // their own limit to 30 s with vi.setConfig (05-REVIEW IN-07; they timed out
+    // at 5 s under load, todo 2026-11-21-give-heavy-simulation-tests-an-explicit-timeout).
   },
 });

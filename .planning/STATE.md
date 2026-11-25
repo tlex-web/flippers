@@ -1,45 +1,42 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 03
-current_phase_name: Table, Plunger & Event Bus
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-11-19T20:58:33.235Z"
-last_activity: 2026-11-19
-last_activity_desc: "Completed quick task 261119-sbr: Re-scope to an original table (Flippers)"
-state_head: 80869ae03cb8fe18856598aa42f273f2a57800a8
+status: Awaiting next milestone
+stopped_at: Milestone v1.0 complete and archived
+last_updated: "2026-11-25T17:03:24.143Z"
+last_activity: 2026-11-25
+last_activity_desc: "Milestone v1.0 shipped as PR #5"
+state_head: b33495a176217ad0b8c5946def50fd9fccb5b45b
 progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 19
-  completed_plans: 14
+  total_phases: 12
+  completed_phases: 12
+  total_plans: 84
+  completed_plans: 84
 milestone_name: milestone
+current_phase: 06.4.1.1
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-19)
+See: .planning/PROJECT.md (updated 2026-11-25)
 
 **Core value:** The moment-to-moment pinball loop — plunger, flippers, ball physics, and bumpers — feels satisfying, weighty, and true to real pinball.
-**Current focus:** Phase 3 — table, plunger & event bus
+**Current focus:** Planning next milestone (v1.0 MVP shipped 2026-11-25)
 
 ## Current Position
 
-Phase: 03 (Table, Plunger & Event Bus) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-19 - Completed quick task 261119-sbr: Re-scope to an original table (Flippers)
-
-Progress: [███░░░░░░░] 33%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-25 -- Milestone v1.0 shipped as PR #5
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 14
+- Total plans completed: 85
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -48,7 +45,17 @@ Progress: [███░░░░░░░] 33%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 7 | - | - |
-| 02 | 7 | - | - |
+| 2 | 7 | - | - |
+| 3 | 6 | - | - |
+| 04 | 15 | - | - |
+| 05 | 8 | - | - |
+| 06 | 14 | - | - |
+| 06.1 | 5 | - | - |
+| 06.2 | 6 | - | - |
+| 06.3 | 3 | - | - |
+| 06.4 | 4 | - | - |
+| 06.4.1 | 3 | - | - |
+| 06.4.1.1 | 7 | - | - |
 
 **Recent Trend:**
 
@@ -68,63 +75,136 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P03 | 32min | 2 tasks | 4 files |
 | Phase 02 P04 | 15min | 2 tasks | 3 files |
 | Phase 2 P5 | 31min | 3 tasks | 5 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 03 P01 | 13min | 3 tasks | 9 files |
+| Phase 03 P02 | 11min | 2 tasks | 5 files |
+| Phase 03 P03 | 5min | 2 tasks | 8 files |
+| Phase 03 P04 | 4min | 2 tasks | 5 files |
+| Phase 03 P05 | 14min | 3 tasks | 10 files |
+| Phase 03 P06 | 10min | 3 tasks | 9 files |
+| Phase 04 P01 | 10min | 3 tasks | 11 files |
+| Phase 04 P02 | 5min | 2 tasks | 5 files |
+| Phase 04 P03 | 14min | 3 tasks | 6 files |
+| Phase 04 P04 | 3min | 2 tasks | 8 files |
+| Phase 04 P05 | 11min | 3 tasks | 8 files |
+| Phase 04 P06 | 18min | 3 tasks | 9 files |
+| Phase 04 P07 | 6min | 2 tasks | 5 files |
+| Phase 04 P08 | 9min | 3 tasks | 10 files |
+| Phase 04 P09 | 9 min | 2 tasks | 7 files |
+| Phase 04 P10 | 4 min | 2 tasks | 5 files |
+| Phase 04 P11 | 7 min | 2 tasks | 5 files |
+| Phase 04 P12 | 8 min | 3 tasks | 4 files |
+| Phase 04 P13 | 5 min | 2 tasks | 4 files |
+| Phase 04 P14 | 7 min | 3 tasks | 4 files |
+| Phase 04 P15 | 37 min | 3 tasks | 3 files |
+| Phase 05 P01 | 7 min | 2 tasks | 9 files |
+| Phase 05 P08 | 7 min | 3 tasks | 5 files |
+| Phase 05 P02 | 18min | 2 tasks | 9 files |
+| Phase 05 P03 | 12 min | 3 tasks | 12 files |
+| Phase 05 P07 | 7 min | 3 tasks | 5 files |
+| Phase 05 P04 | 17 min | 2 tasks | 8 files |
+| Phase 05 P05 | 18 min | 2 tasks | 7 files |
+| Phase 05 P06 | 15 min | 3 tasks | 6 files |
+| Phase 06 P01 | 13 min | 3 tasks | 9 files |
+| Phase 06 P02 | 46min | 2 tasks | 6 files |
+| Phase 06 P03 | 35 min | 3 tasks | 9 files |
+| Phase 06 P04 | 10min | 2 tasks | 9 files |
+| Phase 06 P05 | 11 min | 2 tasks | 8 files |
+| Phase 06 P06 | 16min | 2 tasks | 6 files |
+| Phase 06 P07 | 10min | 2 tasks | 7 files |
+| Phase 06 P08 | 17min | 2 tasks | 11 files |
+| Phase 06 P09 | 47min | 2 tasks | 9 files |
+| Phase 06 P10 | 28min | 2 tasks | 8 files |
+| Phase 06 P11 | 13 min | 2 tasks | 10 files |
+| Phase 06 P12 | 16min | 2 tasks | 10 files |
+| Phase 06 P13 | 20min | 2 tasks | 8 files |
+| Phase 06 P14 | 10min | 3 tasks | 5 files |
+| Phase 06.1 P01 | 4min | 2 tasks | 29 files |
+| Phase 06.1 P03 | 8min | 3 tasks | 5 files |
+| Phase 06.1 P02 | 15min | 3 tasks | 7 files |
+| Phase 06.1 P04 | 3min | 2 tasks | 9 files |
+| Phase 06.1 P05 | 4min | 3 tasks | 5 files |
+| Phase 06.2 P01 | 5 min | 2 tasks | 1 files |
+| Phase 06.2 P02 | 11min | 2 tasks | 4 files |
+| Phase 06.2 P04 | 7min | 2 tasks | 2 files |
+| Phase 06.2 P05 | 3min | 2 tasks | 4 files |
+| Phase 06.2 P03 | 21 min | 3 tasks | 3 files |
+| Phase 06.2 P06 | 6min | 2 tasks | 3 files |
+| Phase 06.3 P01 | 5min | 2 tasks | 6 files |
+| Phase 06.3 P02 | 8min | 2 tasks | 3 files |
+| Phase 06.3 P03 | 13min | 3 tasks | 3 files |
+| Phase 06.4 P01 | 10 min | 2 tasks | 5 files |
+| Phase 06.4 P02 | 4min | 2 tasks | 3 files |
+| Phase 06.4 P03 | 3 min | 2 tasks | 4 files |
+| Phase 06.4 P04 | 21min | 2 tasks | 1 files |
+| Phase 06.4.1 P01 | 9 min | 2 tasks | 4 files |
+| Phase 06.4.1 P02 | 30min | 2 tasks | 2 files |
+| Phase 06.4.1 P03 | 11min | 3 tasks | 1 files |
+| Phase 06.4.1.1 P01 | 6 min | 3 tasks | 8 files |
+| Phase 06.4.1.1 P02 | 3 min | 2 tasks | 2 files |
+| Phase 06.4.1.1 P03 | 11min | 2 tasks | 1 files |
+| Phase 06.4.1.1 P04 | 86min | 3 tasks | 4 files |
+| Phase 06.4.1.1 P05 | 6 min | 2 tasks | 4 files |
+| Phase 06.4.1.1 P06 | 4min | 2 tasks | 4 files |
+| Phase 06.4.1.1 P07 | 3 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Phase 1]: Physics engine (Planck.js `setBullet` vs. custom swept solver) deliberately deferred to an empirical spike inside Phase 1 — decide by which is provably tunnel-proof and easiest to tune, not on paper.
-- [Roadmap]: Risk-first ordering — physics core and flipper feel retired before any table geometry is built.
-- [Roadmap]: Keep v1 physics data structures N-ball-ready so deferred multiball is additive later, not a rewrite.
-- [Phase 01]: TypeScript pinned to 5.9.3 (not plan 7.0.2) for 01-01 scaffold — @typescript-eslint 8 requires TS <6.1.0 and crashes under TS 7.0 native compiler; resolved per CLAUDE.md compat escape hatch. Exact-pin + lockfile control preserved. Ratify or revisit when typescript-eslint supports TS 7.
-- [Phase 01]: Physics isolated behind an engine-agnostic PhysicsWorld interface — planck imported only in planck-world.ts; pooled snapshots avoid per-frame allocation; 120Hz fixed-step accumulator loop with MAX_FRAME_MS spiral-of-death clamp. PHYS-01/02/03 satisfied by a green headless smoke test.
-- [Phase 01]: PHYS-03 proven and regression-guarded headlessly: 60/120/144Hz render cadences run identical fixed-step counts and reach bit-identical ball state; a 5s tab-blur delta is clamped to a bounded burst (no spiral, finite, recovers). No loop.ts change needed — the 01-02 MAX_FRAME_MS clamp already passes.
-- [Phase 01]: Test flipper is the canonical Box2D pinball flipper — a DYNAMIC bat on a motorized revolute joint (enableMotor, high maxMotorTorque, plus/minus 45deg limits), never kinematic; exposed via getFlippers() with an engine-agnostic setFlipperMotor drive hook. Ball CCD armed on addBall (Planck #167 guard).
-- [Phase 01]: Swept containment invariant (sweptEscaped) is engine-agnostic (reads the interface, not planck) with an EXCLUSIVE radius boundary (graze at exactly radius = contact, not escape); it catches thin-wall tunnel and boundary poke-out/re-enter that a naive center-in-box check misses. Deterministic mulberry32 PRNG (never the unseeded global RNG) backs seed replay.
-- [Phase 01]: Throwaway Canvas 2D debug sandbox (D-06/D-07) renders the live interpolated ball + walls + test flipper + velocity + contacts + FPS/physics-Hz/KE HUD, reading state only through the PhysicsWorld interface (no planck import); allocation-free rAF path (pooled buffers, cached gradient/HUD strings). Diagnosis only — pass/fail stays the headless soak (01-06). Human render checkpoint operator-approved.
-- [Phase 01]: Headless swept-containment soak (npm run soak) is the SOLE PHYS-02 tunnel-proof gate (D-03): seeded mulberry32 sweep of launch angle x speed (past real max, ~58 m/s) x flipper phase over >=630s SIMULATED 120Hz steps, sweptEscaped asserted every step against the interface; green with CCD on in ~11s wall-clock. Planck setBullet+continuousPhysics empirically HOLDS at ~10x the ball's real max velocity. — Turns PHYS-02 (the #1 risk) into a green/red CI line with replayable seeds and makes the plan 01-07 engine decision empirical (D-05).
-- [Phase 01]: The soak gate is proven honest by a CCD-off negative control: bullet:false disables world-level continuousPhysics (Box2D runs CCD vs static bodies regardless of the per-body setBullet flag), so a max-velocity thin-wall launch tunnels and runSoak reports passed=false with a numeric replayable seed + full state that reproduces identically. Flipper tunnels use swept-path crossing + far-side-clear to exclude the stress-flipper crushing a resting ball. — A green gate is only trustworthy when a real fault is demonstrated to turn it RED (test integrity, T-06-01).
-- [Phase 01]: Engine LOCKED — Planck.js 1.5.0 (setBullet + world continuousPhysics, behind the PhysicsWorld interface) confirmed by the passing npm run soak tunnel-proof gate + a green headless stability/energy proof (stability.test.ts: settles-to-rest, no jitter/corner-stick, kinetic energy monotonically non-increasing, teeth-proven). The D-01 custom-swept-solver fallback is documented but NOT triggered. Feel constants held unchanged; operator approved a visibly weighty fall/settle (D-09 Phase-1 target), final heavy verdict deferred to Phase 2.
-- [Phase ?]: [Phase 02]: Two mirrored capsule feel flippers (Box core + rounded tip/hinge Circles, D-07) on motorized revolute joints; tipRadius on FlipperState (D-08); setFlipperMotor remapped to feel speeds +1->UP_SPEED 30 / -1->RETURN_SPEED 20 (D-05), replacing FLIPPER_MOTOR_SPEED; flipper restitution 0 (D-06(3)); torque 10000->500, limits +/-pi/8; mirror via body angle pi + planck reference-relative limits; right flipper is throwaway-rig scaffold (D-11) clear of every Phase-1 test ball. Phase-1 flipper neg-control launch retuned 80->105 to stay honest under the slower feel drive.
-- [Phase 02]: Flipper control layer split into two engine-agnostic pure-TS modules (src/input/ keyboard held-set + per-side OR latched edges on event.code; src/control/ FlipperController FSM resting->flipping-up->held-up->returning) — neither imports planck (grep-enforced), FSM drives world only via setFlipperMotor(id,+1/-1/0) and holds +1 continuously through held-up (D-06(1)); unit-proven vs synthetic events and a spy PhysicsWorld.
-- [Phase 02]: FSM limit detection is by angular settling (|delta|<1e-3 rad after moving), not a hard-coded FLIPPER_UPPER/LOWER_ANGLE compare — the referenceAngle-mirrored right flipper reports absolute angles around pi, so settling is the mirror-safe, geometry/engine-independent detector.
-- [Phase ?]: [Phase 02]: FixedStepLoop.advance() gained an optional onStep pre-step hook invoked before each internal world.step (D-10); main.ts drains the input latch + ticks the FlipperController FSM at the top of each fixed 120 Hz step via one stable callback passed by reference (zero per-frame alloc, T-02-05), so a keypress applies sub-frame. Loop stays engine-agnostic. First keyboard-playable end-to-end flipper rig + drain-triggered ball feed (D-11), guarded by a no-mock E2E integration test.
-- [Phase ?]: [Phase 02]: FlipperController now commands setFlipperMotor(id,0) per flipper in its constructor to enforce its documented resting==motor-0 invariant (Rule-1 fix surfaced by the E2E test) - otherwise a never-pressed bat runs the adapter construction-default motor into a joint limit and Box2D locks it (startup limit-jam). Release jam-lag (~15 steps after a long cradle hold) + physical rest/raise orientation deferred to the 02-06 feel checkpoint.
-- [Phase 02]: Adaptive angular sub-stepping (D-01) lives inside PlanckWorld.step(): it splits FIXED_DT into N deterministic Planck sub-steps sized from the live peak flipper joint speed (N=ceil(omega*L*dt/(0.5*r)); 1 at rest, 2 at FLIPPER_UP_SPEED), bounded to N<=4 by a secondary cap FLIPPER_MAX_ANGULAR_SPEED=96 (D-02), with events accumulating across sub-steps and pools/contacts synced once after the last. PlanckWorldOptions.subStepping=false forces N=1 as the 02-05 negative-control hook. N is from joint speed never wall-clock; the ball setBullet CCD and the interface/harness are untouched. — FLIP-04 rotational anti-tunnel mechanism, unit-proven; 02-05 seeded gate proves non-penetration green ON / red OFF.
-- [Phase ?]: FLIP-04 gate proven: seeded green flipper-primary peak-omega swept gate (CCD+sub-stepping ON, >=630s simulated) + replayable RED sub-stepping teeth control
-- [Phase ?]: Sub-stepping teeth isolated with CCD off in both arms; bullet:true teeth is vacuous (CCD masks it, peak omega=30 cannot skip the 0.2m ball)
-- [Phase ?]: Feel proven as numbers: tip out-launches base per v=omega*r (2.62 vs 3.0), caught ball cradles jitter-free with monotonic energy
-- [Phase 02 GAP-01 rig fix]: 02-06 human-checkpoint feedback (live rig) — made the throwaway two-flipper TEST RIG playable WITHOUT touching the raiseSign fix or any feel constant (D-11 scaffold only). Symmetric same-height pivots mirrored about box centre (left keeps Phase-1 (0.35,2.6); right its mirror (1.65,2.6)) — the "not on the same height" report; HALF_SEP sized so tips never collide at any angle (min gap 0.31m through a full raise sweep). Idle made symmetric by constructing FlipperController (motor 0) BEFORE the first ball (adapter construction motor left unchanged so FLIP-04 soak/teeth calibration stays byte-identical). Centre feed drops ONE ball onto the pair (rests x≈1.0,y≈2.45; max x ever 1.10 — never off the right edge); new removeBall() on the interface removes the drained ball before re-feeding (no corner pile-up). stability.test.ts rebuilt around the centred pair (holdAllFlippers; energy ball r=0.1 to clear under raised bats); flipper-feel v=ω·r decoupled from the rig (droop far flipper) + strike the flat core (rFrac 0.8) not the whip-prone tip circle — clean match within the UNCHANGED 35% tol. All green: tsc/eslint 0, 71/71, 2/2 soak.
-- [Phase 02 GAP-01]: Fixed the verifier's BLOCKER (SC1/FLIP-01) — setFlipperMotor(id,+1) raised the right bat but DROOPED the left (a body-angle-pi mirror preserves rotational handedness, so the two counter-rotating bats need OPPOSITE motor signs to both raise). Folded a per-flipper raiseSign (mirror?+1:-1) into PlanckWorld.setFlipperMotor (D-05); FlipperController still drives +1=raise engine-agnostically. Symmetric +/-pi/8 limits mean flipping the sign drives each bat to the CORRECT limit (+1=up cradle, -1=rest). Right pivot moved 1.15->1.55 (D-11 throwaway rig) so the now-UP raised left bat no longer collides with it. Raise direction re-proven against TRUE world tip-Y for BOTH sides; feel v=omega*r re-proven with the correct +1 sign via a sustained-launch measure; FLIP-04 teeth re-calibrated (soak sweep reverses before the limit, sign-agnostic; teeth speed 96->92). All green: tsc/eslint 0, 71/71 tests, 2/2 soak gates. 02-06 human by-feel checkpoint now unblocked.
+Decisions are logged in PROJECT.md Key Decisions table. The v1.0 per-plan decision log was cleared at milestone close; it lives in the archived phase SUMMARY files (`.planning/milestones/v1.0-phases/`) and in git history before the `chore: archive v1.0 milestone files` commit.
 
 ### Pending Todos
 
-None yet.
+- [Rescale bat to ball for root shots (backlog)](.planning/todos/pending/2026-11-24-rescale-bat-to-ball-for-root-shots.md): the root strip (d < 0.25 m) still meets the sling's inlane corner after 06.3 (10/139 clear vs 118/139 with no slings); deferred to a bat-to-ball rescale (D-03). Acknowledged at the v1.0 close and carried forward.
 
 ### Blockers/Concerns
 
-- [Phase 3]: Table layout is an original design authored in 03-01 from standard pinball elements (positions chosen for good ball flow, sized from the unchanged Phase-2 feel constants) — no external layout source.
-- [Phase 2]: Rotational CCD (angular sub-stepping + capsule/speculative contacts) is a narrower, less-documented subproblem than linear CCD — warrants a focused research pass before building.
+Resolved v1.0 items were cleared at milestone close. Open items carried into the next milestone (details in `.planning/milestones/v1.0-MILESTONE-AUDIT.md`):
+
+- [Phase 1/2]: Phases 1 and 2 have no VALIDATION.md, and Phase 2 has no SECURITY.md. Both predate those audits.
+- [Phase 3 → 5]: `#ef476f` is shared by the drain, the velocity arrow and the full meter (03-UI-REVIEW carry-forward).
+- [Phase 06.2]: 06.2-REVIEW-DISPOSITION.md has 6 open rows, untriaged. WR-01 is the most visible: a search give-up removes the ball mid-table while the drain cue and apron flash fire at the drain.
+- [Phase 06.3]: 06.3-REVIEW-DISPOSITION.md has 6 open info rows (IN-02..IN-07). IN-03: the trimmed obtuse corner acts as a kick zone on the passive face, and the `SLING_FACE_TOL` comment is stale.
+- [Phase 06.4]: 06.4-REVIEW-DISPOSITION.md has 6 open rows. WR-01: the `apply-view.test.ts` boot-call guard can't fail. IN-01: bar row 2 may overflow below about 345 px with a 7-digit muted score (unmeasured).
+- [Phase 06.4.1]: 06.4.1-REVIEW-DISPOSITION.md has 4 rows deferred under 06.4.1.1 D-09. There are also favicon-gate residuals (a `rel=manifest` data: JSON case; jsdom vs browser XML parity), and `06.4.1-02-SUMMARY.md` frontmatter is not parseable YAML.
+- [Phase 06.4.1.1]: 06.4.1.1-REVIEW-DISPOSITION.md has 6 open info rows (IN-01..IN-06). The UI review asks to measure the bar hint at 320 and 345 px, where it may clip to "…← →…".
+- [Tooling]: TypeScript is pinned to 5.9.3, not 7.0.2. `npm audit` reports pre-existing moderate/high advisories in dev tooling.
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 261119-sbr | Re-scope to an original table (Flippers) | 2026-11-19 | 1c0848f | [261119-sbr-re-scope-project-from-a-space-cadet-recr](./quick/261119-sbr-re-scope-project-from-a-space-cadet-recr/) |
+
+### Roadmap Evolution
+
+- Phase 06.1 inserted after Phase 6: Address tech debt: bat/sling pinch (WR-03) + review hygiene (URGENT)
+- Phase 06.2 inserted after Phase 06.1: Address tech debt: ball-search soft-lock + 06.1 review triage (from v1.0 re-audit) (URGENT)
+- Phase 06.3 inserted after Phase 06.2: Fix slingshot deflection on flipper-root shots (todo 2026-11-23-root-shot-deflects-off-slingshot) (URGENT)
+- Phase 06.4 inserted after Phase 06.3: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording (URGENT)
+- Phase 06.4.1 inserted after Phase 06.4: Address tech debt: bar-mode control hints, HUD status min-width, favicon (URGENT)
+- Phase 06.4.1.1 inserted after Phase 06.4.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify (URGENT)
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and deferred at milestone close, most recent first:
 
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| Progression | Original rank/mission/lock-jackpot/multiball layer (v2) | Deferred | Roadmap creation |
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| debug_sessions | left-shift-sticky-keys-flipper-stuck | diagnosed (fix shipped in 04-11..04-14) | 2026-11-25 | v1.0 |
+| debug_sessions | shift-flipper-residual-stick | diagnosed (fix shipped in 04-12..04-14) | 2026-11-25 | v1.0 |
+| todos | 2026-11-24-rescale-bat-to-ball-for-root-shots.md | (presence-only) | 2026-11-25 | v1.0 |
+| Progression | Original rank/mission/lock-jackpot/multiball layer (v2) | Deferred | Roadmap creation | v1.0 |
 
 ## Session Continuity
 
-Last session: 2026-07-15T22:32:13.725Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-table-plunger-event-bus/03-CONTEXT.md
+Last session: 2026-11-25T16:40:00.000Z
+Stopped at: Milestone v1.0 MVP complete and archived (override_closeout: 3 items acknowledged, 8 stale verifications accepted against the audit at HEAD)
+Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

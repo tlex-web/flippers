@@ -1,9 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { BALL_RADIUS_M, FIXED_DT } from "../physics/constants";
 import { PlanckWorld } from "../physics/planck-world";
+import { PROOF_BOX_SPEC } from "../table/spec";
 import type { BallState, PhysicsWorld } from "../physics/types";
 import { FixedStepLoop } from "../sim/loop";
+
+// Heavy simulation suite: the 5 s default timeout is too tight under load, so
+// this file alone gets 30 s (05-REVIEW IN-07; the fast suites keep the default).
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Resting-ball stillness + kinetic-energy-monotonic proof — the stability half of
@@ -173,10 +178,7 @@ function stepUntilSettled(world: PhysicsWorld, step: () => void): number {
  * tolerance. This is the energy-monotonic detector: it tolerates tiny numerical
  * noise but flags any real spontaneous gain (a ball speeding up on its own).
  */
-function firstMonotonicIncrease(
-  series: readonly number[],
-  absEps: number,
-): number {
+function firstMonotonicIncrease(series: readonly number[], absEps: number): number {
   for (let i = 1; i < series.length; i++) {
     const cur = series[i];
     const prev = series[i - 1];
@@ -190,7 +192,7 @@ function firstMonotonicIncrease(
 
 describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   it("a dropped ball settles to rest and then sits perfectly still (no jitter)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     // Drop straight down onto the CENTRE of the mirrored pair; held at the droop
     // limit the two bats form a deep, rigid V that catches and steadies the ball.
     world.addBall({ x: 1.0, y: 0.4, vx: 0 });
@@ -221,7 +223,7 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   });
 
   it("a ball seeded into a wall corner settles to rest (no corner-sticking)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     const b = bounds(world);
     const r = BALL_RADIUS_M;
     const step = makeStepper(world);
@@ -248,7 +250,7 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
   });
 
   it("kinetic energy is monotonically non-increasing once undisturbed (never spontaneously gains speed)", () => {
-    const world: PhysicsWorld = new PlanckWorld();
+    const world: PhysicsWorld = new PlanckWorld({ table: PROOF_BOX_SPEC });
     const b = bounds(world);
     const step = makeStepper(world);
 
@@ -305,17 +307,13 @@ describe("resting-ball stillness + kinetic-energy-monotonic proof", () => {
 
   it("the energy-monotonic detector rejects a synthetic speed-up (proof of teeth)", () => {
     // A genuinely non-increasing series passes...
-    expect(
-      firstMonotonicIncrease([0.5, 0.5, 0.4, 0.4, 0.1, 0.0], ENERGY_NOISE_EPS),
-    ).toBe(-1);
+    expect(firstMonotonicIncrease([0.5, 0.5, 0.4, 0.4, 0.1, 0.0], ENERGY_NOISE_EPS)).toBe(-1);
     // ...but a fabricated spontaneous speed-up (rising energy) is CAUGHT. Without
     // this, the monotonic assertion above could rubber-stamp a solver energy leak.
-    expect(
-      firstMonotonicIncrease([0.1, 0.2, 0.3], ENERGY_NOISE_EPS),
-    ).toBeGreaterThan(0);
+    expect(firstMonotonicIncrease([0.1, 0.2, 0.3], ENERGY_NOISE_EPS)).toBeGreaterThan(0);
     // Tiny machine-epsilon noise is tolerated (not mistaken for a real gain).
-    expect(
-      firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS),
-    ).toBe(-1);
+    expect(firstMonotonicIncrease([0.2, 0.2 + ENERGY_NOISE_EPS / 2, 0.19], ENERGY_NOISE_EPS)).toBe(
+      -1,
+    );
   });
 });
