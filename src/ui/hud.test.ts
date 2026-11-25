@@ -12,6 +12,7 @@ import {
   DiagView,
   diagText,
   formatScore,
+  HINT_READY_ATTR,
   HudView,
   MuteView,
   muteAnnouncement,
@@ -64,6 +65,7 @@ class FakeSource implements HudSource {
   best = 0;
   newBest = false;
   gameOverStep = -1;
+  onPlunger = false;
   getScore(): number {
     return this.score;
   }
@@ -111,6 +113,9 @@ class FakeSource implements HudSource {
   }
   getGameOverStep(): number {
     return this.gameOverStep;
+  }
+  isBallOnPlunger(): boolean {
+    return this.onPlunger;
   }
 }
 
@@ -175,8 +180,9 @@ describe("statusText (GAME-02/03, 06-UI-SPEC status line)", () => {
     ["attract", 0, "PRESS ENTER TO START"],
     ["gameOver", 0, "GAME OVER · PRESS ENTER"],
     ["warning", 0, "WARNING"],
-    // index.html shows the bar hint through .hud-status:not(:empty) + .hud-hint,
-    // so the none status must stay the empty string.
+    // HudView marks the bar hint ready (data-ready) only when the status code
+    // is none, and the hint shares the status cell, so none must stay the
+    // empty string (06.4.1.1 D-03).
     ["none", 0, ""],
   ] as const)("(%s, %d) reads %j", (code, value, text) => {
     expect(statusText(code, value)).toBe(text);
@@ -1135,5 +1141,28 @@ describe("HudView best line and NEW HIGH SCORE (plan 06-11 Task 2, 06-UI-SPEC ro
     view.update(src);
     expect(bestLine.writes).toBe(writes + 1);
     expect(bestLine.textContent).toBe("HIGH SCORE 50,000");
+  });
+});
+
+describe("HudView bar hint ready flag (06.4.1.1 D-01, D-03)", () => {
+  it("marks the hint data-ready while playing on the plunger with no status, and clears it on launch (D-01)", () => {
+    const hint = new FakeAttrSink();
+    const view = new HudView(
+      new CountingSink(),
+      new CountingSink(),
+      new CountingSink(),
+      null,
+      null,
+      hint,
+    );
+    const src = new FakeSource();
+    src.state = "playing";
+    src.ball = 1;
+    src.onPlunger = true;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBe("true");
+    src.onPlunger = false;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBeUndefined();
   });
 });

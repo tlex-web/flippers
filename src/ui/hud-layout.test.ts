@@ -6,7 +6,7 @@ import { SKILL_SHOT_MAX_POINTS } from "../game/tuning";
 import { FlipperInput } from "../input/flipper-input";
 import { PlungerInput } from "../input/plunger-input";
 import { HUD_BAR_GAP_CSS } from "../render/view-transform";
-import { statusText, type StatusCode } from "./hud";
+import { HINT_READY_ATTR, statusText, type StatusCode } from "./hud";
 
 /**
  * Narrow-viewport HUD bar (06.4, GAME-01): main.ts sets data-hud="bar" on
@@ -64,7 +64,7 @@ const KEY_CODE = {
 
 /** The bar-mode hint's inner markup ("" when it is missing). */
 function hintBody(): string {
-  const m = /<p class="hud-hint">([\s\S]*?)<\/p>/.exec(indexHtml);
+  const m = /<p id="hud-hint" class="hud-hint">([\s\S]*?)<\/p>/.exec(indexHtml);
   expect(m).not.toBeNull();
   return m?.[1] ?? "";
 }
@@ -149,21 +149,23 @@ describe("index.html narrow-viewport HUD bar (06.4; GAME-01)", () => {
 });
 
 /**
- * Bar-mode control hint (06.4.1, 06.4-UI-REVIEW fix 1): a static line after
- * #hud-status that shares the status cell and shows only while the status is
- * empty, so a narrow-window player learns the keys and the bar never changes
- * height. HudView writes statusText("none") as "", which is what :empty needs.
+ * Bar-mode control hint (06.4.1, 06.4-UI-REVIEW fix 1; ready-only per 06.4.1.1
+ * D-01, D-03): a static line after #hud-status that shares the status cell. It
+ * is hidden by default and shows only while HudView, not the status text, marks
+ * it data-ready (the ball in play rests on the plunger and no status shows), so
+ * a narrow-window player learns the launch keys at the plunger and the bar
+ * never changes height.
  */
-describe("index.html bar-mode control hint (06.4.1; GAME-01)", () => {
-  it("places the hint right after an empty #hud-status (for :empty and +)", () => {
+describe("index.html bar-mode control hint, ready-only (06.4.1, 06.4.1.1 D-01, D-03; GAME-01)", () => {
+  it("keeps the hint the next element after #hud-status (reading order)", () => {
     // The status div is empty, and the next tag after it opens the hint.
     const next = /id="hud-status"[^>]*><\/div>\s*(<[^>]*>)/.exec(indexHtml)?.[1];
-    expect(next).toBe('<p class="hud-hint">');
+    expect(next).toBe('<p id="hud-hint" class="hud-hint">');
   });
 
   it("is static: no role and no aria-live", () => {
-    expect(indexHtml.match(/<p class="hud-hint"/g)?.length).toBe(1);
-    expect(indexHtml).not.toMatch(/<p class="hud-hint"[^>]*\b(role|aria-)/);
+    expect(indexHtml.match(/<p id="hud-hint" class="hud-hint"/g)?.length).toBe(1);
+    expect(indexHtml).not.toMatch(/<p id="hud-hint" class="hud-hint"[^>]*\b(role|aria-)/);
   });
 
   it('reads "Hold Space to launch · ← → flip" in at most 31 code points', () => {
@@ -218,13 +220,23 @@ describe("index.html bar-mode control hint (06.4.1; GAME-01)", () => {
     }
   });
 
-  it("hides the hint by visibility, never display, whenever a status shows", () => {
+  it("hides the bar hint by default, by visibility (06.4.1.1 D-03)", () => {
+    expect(style).toMatch(barRule(String.raw`\.hud-hint`, String.raw`visibility:\s*hidden`));
+  });
+
+  it("shows the bar hint only on the ready attribute, by visibility, never display (06.4.1.1 D-03)", () => {
+    expect(HINT_READY_ATTR).toBe("data-ready");
     const m = new RegExp(
-      String.raw`${BAR}\s+\.hud-status:not\(:empty\)\s*\+\s*\.hud-hint\s*\{([^}]*)\}`,
+      String.raw`${BAR}\s+\.hud-hint\[${HINT_READY_ATTR}="true"\]\s*\{([^}]*)\}`,
     ).exec(style);
     expect(m).not.toBeNull();
-    expect(m?.[1]).toMatch(/visibility:\s*hidden/);
+    expect(m?.[1]).toMatch(/visibility:\s*visible/);
     expect(m?.[1]).not.toMatch(/display:/);
+  });
+
+  it("couples no :empty selector to the hint (06.4.1-UI-REVIEW fix 3)", () => {
+    expect(style).not.toMatch(/:empty[^{]*\.hud-hint/);
+    expect(style).not.toMatch(/\.hud-hint[^{]*:empty/);
   });
 
   it("gives the hint the status row's line box, so the bar keeps one height", () => {
