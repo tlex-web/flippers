@@ -1,19 +1,18 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.0
-current_phase: 06.4.1
-status: completed
-stopped_at: Phase 06.4.1 complete — all phases complete
-last_updated: "2026-11-24T23:46:03.978Z"
-last_activity: 2026-11-24
+current_phase: 06.4.1.1
+status: Phase 06.4.1.1 inserted, not planned
+stopped_at: Phase 06.4.1.1 context gathered
+last_updated: "2026-11-25T11:36:57.816Z"
+last_activity: 2026-11-25
 last_activity_desc: Phase 06.4.1 complete
-state_head: f008b693392c6ff7a585d9ee65a8ae0492f9d4a3
+state_head: 75bea2697583dfe11a002417a25930a79482c399
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 11
   total_plans: 77
   completed_plans: 77
-  percent: 100
 milestone_name: milestone
 ---
 
@@ -28,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 ## Current Position
 
-Phase: 06.4.1
+Phase: 06.4.1.1
 Plan: Not started
-Status: All phases complete
+Status: Phase 06.4.1.1 inserted, not planned
 Last activity: 2026-11-25 - Completed quick task 261125-0es: Replace regex favicon validation with jsdom parsers (closes 06.4.1 WR-01/WR-02)
 
 Progress: [██████████] 100% (11/11 phases, 77/77 plans)
@@ -375,6 +374,7 @@ Recent decisions affecting current work:
 - Phase 06.3 inserted after Phase 06.2: Fix slingshot deflection on flipper-root shots (todo 2026-11-23-root-shot-deflects-off-slingshot) (URGENT)
 - Phase 06.4 inserted after Phase 06.3: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording (URGENT)
 - Phase 06.4.1 inserted after Phase 06.4: Address tech debt: bar-mode control hints, HUD status min-width, favicon (URGENT)
+- Phase 06.4.1.1 inserted after Phase 06.4.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify (URGENT)
 
 ## Deferred Items
 
@@ -386,6 +386,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-24T21:35:00.000Z
-Stopped at: Phase 06.4.1 re-verified after review fixes — all v1.0 phases complete, ready for milestone close (2 open 06.4.1 review warnings to triage)
-Resume file: None
+Last session: 2026-11-25T11:36:52.464Z
+Stopped at: Phase 06.4.1.1 context gathered
+Resume file: .planning/phases/06.4.1.1-address-tech-debt-ready-only-bar-hint-11px-type-06-4-1-re-ve/06.4.1.1-CONTEXT.md
