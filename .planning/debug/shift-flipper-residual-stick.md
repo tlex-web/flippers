@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "shift-flipper-residual-stick: Hold ShiftLeft and ShiftRight together, release ShiftLeft first, then ShiftRight: both bats drop (Shift bindings behave as reliably as the arrow keys). (UAT 04 test 17, gap G-04-17)"
 created: 2026-11-21T00:00:00Z
 updated: 2026-11-21T00:50:00Z
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-25
+  status: diagnosed
 ---
 
 ## Current Focus

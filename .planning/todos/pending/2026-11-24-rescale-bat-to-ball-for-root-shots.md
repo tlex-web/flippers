@@ -6,6 +6,9 @@ severity: minor
 files:
   - src/physics/constants.ts
   - src/table/spec.ts
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-25
 ---
 
 ## Problem

@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "left-shift-sticky-keys-flipper-stuck: Each bat snaps up the instant its key goes down and starts falling the instant it comes up, on all six bindings. No tap leaves a bat hanging raised. (UAT 04 test 11, gap G-04-11)"
 created: 2026-11-20T22:00:00Z
 updated: 2026-11-20T22:57:00Z
+audit_acknowledged:
+  milestone: v1.0
+  at: 2026-11-25
+  status: diagnosed
 ---
 
 ## Current Focus
