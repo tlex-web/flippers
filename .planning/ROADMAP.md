@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 06.3: Fix slingshot deflection on flipper-root shots** (completed 2026-11-24)
 - [x] **Phase 06.4: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording** (completed 2026-11-24)
 - [x] **Phase 06.4.1: Address tech debt: bar-mode control hints, HUD status min-width, favicon** (completed 2026-11-24)
+- [ ] **Phase 06.4.1.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify**
 
 ## Phase Details
 
@@ -381,3 +382,23 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 - [x] 06.4.1-03-PLAN.md — Phase gate on the merged tree, blocking human UAT at six viewports with the A1 (hint scope) and icon-motif questions, then close 06.4 WR-02 and IN-03 [wave 3]
+
+### Phase 06.4.1.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify (INSERTED)
+
+**Goal:** On a narrow window the bar hint "Hold Space to launch · ← → flip" shows only while the ball in play rests on the plunger (including while Space is held) and no status shows, on every serve. A read-only `GameSession.isBallOnPlunger()` getter drives a `data-ready` attribute that HudView writes on change; the `:empty` coupling is gone and the bar keeps one height. No font-size below 12 px remains in `index.html`, guarded by a test. Phase 06.4.1's VERIFICATION, SECURITY and VALIDATION are re-run at HEAD and name jsdom 31.0.1 and the current favicon gate, with the user-approved overrides. `src/physics`, `src/table`, `src/control`, package.json and the lockfile stay byte-identical; determinism replays stay bit-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3; decisions in `06.4.1.1-CONTEXT.md`.
+**Requirements**: TBD
+**Depends on:** Phase 06.4.1
+**Plans:** 4 plans (4 waves)
+
+Plans:
+**Wave 1**
+- [ ] 06.4.1.1-01-PLAN.md — Ready-only bar hint end to end: `isBallOnPlunger()` getter, HudView `data-ready` sink wired in main.ts, attribute CSS replacing the `:empty` rule; ready x status matrix, serve sequence, spy-rig and real-table charge/fall-back tests [wave 1]
+
+**Wave 2** *(blocked on Wave 1: shares index.html and hud-layout.test.ts)*
+- [ ] 06.4.1.1-02-PLAN.md — 12 px type floor: the three 11 px labels to 12 px with a floor guard test, and a test that the side panel width stays set by the status reserve (D-07) [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 06.4.1.1-03-PLAN.md — Phase gate and boundary on the merged tree, then one blocking-human UAT at 375x812, 1440x900 and the switch point that also approves the eight 06.4.1 overrides [wave 3]
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 06.4.1.1-04-PLAN.md — 06.4.1 records to HEAD: stale SECURITY/VALIDATION rows rewritten and approved overrides seeded, the user runs `/gsd-execute-phase 06.4.1`, then verification passed is confirmed and new review findings are deferred under D-09 [wave 4]
