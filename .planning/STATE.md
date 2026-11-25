@@ -4,16 +4,16 @@ milestone: v1.0
 current_phase: 06.4.1.1
 current_phase_name: "Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify"
 status: executing
-stopped_at: Completed 06.4.1.1-04-PLAN.md
-last_updated: "2026-11-25T15:18:16.753Z"
+stopped_at: Completed 06.4.1.1-05-PLAN.md
+last_updated: "2026-11-25T15:37:13.969Z"
 last_activity: 2026-11-25
 last_activity_desc: Phase 06.4.1.1 execution started
-state_head: ce1562a38ce8915d6446ab28f3a1029bc0b24250
+state_head: d95af1898e9a870e826e51d40e581807ca21b90d
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 84
-  completed_plans: 81
+  completed_plans: 82
 milestone_name: milestone
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 ## Current Position
 
-Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — READY TO EXECUTE
-Plan: 4 of 4
+Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — EXECUTING
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-11-25 — Phase 06.4.1.1 execution started
 
@@ -149,6 +149,7 @@ Progress: [█████████░] 92% (11/11 phases, 77/77 plans)
 | Phase 06.4.1.1 P02 | 3 min | 2 tasks | 2 files |
 | Phase 06.4.1.1 P03 | 11min | 2 tasks | 1 files |
 | Phase 06.4.1.1 P04 | 86min | 3 tasks | 4 files |
+| Phase 06.4.1.1 P05 | 6 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -347,6 +348,7 @@ Recent decisions affecting current work:
 - [Phase 06.4.1.1]: 06.4.1.1-04: 06.4.1 re-verified at HEAD via /gsd-execute-phase 06.4.1: verification.status passed, 17/17, all eight approved overrides matched (overrides_applied 4 counts truths 1, 7, 9, 13, not entries)
 - [Phase 06.4.1.1]: 06.4.1.1-04: 06.4.1 review findings WR-01, WR-02, IN-01, IN-02 (0 critical) deferred under D-09, no fix round; ledger open 0, total 5. IN-01/IN-02 sit in hud.ts/hud.test.ts code 06.4.1.1 changed, so 06.4.1.1's own code review covers them
 - [Phase 06.4.1.1]: 06.4.1.1-04: a later 06.4.1.1 review-fix commit to a 06.4.1 covered file (index.html, src/ui/hud.ts, hud.test.ts, hud-layout.test.ts, key-labels.test.ts, game-session.ts, sandbox/main.ts, asset-free.test.ts, jsdom.d.ts, package.json) makes 06.4.1 stale again and needs one more /gsd-execute-phase 06.4.1
+- [Phase 06.4.1.1]: 06.4.1.1-05: bar hint ready signal waits PLUNGER_HINT_SETTLE_STEPS (12 steps) of continuous rest via private GameSession.restSteps; sim and replays untouched (D-10, CR-01)
 
 ### Pending Todos
 
@@ -399,6 +401,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-25T14:27:44.409Z
-Stopped at: Completed 06.4.1.1-04-PLAN.md
+Last session: 2026-11-25T15:37:05.318Z
+Stopped at: Completed 06.4.1.1-05-PLAN.md
 Resume file: None
