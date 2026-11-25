@@ -18,12 +18,12 @@ import * as palette from "./palette";
  * drawn only from palette.ts colors. The gate reads it through real parsers,
  * the same routes the browser takes, never a regex over markup:
  *
- * - HTML: jsdom builds the spec HTML tree. Exactly one link may carry the icon
- *   rel token, its rel, type and attribute set are pinned, and no noscript or
- *   template element may appear (jsdom parses with the scripting flag off and
- *   browsers with it on, which changes how noscript content tokenizes, and a
- *   template's contents, where a noscript can hide, are a separate fragment
- *   that querySelector does not search).
+ * - HTML: jsdom builds the spec HTML tree. Every element must be an
+ *   INDEX_ELEMENTS member in the HTML namespace (an allowlist of what the page
+ *   uses, which keeps out every element whose contents jsdom and browsers
+ *   parse differently). Exactly one link may carry the icon rel token; it must
+ *   be an HTML link directly in head whose source is its start tag alone, and
+ *   its rel, type and attribute set are pinned.
  * - data: URL: Node's WHATWG URL parser and fetch (the fetch spec's data: URL
  *   processor) decode the href; the MIME type must be exactly image/svg+xml and
  *   every byte printable ASCII, so the browser's XML decoder has nothing to
@@ -40,11 +40,12 @@ import * as palette from "./palette";
  * - serialized: jsdom's tree written back out as canonical markup (every
  *   attribute double-quoted, character references decoded), which catches a
  *   value the source spells with references or leaves unquoted.
- * - raw: the index.html source with only the icon link's own source span (its
- *   parse5 location) cut out, which catches markup jsdom's parser drops but a
- *   browser keeps, e.g. tags inside a `<select>`: parse5 still uses the old
- *   "in select" insertion mode, while current browsers keep and load them
- *   (06.4.1-REVIEW WR-01, sixth pass).
+ * - raw: the index.html source with only the icon link's start tag (its parse5
+ *   startTag span) cut out. Defence in depth: it reads the source text with no
+ *   parse in between. It is not what guards a jsdom-vs-browser parse
+ *   divergence, because the regexes miss a value spelled with character
+ *   references (06.4.1-REVIEW WR-02, seventh pass); INDEX_ELEMENTS keeps every
+ *   such element out instead.
  *
  * The regex validator this replaces was retired after six 06.4.1 review passes
  * kept finding validator-vs-browser parsing mismatches.
@@ -249,6 +250,65 @@ const ICON_SHAPES: ReadonlySet<string> = new Set(["rect", "circle", "ellipse", "
  */
 const PAINT_ATTRS: ReadonlySet<string> = new Set(["fill", "stroke"]);
 
+/** The HTML namespace: every index.html element, the icon link included, must be in it. */
+const XHTML_NS = "http://www.w3.org/1999/xhtml";
+
+/**
+ * The only elements index.html may contain (by localName, in the HTML
+ * namespace): exactly the ones the page uses. An allowlist, not a denylist,
+ * for the same reason as ICON_ELEMENTS: four 06.4.1 review passes each found
+ * another element whose contents jsdom and browsers parse differently, so the
+ * tree the gate reads is not the tree the browser builds:
+ *
+ * - noscript: jsdom parses with the scripting flag off (no runScripts) and
+ *   browsers with it on, which changes how its content tokenizes.
+ * - template: its contents are a separate fragment that querySelectorAll does
+ *   not search, so a noscript could hide there (WR-02, sixth pass).
+ * - select: parse5 still uses the old "in select" insertion mode and drops the
+ *   tags browsers now keep and load (WR-01 sixth pass, WR-02 seventh pass).
+ * - svg and math: in foreign content `<link>` is an ordinary element that
+ *   holds children, so a link there spans a subtree (WR-01, seventh pass).
+ *
+ * None of them is listed, nor is any element that embeds or fetches a
+ * document (iframe, object, embed) or media (img, audio, video, source).
+ * Adding an element to index.html means adding it here, a reviewed choice.
+ */
+const INDEX_ELEMENTS: ReadonlySet<string> = new Set([
+  "html",
+  "head",
+  "meta",
+  "title",
+  "link",
+  "style",
+  "body",
+  "main",
+  "canvas",
+  "div",
+  "p",
+  "kbd",
+  "dl",
+  "dt",
+  "dd",
+  "span",
+  "script",
+]);
+
+/**
+ * Throws unless every element of `doc` is an INDEX_ELEMENTS member in the HTML
+ * namespace, naming the first that is not (in document order).
+ * querySelectorAll does not enter template contents, which is sound because a
+ * template is itself rejected.
+ */
+function checkIndexElements(doc: Document): void {
+  for (const el of Array.from(doc.querySelectorAll("*"))) {
+    if (el.namespaceURI !== XHTML_NS || !INDEX_ELEMENTS.has(el.localName)) {
+      throw new Error(
+        `index.html element <${el.localName}> (namespace ${el.namespaceURI}) is not in INDEX_ELEMENTS`,
+      );
+    }
+  }
+}
+
 /** `s` with only ASCII A-Z lowercased (HTML and CSS keywords are ASCII case-insensitive). */
 function asciiLower(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
@@ -397,44 +457,47 @@ async function decodeIconHref(href: string): Promise<string> {
 interface StrippedHtml {
   /** jsdom's tree serialized: every attribute double-quoted, references decoded, `>` in a value escaped. */
   readonly serialized: string;
-  /** The source text with only the icon link's own source span cut out. */
+  /** The source text with only the icon link's start tag cut out. */
   readonly raw: string;
 }
 
 /**
  * `html` with its one icon link removed, in the two views PATTERNS scan (see
  * StrippedHtml): jsdom's tree (the spec HTML tree a browser builds) serialized,
- * and the raw source minus the link's source span. jsdom keeps parse5's
- * source locations (includeNodeLocations), so the span cut from the raw text
- * is exactly the tag the checks below read. Throws unless the document holds
- * exactly one link whose rel tokens include icon, holds no noscript or
- * template element, and that link's type is exactly image/svg+xml, its rel is
- * exactly the single token icon, its attributes are exactly rel, type and href
- * (nothing else rides on the removed element), and its href decodes
- * (decodeIconHref) to an SVG that passes checkIconSvg.
+ * and the raw source minus the link's start tag. jsdom keeps parse5's source
+ * locations (includeNodeLocations), so the span cut from the raw text is
+ * exactly the tag the checks below read. Throws unless every element passes
+ * checkIndexElements, the document holds exactly one link (in any namespace)
+ * whose rel tokens include icon, and that link is an HTML-namespace link whose
+ * parent is head, its source span is its start tag alone (no children, no end
+ * tag), its type is exactly image/svg+xml, its rel is exactly the single token
+ * icon, its attributes are exactly rel, type and href (nothing else rides on
+ * the removed element), and its href decodes (decodeIconHref) to an SVG that
+ * passes checkIconSvg.
  *
  * JSDOM is built with no runScripts or resources option, so it never runs
- * scripts or loads subresources; that also means it parses with the scripting
- * flag off, while browsers parse with it on, which changes how noscript
- * content tokenizes. index.html needs no noscript, so one is rejected instead
- * of modeled. A template is rejected too: querySelector does not search its
- * contents (a separate DocumentFragment), so a noscript nested in one would
- * escape the noscript check, and a browser can close the template from inside
- * that noscript's raw text and parse what follows as live head markup that
- * jsdom keeps inside an attribute value (06.4.1-REVIEW WR-02, sixth pass).
- * index.html needs no template either. A nested template needs no recursion:
- * the outermost one is a real element of the document tree.
+ * scripts or loads subresources (and parses with the scripting flag off, one
+ * of the divergences INDEX_ELEMENTS keeps out).
+ *
+ * The link's placement is checked on its own, although INDEX_ELEMENTS already
+ * rejects svg and math: it is the one element the gate removes from both
+ * views, so it must not be able to carry anything with it. In SVG or MathML
+ * content a link holds children, and its parse5 span runs to its `</link>`
+ * or, when an ancestor's end tag closes it, to the end of its last child
+ * (06.4.1-REVIEW WR-01, seventh pass). Cutting only the startTag span, and
+ * requiring it to equal the element's span, keeps that subtree in both views.
  */
 async function stripIconLink(html: string): Promise<StrippedHtml> {
   const dom = new JSDOM(html, { includeNodeLocations: true });
   const doc = dom.window.document;
+  checkIndexElements(doc);
   const icons = Array.from(doc.querySelectorAll("link")).filter(isIconLink);
   const link = icons[0];
   if (icons.length !== 1 || !link) {
     throw new Error(`expected exactly one icon link in index.html, found ${icons.length}`);
   }
-  if (doc.querySelector("noscript, template")) {
-    throw new Error("index.html must hold no noscript or template element");
+  if (link.namespaceURI !== XHTML_NS || link.parentElement !== doc.head) {
+    throw new Error("icon link must be an HTML <link> in head");
   }
   const type = link.getAttribute("type");
   if (type !== "image/svg+xml") {
@@ -450,14 +513,21 @@ async function stripIconLink(html: string): Promise<StrippedHtml> {
   }
   checkIconSvg(await decodeIconHref(link.getAttribute("href") ?? ""));
   const loc = dom.nodeLocation(link);
-  if (!loc) throw new Error("icon link has no source location");
-  // A sanity check on the offsets, not a parse: the span must be the link's
-  // own start tag, or the raw view would hide the wrong text.
-  const span = html.slice(loc.startOffset, loc.endOffset);
-  if (asciiLower(span.slice(0, 5)) !== "<link" || !span.endsWith(">")) {
+  const tag = loc?.startTag;
+  if (!loc || !tag) throw new Error("icon link has no source location");
+  // The element must be exactly its start tag (a void HTML link), so the cut
+  // hides nothing but the tag the checks above read. The text check is a
+  // sanity check on the offsets, not a parse.
+  const span = html.slice(tag.startOffset, tag.endOffset);
+  if (
+    tag.startOffset !== loc.startOffset ||
+    tag.endOffset !== loc.endOffset ||
+    asciiLower(span.slice(0, 5)) !== "<link" ||
+    !span.endsWith(">")
+  ) {
     throw new Error("icon link source span is not its <link> tag");
   }
-  const raw = html.slice(0, loc.startOffset) + html.slice(loc.endOffset);
+  const raw = html.slice(0, tag.startOffset) + html.slice(tag.endOffset);
   link.remove();
   return { serialized: dom.serialize(), raw };
 }
@@ -1053,41 +1123,84 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     }
   });
 
-  // 06.4.1-REVIEW WR-01 (sixth pass): parse5 still uses the old "in select"
-  // insertion mode and drops every tag inside a <select> except option,
-  // optgroup, input, script and template, so the serialized view holds an
-  // empty select. Chrome's relaxed select parsing keeps the img, div and link
-  // as elements and loads them (reviewer-verified in Chrome 158). Only the raw
-  // view sees them.
-  it("the raw scan catches assets jsdom drops from inside a <select> but browsers load", async () => {
-    const poc =
+  // 06.4.1-REVIEW WR-01 (sixth pass) and WR-02 (seventh pass): parse5 still
+  // uses the old "in select" insertion mode and drops every tag inside a
+  // <select> except option, optgroup, input, script and template, so the
+  // serialized view holds an empty select. Chrome's relaxed select parsing
+  // keeps the elements and loads them (reviewer-verified in Chrome 158). The
+  // first row's assets are spelled so the raw view's regexes see them; the
+  // second is the WR-02 PoC, which spells them with character references, so
+  // no pattern sees it in either view. INDEX_ELEMENTS rejects both.
+  it.each<readonly [string, string, boolean]>([
+    [
+      "assets the raw regexes see",
       '<select aria-hidden="true" style="display:none"><img src=stars.png>' +
-      '<div style="background:url(stars.jpg)"></div>' +
-      "<link rel=stylesheet href=//cdn.example/x.css></select>\n" +
-      '    <main id="sandbox">';
-    const html = indexHtml.replace('<main id="sandbox">', poc);
+        '<div style="background:url(stars.jpg)"></div>' +
+        "<link rel=stylesheet href=//cdn.example/x.css></select>",
+      true,
+    ],
+    [
+      "assets spelled with character references (WR-02 PoC)",
+      '<select aria-hidden="true" hidden><link rel=stylesheet href=http&#58;//127.0.0.1:8765/x&#46;css>' +
+        '<div style="background:u&#114;l(http&#58;//127.0.0.1:8765/bg&#46;png)">x</div></select>',
+      false,
+    ],
+  ])("a <select> is rejected by INDEX_ELEMENTS: %s", async (_name, poc, rawPatternsSee) => {
+    const html = indexHtml.replace('<main id="sandbox">', `${poc}\n    <main id="sandbox">`);
     expect(html).not.toBe(indexHtml);
-    const stripped = await stripIconLink(html);
-    expect(stripped.serialized).toContain(
-      '<select aria-hidden="true" style="display:none"></select>',
+    // jsdom drops the tags inside the select (keeping only their text), so
+    // neither view's tree holds the elements Chrome loads.
+    const select = new JSDOM(html).window.document.querySelector("select");
+    expect(select?.children).toHaveLength(0);
+    expect(scan({ "/poc.html": poc }).length > 0).toBe(rawPatternsSee);
+    await expect(stripIconLink(html)).rejects.toThrow("index.html element <select>");
+  });
+
+  // 06.4.1-REVIEW WR-01 (seventh pass): the real icon link moved into an SVG
+  // block in body. In foreign content the link holds the script after it, and
+  // the trailing <g/> makes the implied-close span end in `/>`. The old span
+  // check passed it and cut the whole subtree out of both views; Chrome ran
+  // the script (reviewer-verified in Chrome 158). INDEX_ELEMENTS rejects the
+  // svg; the link placement guard (an HTML link whose parent is head, cut by
+  // its startTag span) rejects the same page on its own.
+  it("the gate rejects the WR-01 PoC: an icon link inside an SVG block", async () => {
+    const start = indexHtml.indexOf("<link");
+    const end = indexHtml.indexOf("/>", start) + 2;
+    const href = iconHrefs(indexHtml)[0] ?? "";
+    expect(start).toBeGreaterThan(0);
+    expect(href.startsWith("data:image/svg+xml,")).toBe(true);
+    const poc =
+      `<svg width="0" height="0"><link rel="icon" type="image/svg+xml" href="${href}">` +
+      '<script>new Image().src = "https://cdn.example/hit.png";</script><g/></svg>';
+    const html = (indexHtml.slice(0, start) + indexHtml.slice(end)).replace(
+      '<main id="sandbox">',
+      `${poc}\n    <main id="sandbox">`,
     );
-    const hits = scan(strippedSources("/index.html", stripped));
-    for (const name of [
-      "img tag",
-      "CSS url() reference",
-      "image, audio or font file extension",
-      "remote URL in markup or CSS",
-    ]) {
-      expect(hits, name).toContain(`/index.html (raw): ${name}`);
-    }
-    expect(hits.filter((h) => h.startsWith("/index.html (serialized)"))).toEqual([]);
+    const links = Array.from(new JSDOM(html).window.document.querySelectorAll("link"));
+    expect(links).toHaveLength(1);
+    expect(links[0]?.namespaceURI).toBe(SVG_NS);
+    expect(links[0]?.children).toHaveLength(2);
+    await expect(stripIconLink(html)).rejects.toThrow("index.html element <svg>");
+  });
+
+  // The rest of the class: each element's contents parse differently in jsdom
+  // and browsers, or it embeds a document; INDEX_ELEMENTS rejects each one.
+  it.each<readonly [string, string]>([
+    ["math", "<math><mi>x</mi></math>"],
+    ["iframe", '<iframe srcdoc="&lt;p&gt;x&lt;/p&gt;"></iframe>'],
+    ["object", "<object></object>"],
+    ["noscript", "<noscript><p>x</p></noscript>"],
+    ["template", "<template><p>x</p></template>"],
+    ["svg", '<svg width="0" height="0"></svg>'],
+  ])("a <%s> element is rejected by INDEX_ELEMENTS", async (name, fragment) => {
+    const html = indexHtml.replace('<main id="sandbox">', `${fragment}\n    <main id="sandbox">`);
+    expect(html).not.toBe(indexHtml);
+    await expect(stripIconLink(html)).rejects.toThrow(`index.html element <${name}>`);
   });
 
   it("a noscript element is rejected (jsdom parses with scripting off, browsers with it on)", async () => {
     const html = `${iconLink(GOOD_SVG)}<noscript><p title="</noscript><link rel=icon href=x.png>"></p></noscript>`;
-    await expect(stripIconLink(html)).rejects.toThrow(
-      "index.html must hold no noscript or template element",
-    );
+    await expect(stripIconLink(html)).rejects.toThrow("index.html element <noscript>");
   });
 
   // 06.4.1-REVIEW WR-02 (sixth pass): a noscript inside a template. A browser
@@ -1099,8 +1212,8 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   // counts one icon link. The first row is the reviewer's PoC; its hidden link
   // is also visible to the raw scan's icon link pattern. The second hides the
   // link behind a quoted `>`, which that pattern cannot see (and its href is
-  // unquoted, so the data: pattern cannot either): there the template ban is
-  // the only guard. Each row asserts the template ban's rejection.
+  // unquoted, so the data: pattern cannot either): there INDEX_ELEMENTS is the
+  // only guard. Each row asserts that INDEX_ELEMENTS rejects the template.
   it.each<readonly [string, string, boolean]>([
     [
       "the reviewer's PoC (a PNG icon link)",
@@ -1121,9 +1234,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     expect(new JSDOM(html).window.document.querySelector("noscript")).toBeNull();
     expect(byName("icon link").test(hidden)).toBe(rawPatternSees);
     expect(byName("data: URI asset").test(hidden)).toBe(false);
-    await expect(stripIconLink(html)).rejects.toThrow(
-      "index.html must hold no noscript or template element",
-    );
+    await expect(stripIconLink(html)).rejects.toThrow("index.html element <template>");
   });
 
   it("a non-icon apple-touch-icon link is left for the pattern scan to catch", async () => {

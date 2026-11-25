@@ -15,15 +15,29 @@ declare module "jsdom" {
   }
 
   /**
-   * The offsets of parse5's location info (jsdom 31 returns parse5 8's
-   * ElementLocation, which also carries line, column and per-attribute data
-   * that the test does not read). Both offsets index the source string passed
-   * to the constructor: startOffset is the node's first character and
-   * endOffset points just past its last.
+   * A source span from parse5's location info. Both offsets index the source
+   * string passed to the constructor: startOffset is the span's first
+   * character and endOffset points just past its last.
    */
-  export interface NodeLocation {
+  export interface SourceSpan {
     readonly startOffset: number;
     readonly endOffset: number;
+  }
+
+  /**
+   * The parts of parse5's location info the test reads (jsdom 31 returns
+   * parse5 8's ElementLocation for an element, which also carries line,
+   * column, per-attribute and end-tag data). The node's own offsets span the
+   * whole element: its start tag, its children and its end tag, or up to
+   * where an ancestor's end tag closed it implicitly.
+   */
+  export interface NodeLocation extends SourceSpan {
+    /**
+     * Elements only (parse5's optional ElementLocation.startTag): the span of
+     * the element's own start tag. For a void HTML element such as `<link>`
+     * it equals the node's span.
+     */
+    readonly startTag?: SourceSpan;
   }
 
   export class JSDOM {
