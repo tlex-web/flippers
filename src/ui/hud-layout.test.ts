@@ -297,25 +297,44 @@ describe("side panel status reserve (06.4.1; 06.4 WR-02)", () => {
 });
 
 /**
+ * A font-size declaration's value, up to the first `;` or `}`, so the last
+ * declaration of a block written without a semicolon is still seen
+ * (06.4.1.1-REVIEW IN-02).
+ */
+const FONT_SIZE_DECL = /font-size:\s*([^;}]+)[;}]/g;
+
+/**
+ * The same for the `font` shorthand; the lookbehind skips `font-size` and
+ * `font-family` (06.4.1.1-REVIEW IN-02).
+ */
+const FONT_SHORTHAND_DECL = /(?<![\w-])font:\s*([^;}]+)[;}]/g;
+
+/**
  * Type scale floor (06.4.1.1 D-06, 06.4.1-UI-REVIEW fix 2): no HUD text is set
  * below 12 px. Every font-size in the style block is a px value (so the floor
  * is checkable), every font shorthand inherits, and no inline style sets a font.
  */
 describe("type scale floor (06.4.1.1 D-06)", () => {
   it("uses no font-size below 12 px (06.4.1.1 D-06)", () => {
-    const sizes = [...style.matchAll(/font-size:\s*([^;]+);/g)].map((m) => m[1]?.trim() ?? "");
+    const sizes = [...style.matchAll(FONT_SIZE_DECL)].map((m) => m[1]?.trim() ?? "");
     expect(sizes.length).toBeGreaterThan(0);
     for (const s of sizes) {
       expect(s, s).toMatch(/^[\d.]+px$/);
       expect(Number.parseFloat(s), s).toBeGreaterThanOrEqual(12);
     }
-    const shorthands = [...style.matchAll(/(?<![\w-])font:\s*([^;]+);/g)].map(
-      (m) => m[1]?.trim() ?? "",
-    );
+    const shorthands = [...style.matchAll(FONT_SHORTHAND_DECL)].map((m) => m[1]?.trim() ?? "");
     for (const s of shorthands) {
       expect(s, s).toBe("inherit");
     }
     expect(indexHtml).not.toMatch(/style="[^"]*font/);
+  });
+
+  it("catches a final declaration with no semicolon (06.4.1.1-REVIEW IN-02)", () => {
+    const css = ".a { color: red; font-size: 10px }\n.b { font: 10px/1 monospace }";
+    expect([...css.matchAll(FONT_SIZE_DECL)].map((m) => m[1]?.trim())).toEqual(["10px"]);
+    expect([...css.matchAll(FONT_SHORTHAND_DECL)].map((m) => m[1]?.trim())).toEqual([
+      "10px/1 monospace",
+    ]);
   });
 
   it("sets the three former 11 px labels to 12 px", () => {
@@ -376,11 +395,19 @@ describe("side panel width after the 12 px floor (06.4.1.1 D-07)", () => {
     expect(bonus).toBeGreaterThan(-1);
     expect(heading).toBeGreaterThan(bonus);
 
+    // The bound is structural (06.4.1.1-REVIEW IN-03): #hud ends before the
+    // overlay's opening tag, and the slice closes every div it opens, so the
+    // overlay is #hud's sibling, not a descendant. Rewording the HTML comment
+    // above the overlay changes nothing here.
     const hudStart = markup.indexOf('<div id="hud" class="hud">');
-    const hudEnd = markup.indexOf("<!-- End-of-ball bonus");
+    const hudEnd = markup.indexOf('<div id="hud-bonus"');
     expect(hudStart).toBeGreaterThan(-1);
     expect(hudEnd).toBeGreaterThan(hudStart);
-    expect(bonus).toBeGreaterThan(hudEnd);
-    expect(markup.slice(hudStart, hudEnd)).not.toMatch(/hud-bonus-heading/);
+    const hud = markup.slice(hudStart, hudEnd);
+    const opens = hud.match(/<div\b/g)?.length ?? 0;
+    const closes = hud.match(/<\/div>/g)?.length ?? 0;
+    expect(opens).toBeGreaterThan(0);
+    expect(closes).toBe(opens);
+    expect(hud).not.toMatch(/hud-bonus-heading/);
   });
 });
