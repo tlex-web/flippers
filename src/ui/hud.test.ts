@@ -114,7 +114,10 @@ class FakeSource implements HudSource {
   getGameOverStep(): number {
     return this.gameOverStep;
   }
+  /** How many times HudView read isBallOnPlunger() (the null-sink read case). */
+  onPlungerReads = 0;
   isBallOnPlunger(): boolean {
+    this.onPlungerReads++;
     return this.onPlunger;
   }
 }
@@ -1164,5 +1167,141 @@ describe("HudView bar hint ready flag (06.4.1.1 D-01, D-03)", () => {
     src.onPlunger = false;
     view.update(src);
     expect(hint.attrs.get(HINT_READY_ATTR)).toBeUndefined();
+  });
+
+  /** A view with a hint sink over a source playing ball 1, not yet updated. */
+  function hintRig(): { view: HudView; hint: FakeAttrSink; src: FakeSource } {
+    const hint = new FakeAttrSink();
+    const view = new HudView(
+      new CountingSink(),
+      new CountingSink(),
+      new CountingSink(),
+      null,
+      null,
+      hint,
+    );
+    const src = new FakeSource();
+    src.state = "playing";
+    src.ball = 1;
+    src.played = true;
+    src.step = 100;
+    return { view, hint, src };
+  }
+
+  it.each([
+    // state, warning, onPlunger, expected data-ready
+    ["playing", false, true, "true"],
+    ["playing", true, true, undefined], // WARNING wins
+    ["playing", false, false, undefined], // launched
+    ["tilted", false, true, undefined],
+    ["bonus", false, true, undefined],
+    ["game-over", false, true, undefined],
+  ] as const)(
+    "%s warning=%s onPlunger=%s -> data-ready %s (D-01, D-03: the status always wins)",
+    (state, warning, onPlunger, want) => {
+      const { view, hint, src } = hintRig();
+      src.state = state;
+      src.warning = warning;
+      src.onPlunger = onPlunger;
+      view.update(src);
+      expect(hint.attrs.get(HINT_READY_ATTR)).toBe(want);
+    },
+  );
+
+  it("BALL SAVED hides the hint on the plunger until its window ends (D-03)", () => {
+    const { view, hint, src } = hintRig();
+    src.onPlunger = true;
+    src.saveCount = 1;
+    src.saveStep = src.step;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBeUndefined();
+    src.step = src.saveStep + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBe("true");
+  });
+
+  it("SKILL SHOT hides the hint on the plunger until its window ends (D-03)", () => {
+    const { view, hint, src } = hintRig();
+    src.onPlunger = true;
+    src.skillCount = 1;
+    src.skillValue = 5000;
+    src.skillStep = src.step;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBeUndefined();
+    src.step = src.skillStep + STATUS_TRANSIENT_STEPS;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBe("true");
+  });
+
+  it("write-on-change: unchanged inputs add no hint write (D-03)", () => {
+    const { view, hint, src } = hintRig();
+    src.onPlunger = true;
+    view.update(src);
+    const calls = hint.calls;
+    for (let i = 0; i < 10; i++) {
+      src.step++;
+      view.update(src);
+    }
+    expect(hint.calls).toBe(calls);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBe("true");
+  });
+
+  it("shows on every serve with no latch, one write per change (D-01, D-04)", () => {
+    const { view, hint, src } = hintRig();
+    // Ball 1 served: resting on the plunger.
+    src.onPlunger = true;
+    view.update(src);
+    expect(hint.attrs.get(HINT_READY_ATTR)).toBe("true");
+    let calls = hint.calls;
+    // Each transition is followed by a steady frame, which must not write.
+    const expectWrite = (want: string | undefined): void => {
+      view.update(src);
+      src.step++;
+      view.update(src);
+      expect(hint.calls).toBe(calls + 1);
+      expect(hint.attrs.get(HINT_READY_ATTR)).toBe(want);
+      calls = hint.calls;
+    };
+    // Launch: the ball leaves the zone.
+    src.onPlunger = false;
+    expectWrite(undefined);
+    // A weak plunge falls back to rest.
+    src.onPlunger = true;
+    expectWrite("true");
+    // Launch again and drain into the bonus tally (no ball in play).
+    src.onPlunger = false;
+    src.state = "bonus";
+    src.bonusTotal = 8000;
+    expectWrite(undefined);
+    // Ball 2 served.
+    src.state = "playing";
+    src.ball = 2;
+    src.onPlunger = true;
+    expectWrite("true");
+    // Ball 2 drains into another bonus tally.
+    src.state = "bonus";
+    src.onPlunger = false;
+    expectWrite(undefined);
+    // Ball 3 served.
+    src.state = "playing";
+    src.ball = 3;
+    src.onPlunger = true;
+    expectWrite("true");
+  });
+
+  it("reads isBallOnPlunger() even with no hint sink, so the presented replay exercises it (D-02)", () => {
+    const view = new HudView(
+      new CountingSink(),
+      new CountingSink(),
+      new CountingSink(),
+      new CountingSink(),
+      new FakeAttrSink(),
+    );
+    const src = new FakeSource();
+    src.state = "playing";
+    src.ball = 1;
+    src.onPlunger = true;
+    view.update(src);
+    expect(src.onPlungerReads).toBeGreaterThan(0);
   });
 });

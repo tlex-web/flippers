@@ -1664,3 +1664,66 @@ describe("GameSession ball save rules (plan 06-07 Task 2, PLSH-07, D-08, D-09, r
     expect(r.session.getSaveCount()).toBe(1);
   });
 });
+
+describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
+  it("is false before onStart (no ball in play)", () => {
+    const r = makeRig(NO_SAVE);
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+  });
+
+  it("is true with the served ball at SPAWN and at rest", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    r.setBallVx(0);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+  });
+
+  it("is false while the ball moves (vx 1) and out of the zone (y 0)", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    r.setBallVx(1);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.setBallVx(0);
+    r.setBallY(0);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+  });
+
+  it("is false in the bonus tally and true again on every serve, balls 2 and 3 (D-04)", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    expect(r.session.isBallOnPlunger()).toBe(true);
+    for (const next of [2, 3]) {
+      r.step(drainOf(r.session.activeBallId));
+      expect(r.session.getState()).toBe("bonus");
+      expect(r.session.isBallOnPlunger()).toBe(false);
+      finishBonus(r);
+      expect(r.session.getState()).toBe("playing");
+      expect(r.session.getBall()).toBe(next);
+      expect(r.session.isBallOnPlunger()).toBe(true);
+    }
+  });
+
+  it("is pure: 100 reads change no world call, impulse, gate value or step", () => {
+    const r = makeRig(NO_SAVE);
+    r.session.onStart();
+    r.setBallX(SPAWN.x);
+    r.setBallY(SPAWN.y);
+    const calls = r.calls.length;
+    const impulses = r.impulses.length;
+    const gate = r.gate.length;
+    const step = r.session.getStep();
+    for (let i = 0; i < 100; i++) r.session.isBallOnPlunger();
+    expect(r.calls.length).toBe(calls);
+    expect(r.impulses.length).toBe(impulses);
+    expect(r.gate.length).toBe(gate);
+    expect(r.session.getStep()).toBe(step);
+  });
+});
