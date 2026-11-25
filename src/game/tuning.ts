@@ -319,3 +319,19 @@ export const KICKBACK_GRACE_STEPS = 240;
  * RED control). Starts at the bumper's 5.5 m/s; tune by feel within the bound.
  */
 export const KICKBACK_SPEED = 5.5;
+
+// ---------------------------------------------------------------------------
+// Bar hint (06.4.1.1)
+// ---------------------------------------------------------------------------
+//
+// Presentation timing that rides on the step clock, so it stays deterministic.
+// Nothing in the sim reads it: only the bar hint's ready signal waits on it.
+
+/**
+ * Consecutive fixed steps (12 = 100 ms at 120 Hz) the ball in play must rest in
+ * PLUNGER_ZONE before `GameSession.isBallOnPlunger()` reports true, so the bar
+ * hint rides out the bounce apexes of a weak-plunge fall-back (rest windows of
+ * at most 3 steps in the 06.4.1.1-REVIEW CR-01 trace). A served ball rests from
+ * its first step, so a serve pays only this window (06.4.1.1 D-10).
+ */
+export const PLUNGER_HINT_SETTLE_STEPS = 12;

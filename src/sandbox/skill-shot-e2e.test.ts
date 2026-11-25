@@ -5,7 +5,12 @@ import { FlipperController } from "../control/flipper-controller";
 import { isRestingInZone, PlungerController } from "../control/plunger-controller";
 import { GameSession, type FlipperGate } from "../game/game-session";
 import { ReactiveElements } from "../game/reactive-elements";
-import { ROLLOVER_POINTS, SKILL_SHOT_BASE_POINTS, SKILL_SHOT_ROTATE_STEPS } from "../game/tuning";
+import {
+  PLUNGER_HINT_SETTLE_STEPS,
+  ROLLOVER_POINTS,
+  SKILL_SHOT_BASE_POINTS,
+  SKILL_SHOT_ROTATE_STEPS,
+} from "../game/tuning";
 import { FlipperInput, type KeyEventLike } from "../input/flipper-input";
 import { GameInput } from "../input/game-input";
 import { PlungerInput } from "../input/plunger-input";
@@ -450,10 +455,13 @@ describe("skill shot determinism across render cadences (D-23)", () => {
 });
 
 /**
- * The bar hint's ready signal on the real table (06.4.1.1 D-01, D-02): the
- * plain rest test holds through a held charge (the plunger has no body, so
- * charging never moves the ball), drops right after a release and returns
- * when a weak plunge falls back to rest.
+ * The bar hint's ready signal on the real table (06.4.1.1 D-01, D-02, D-10):
+ * the signal waits PLUNGER_HINT_SETTLE_STEPS consecutive resting steps, then
+ * holds through a held charge (the plunger has no body, so charging never
+ * moves the ball), drops right after a release and returns once when a weak
+ * plunge falls back to rest. The fall-back check (06.4.1.1-REVIEW WR-01)
+ * asserts the rest, not the first bounce apex: once ready the signal stays
+ * true and the ball is still.
  */
 describe("plunger hint signal on the real table (06.4.1.1 D-01, D-02)", () => {
   it("is true on every step of a held charge", () => {
@@ -472,18 +480,39 @@ describe("plunger hint signal on the real table (06.4.1.1 D-01, D-02)", () => {
     g.plungerInput.handleKeyUp(SPACE);
   });
 
-  it("drops after a weak release and returns when the ball falls back", () => {
+  it("a served ball shows the signal on the PLUNGER_HINT_SETTLE_STEPS-th step counting the Enter step (06.4.1.1 D-04, D-10)", () => {
     const g = makeGame();
-    pressEnter(g);
-    runSteps(g, ANCHOR_SETTLE_STEPS);
+    pressEnter(g); // the Enter step serves the ball and already counts it at rest
+    expect(g.session.isBallOnPlunger()).toBe(false);
+    for (let i = 0; i < PLUNGER_HINT_SETTLE_STEPS - 2; i++) {
+      runSteps(g, 1);
+      expect(g.session.isBallOnPlunger(), `step ${i + 2} counting the Enter step`).toBe(false);
+    }
+    runSteps(g, 1);
     expect(g.session.isBallOnPlunger()).toBe(true);
-
-    launch(g, WEAK_HOLD_STEPS);
-    runUntil(g, () => !g.session.isBallOnPlunger(), 3);
-
-    runUntil(g, () => g.session.isBallOnPlunger());
-    expect(g.plunger.getPhase()).toBe("idle");
-    expect(isRestingInZone(g.ball(), PLUNGER_ZONE)).toBe(true);
-    expect(g.firstSwitch()).toBeNull(); // it never left the lane
   });
+
+  it.each([10, WEAK_HOLD_STEPS])(
+    "drops after a weak release (hold %i) and returns once, at rest, with no apex blink (06.4.1.1 D-10, WR-01)",
+    (hold) => {
+      const g = makeGame();
+      pressEnter(g);
+      runSteps(g, ANCHOR_SETTLE_STEPS);
+      expect(g.session.isBallOnPlunger()).toBe(true);
+
+      launch(g, hold);
+      runUntil(g, () => !g.session.isBallOnPlunger(), 3);
+
+      runUntil(g, () => g.session.isBallOnPlunger());
+      for (let i = 0; i < 60; i++) {
+        runSteps(g, 1);
+        expect(g.session.isBallOnPlunger(), `step ${i} after first ready`).toBe(true);
+      }
+      const b = g.ball();
+      expect(Math.hypot(b.vx, b.vy)).toBe(0);
+      expect(g.plunger.getPhase()).toBe("idle");
+      expect(isRestingInZone(b, PLUNGER_ZONE)).toBe(true);
+      expect(g.firstSwitch()).toBeNull(); // it never left the lane
+    },
+  );
 });

@@ -22,6 +22,7 @@ import {
   KICKBACK_GRACE_STEPS,
   NUDGE_COOLDOWN_STEPS,
   NUDGE_IMPULSE,
+  PLUNGER_HINT_SETTLE_STEPS,
   TILT_FORFEIT_HOLD_STEPS,
   WARNING_FLASH_STEPS,
 } from "./tuning";
@@ -1673,12 +1674,14 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
     expect(r.session.isBallOnPlunger()).toBe(false);
   });
 
-  it("is true with the served ball at SPAWN and at rest", () => {
+  it("is true once the served ball has rested at SPAWN for PLUNGER_HINT_SETTLE_STEPS ticks (06.4.1.1 D-10)", () => {
     const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.setBallX(SPAWN.x);
     r.setBallY(SPAWN.y);
     r.setBallVx(0);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
     expect(r.session.isBallOnPlunger()).toBe(true);
   });
 
@@ -1694,11 +1697,13 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
     expect(r.session.isBallOnPlunger()).toBe(false);
   });
 
-  it("is false in the bonus tally and true again on every serve, balls 2 and 3 (D-04)", () => {
+  it("is false at every serve and true after the settle, balls 1-3, false in the bonus tally (D-04, D-10)", () => {
     const r = makeRig(NO_SAVE);
     r.session.onStart();
     r.setBallX(SPAWN.x);
     r.setBallY(SPAWN.y);
+    expect(r.session.isBallOnPlunger()).toBe(false);
+    r.tick(PLUNGER_HINT_SETTLE_STEPS);
     expect(r.session.isBallOnPlunger()).toBe(true);
     for (const next of [2, 3]) {
       r.step(drainOf(r.session.activeBallId));
@@ -1707,7 +1712,9 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
       finishBonus(r);
       expect(r.session.getState()).toBe("playing");
       expect(r.session.getBall()).toBe(next);
-      expect(r.session.isBallOnPlunger()).toBe(true);
+      expect(r.session.isBallOnPlunger(), `ball ${next} at the serve`).toBe(false);
+      r.tick(PLUNGER_HINT_SETTLE_STEPS);
+      expect(r.session.isBallOnPlunger(), `ball ${next} after the settle`).toBe(true);
     }
   });
 
