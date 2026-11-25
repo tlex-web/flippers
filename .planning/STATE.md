@@ -2,16 +2,17 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 current_phase: 06.4.1.1
+current_phase_name: "Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify"
 status: Phase 06.4.1.1 inserted, not planned
 stopped_at: Phase 06.4.1.1 context gathered
-last_updated: "2026-11-25T11:36:57.816Z"
+last_updated: "2026-11-25T12:21:55.518Z"
 last_activity: 2026-11-25
 last_activity_desc: Phase 06.4.1 complete
-state_head: 75bea2697583dfe11a002417a25930a79482c399
+state_head: d52753d7dd815a79196224c2ebd1235e744a0392
 progress:
   total_phases: 12
   completed_phases: 11
-  total_plans: 77
+  total_plans: 81
   completed_plans: 77
 milestone_name: milestone
 ---
@@ -27,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-24)
 
 ## Current Position
 
-Phase: 06.4.1.1
+Phase: 06.4.1.1 (Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify) — READY TO EXECUTE
 Plan: Not started
 Status: Phase 06.4.1.1 inserted, not planned
 Last activity: 2026-11-25 - Completed quick task 261125-0es: Replace regex favicon validation with jsdom parsers (closes 06.4.1 WR-01/WR-02)
