@@ -448,3 +448,42 @@ describe("skill shot determinism across render cadences (D-23)", () => {
     expect(c.balls).toEqual(a.balls);
   });
 });
+
+/**
+ * The bar hint's ready signal on the real table (06.4.1.1 D-01, D-02): the
+ * plain rest test holds through a held charge (the plunger has no body, so
+ * charging never moves the ball), drops right after a release and returns
+ * when a weak plunge falls back to rest.
+ */
+describe("plunger hint signal on the real table (06.4.1.1 D-01, D-02)", () => {
+  it("is true on every step of a held charge", () => {
+    const g = makeGame();
+    expect(g.session.isBallOnPlunger()).toBe(false); // attract: no ball in play
+    pressEnter(g);
+    runSteps(g, ANCHOR_SETTLE_STEPS);
+    expect(g.session.isBallOnPlunger()).toBe(true);
+
+    g.plungerInput.handleKeyDown(SPACE);
+    for (let i = 0; i < WEAK_HOLD_STEPS; i++) {
+      runSteps(g, 1);
+      expect(g.plunger.getPhase(), `step ${i}`).toBe("charging");
+      expect(g.session.isBallOnPlunger(), `step ${i}`).toBe(true);
+    }
+    g.plungerInput.handleKeyUp(SPACE);
+  });
+
+  it("drops after a weak release and returns when the ball falls back", () => {
+    const g = makeGame();
+    pressEnter(g);
+    runSteps(g, ANCHOR_SETTLE_STEPS);
+    expect(g.session.isBallOnPlunger()).toBe(true);
+
+    launch(g, WEAK_HOLD_STEPS);
+    runUntil(g, () => !g.session.isBallOnPlunger(), 3);
+
+    runUntil(g, () => g.session.isBallOnPlunger());
+    expect(g.plunger.getPhase()).toBe("idle");
+    expect(isRestingInZone(g.ball(), PLUNGER_ZONE)).toBe(true);
+    expect(g.firstSwitch()).toBeNull(); // it never left the lane
+  });
+});
