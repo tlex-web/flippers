@@ -31,9 +31,19 @@ import * as palette from "./palette";
  *   initial fill is black, which palette.ts does not hold) and a palette check
  *   on every paint value.
  *
- * The icon link is then removed and the serialized remainder (canonical
- * markup: every attribute double-quoted) is scanned with the unchanged
- * patterns, so every other icon link, icon file and `data:` URI still fails.
+ * The icon link is then removed and the unchanged patterns scan two views of
+ * the remainder, so every other icon link, icon file and `data:` URI still
+ * fails:
+ *
+ * - serialized: jsdom's tree written back out as canonical markup (every
+ *   attribute double-quoted, character references decoded), which catches a
+ *   value the source spells with references or leaves unquoted.
+ * - raw: the index.html source with only the icon link's own source span (its
+ *   parse5 location) cut out, which catches markup jsdom's parser drops but a
+ *   browser keeps, e.g. tags inside a `<select>`: parse5 still uses the old
+ *   "in select" insertion mode, while current browsers keep and load them
+ *   (06.4.1-REVIEW WR-01, sixth pass).
+ *
  * The regex validator this replaces was retired after six 06.4.1 review passes
  * kept finding validator-vs-browser parsing mismatches.
  *
@@ -376,23 +386,34 @@ async function decodeIconHref(href: string): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
+/** The two views of index.html, minus its validated icon link, that PATTERNS scan. */
+interface StrippedHtml {
+  /** jsdom's tree serialized: every attribute double-quoted, references decoded, `>` in a value escaped. */
+  readonly serialized: string;
+  /** The source text with only the icon link's own source span cut out. */
+  readonly raw: string;
+}
+
 /**
- * `html` as jsdom parses it (the spec HTML tree a browser builds), with its
- * one icon link removed and the rest serialized, so the unchanged PATTERNS
- * scan canonical markup: every attribute double-quoted, `>` in a value
- * escaped. Throws unless the document holds exactly one link whose rel tokens
- * include icon, holds no noscript element, and that link's type is exactly
- * image/svg+xml, its rel is exactly the single token icon, its attributes are
- * exactly rel, type and href (nothing else rides on the removed element), and
- * its href decodes (decodeIconHref) to an SVG that passes checkIconSvg.
+ * `html` with its one icon link removed, in the two views PATTERNS scan (see
+ * StrippedHtml): jsdom's tree (the spec HTML tree a browser builds) serialized,
+ * and the raw source minus the link's source span. jsdom keeps parse5's
+ * source locations (includeNodeLocations), so the span cut from the raw text
+ * is exactly the tag the checks below read. Throws unless the document holds
+ * exactly one link whose rel tokens include icon, holds no noscript element,
+ * and that link's type is exactly image/svg+xml, its rel is exactly the single
+ * token icon, its attributes are exactly rel, type and href (nothing else
+ * rides on the removed element), and its href decodes (decodeIconHref) to an
+ * SVG that passes checkIconSvg.
  *
- * JSDOM is built with default options, so it never runs scripts or loads
- * subresources; that also means it parses with the scripting flag off, while
- * browsers parse with it on, which changes how noscript content tokenizes.
- * index.html needs no noscript, so one is rejected instead of modeled.
+ * JSDOM is built with no runScripts or resources option, so it never runs
+ * scripts or loads subresources; that also means it parses with the scripting
+ * flag off, while browsers parse with it on, which changes how noscript
+ * content tokenizes. index.html needs no noscript, so one is rejected instead
+ * of modeled.
  */
-async function stripIconLink(html: string): Promise<string> {
-  const dom = new JSDOM(html);
+async function stripIconLink(html: string): Promise<StrippedHtml> {
+  const dom = new JSDOM(html, { includeNodeLocations: true });
   const doc = dom.window.document;
   const icons = Array.from(doc.querySelectorAll("link")).filter(isIconLink);
   const link = icons[0];
@@ -415,8 +436,22 @@ async function stripIconLink(html: string): Promise<string> {
     throw new Error(`icon link may carry only rel, type and href, found ${names}`);
   }
   checkIconSvg(await decodeIconHref(link.getAttribute("href") ?? ""));
+  const loc = dom.nodeLocation(link);
+  if (!loc) throw new Error("icon link has no source location");
+  // A sanity check on the offsets, not a parse: the span must be the link's
+  // own start tag, or the raw view would hide the wrong text.
+  const span = html.slice(loc.startOffset, loc.endOffset);
+  if (asciiLower(span.slice(0, 5)) !== "<link" || !span.endsWith(">")) {
+    throw new Error("icon link source span is not its <link> tag");
+  }
+  const raw = html.slice(0, loc.startOffset) + html.slice(loc.endOffset);
   link.remove();
-  return dom.serialize();
+  return { serialized: dom.serialize(), raw };
+}
+
+/** The scan() entries for both views of a stripped page, keyed "`file` (serialized)" and "`file` (raw)". */
+function strippedSources(file: string, stripped: StrippedHtml): Record<string, string> {
+  return { [`${file} (serialized)`]: stripped.serialized, [`${file} (raw)`]: stripped.raw };
 }
 
 /** The real favicon payload, decoded: BG_BOTTOM rounded square, WALL ring, BUMPER_CAP disc. */
@@ -479,7 +514,10 @@ describe("asset-free tree (RND-01)", () => {
   });
 
   it("finds no image, audio or font asset, and no network fetch, in src or index.html", async () => {
-    const hits = scan({ ...SOURCES, "/index.html": await stripIconLink(indexHtml) });
+    const hits = scan({
+      ...SOURCES,
+      ...strippedSources("/index.html", await stripIconLink(indexHtml)),
+    });
     expect(hits).toEqual([]);
   });
 
@@ -539,9 +577,17 @@ describe("asset-free tree (RND-01)", () => {
 describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   it("index.html carries exactly one procedural SVG icon link, it validates, and stripping it leaves no icon", async () => {
     const stripped = await stripIconLink(indexHtml);
-    expect(stripped.includes('rel="icon"')).toBe(false);
-    expect(stripped.includes("icon")).toBe(false);
-    expect(stripped.includes("data:")).toBe(false);
+    for (const [view, text] of Object.entries(stripped)) {
+      expect(text.includes('rel="icon"'), view).toBe(false);
+      expect(text.includes("icon"), view).toBe(false);
+      expect(text.includes("data:"), view).toBe(false);
+    }
+    // The raw view is the source minus exactly the link's tag (the real
+    // index.html holds one `<link`, closed by the first `/>` after it).
+    const start = indexHtml.indexOf("<link");
+    const end = indexHtml.indexOf("/>", start) + 2;
+    expect(start).toBeGreaterThan(0);
+    expect(stripped.raw).toBe(indexHtml.slice(0, start) + indexHtml.slice(end));
   });
 
   it("the icon link and data: URI patterns still exist and still trip on the raw index.html", () => {
@@ -567,7 +613,9 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   });
 
   it("strips one valid procedural icon link down to no link at all", async () => {
-    expect((await stripIconLink(iconLink(GOOD_SVG))).includes("<link")).toBe(false);
+    const { serialized, raw } = await stripIconLink(iconLink(GOOD_SVG));
+    expect(serialized.includes("<link")).toBe(false);
+    expect(raw).toBe("");
   });
 
   it("admits every allowlisted element with palette paint", async () => {
@@ -575,12 +623,12 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
       "<g><ellipse cx='16' cy='16' rx='3' ry='2' fill='#4cc9f0'/>" +
         "<path d='M0 0h1v1z' fill='none' stroke='#f72585'/></g>",
     );
-    await expect(stripIconLink(iconLink(svg))).resolves.toBeTypeOf("string");
+    await expect(stripIconLink(iconLink(svg))).resolves.toBeTypeOf("object");
   });
 
   it("admits a ;base64, SVG data URL (decoded the browser's way)", async () => {
     const link = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${btoa(GOOD_SVG)}" />`;
-    await expect(stripIconLink(link)).resolves.toBeTypeOf("string");
+    await expect(stripIconLink(link)).resolves.toBeTypeOf("object");
   });
 
   it.each<readonly [string, string, string]>([
@@ -871,7 +919,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   it("the paint check still strips the ASCII whitespace CSS strips", async () => {
     const fragment = "<rect width='32' height='32' fill=' #f72585 '/>";
     expect(() => checkIconSvg(withElement(fragment))).not.toThrow();
-    await expect(stripIconLink(iconLink(withElement(fragment)))).resolves.toBeTypeOf("string");
+    await expect(stripIconLink(iconLink(withElement(fragment)))).resolves.toBeTypeOf("object");
     // Literal LF, CR and tab pads pass directly; through iconLink() they are
     // encoded, and the byte rule admits no control byte.
     for (const pad of ["\n#f72585\n", "\r\n#f72585\t"]) {
@@ -888,7 +936,7 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     for (const pad of ["&#xA;#f72585&#x9;", "&#xD;#f72585&#x20;"]) {
       const padded = `<rect width='32' height='32' fill='${pad}'/>`;
       expect(() => checkIconSvg(withElement(padded)), pad).not.toThrow();
-      await expect(stripIconLink(iconLink(withElement(padded))), pad).resolves.toBeTypeOf("string");
+      await expect(stripIconLink(iconLink(withElement(padded))), pad).resolves.toBeTypeOf("object");
     }
   });
 
@@ -953,7 +1001,9 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
   // WR-01 merges the real icon link into a preceding unclosed open tag (the
   // parser keeps the first type and href and drops the validated ones as
   // duplicates); WR-02 hides a second icon link behind a quoted `>`; WR-02b is
-  // the unquoted data: URI half, caught once serialization quotes the value.
+  // the unquoted data: URI half, caught once serialization quotes the value
+  // (only the serialized view sees it: the raw text leaves the value unquoted,
+  // so the serialized scan stays alongside the raw one).
   it.each<readonly [string, string, string, string | null]>([
     [
       "WR-01: an icon link merged into a preceding unclosed open tag",
@@ -979,9 +1029,40 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
     if (rule !== null) {
       await expect(stripIconLink(html)).rejects.toThrow(rule);
     } else {
-      const result = await stripIconLink(html);
-      expect(scan({ "/index.html": result })).toContain("/index.html: data: URI asset");
+      const hits = scan(strippedSources("/index.html", await stripIconLink(html)));
+      expect(hits).toContain("/index.html (serialized): data: URI asset");
+      expect(hits).not.toContain("/index.html (raw): data: URI asset");
     }
+  });
+
+  // 06.4.1-REVIEW WR-01 (sixth pass): parse5 still uses the old "in select"
+  // insertion mode and drops every tag inside a <select> except option,
+  // optgroup, input, script and template, so the serialized view holds an
+  // empty select. Chrome's relaxed select parsing keeps the img, div and link
+  // as elements and loads them (reviewer-verified in Chrome 158). Only the raw
+  // view sees them.
+  it("the raw scan catches assets jsdom drops from inside a <select> but browsers load", async () => {
+    const poc =
+      '<select aria-hidden="true" style="display:none"><img src=stars.png>' +
+      '<div style="background:url(stars.jpg)"></div>' +
+      "<link rel=stylesheet href=//cdn.example/x.css></select>\n" +
+      '    <main id="sandbox">';
+    const html = indexHtml.replace('<main id="sandbox">', poc);
+    expect(html).not.toBe(indexHtml);
+    const stripped = await stripIconLink(html);
+    expect(stripped.serialized).toContain(
+      '<select aria-hidden="true" style="display:none"></select>',
+    );
+    const hits = scan(strippedSources("/index.html", stripped));
+    for (const name of [
+      "img tag",
+      "CSS url() reference",
+      "image, audio or font file extension",
+      "remote URL in markup or CSS",
+    ]) {
+      expect(hits, name).toContain(`/index.html (raw): ${name}`);
+    }
+    expect(hits.filter((h) => h.startsWith("/index.html (serialized)"))).toEqual([]);
   });
 
   it("a noscript element is rejected (jsdom parses with scripting off, browsers with it on)", async () => {
@@ -991,8 +1072,10 @@ describe("procedural favicon carve-out (06.4.1; RND-01)", () => {
 
   it("a non-icon apple-touch-icon link is left for the pattern scan to catch", async () => {
     const html = `${iconLink(GOOD_SVG)}\n<link rel="apple-touch-icon" href="icon.png">`;
-    const hits = scan({ "/x.html": await stripIconLink(html) });
-    expect(hits).toContain("/x.html: icon link");
-    expect(hits).toContain("/x.html: image, audio or font file extension");
+    const hits = scan(strippedSources("/x.html", await stripIconLink(html)));
+    for (const view of ["serialized", "raw"]) {
+      expect(hits).toContain(`/x.html (${view}): icon link`);
+      expect(hits).toContain(`/x.html (${view}): image, audio or font file extension`);
+    }
   });
 });
