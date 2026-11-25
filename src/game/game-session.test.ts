@@ -1751,6 +1751,9 @@ describe("GameSession isBallOnPlunger (06.4.1.1 D-02, D-04)", () => {
  * spy ball sits at SPAWN, inside PLUNGER_ZONE, with vx 0 unless a case moves it.
  */
 describe("GameSession isBallOnPlunger settle window (06.4.1.1 D-10, CR-01)", () => {
+  /** The longest bounce-apex rest window in the 06.4.1.1-REVIEW CR-01 trace, in ticks. */
+  const CR01_MAX_APEX_TICKS = 3;
+
   /** A started game with the served spy ball at rest at SPAWN. */
   function servedAtSpawn(options: GameSessionOptions = NO_SAVE): Rig {
     const r = makeRig(options);
@@ -1790,17 +1793,27 @@ describe("GameSession isBallOnPlunger settle window (06.4.1.1 D-10, CR-01)", () 
     expect(r.session.isBallOnPlunger()).toBe(true);
   });
 
-  it("apex windows: 20 rest windows of PLUNGER_HINT_SETTLE_STEPS - 1 ticks never read true (D-10)", () => {
+  it("apex windows: 20 rest windows of PLUNGER_HINT_SETTLE_STEPS - 1 ticks, and of the CR-01 apex length, never read true (D-10)", () => {
     const r = servedAtSpawn();
-    for (let cycle = 0; cycle < 20; cycle++) {
-      r.setBallVx(0);
-      for (let i = 0; i < PLUNGER_HINT_SETTLE_STEPS - 1; i++) {
+    // The window's own edge, then the longest bounce apex on the real table
+    // (06.4.1.1-REVIEW CR-01 trace: 3 resting ticks), which pins the settle
+    // window above the apex length independent of the constant's value.
+    for (const restTicks of [PLUNGER_HINT_SETTLE_STEPS - 1, CR01_MAX_APEX_TICKS]) {
+      for (let cycle = 0; cycle < 20; cycle++) {
+        r.setBallVx(0);
+        for (let i = 0; i < restTicks; i++) {
+          r.tick(1);
+          expect(
+            r.session.isBallOnPlunger(),
+            `window ${restTicks} cycle ${cycle} rest tick ${i}`,
+          ).toBe(false);
+        }
+        r.setBallVx(1);
         r.tick(1);
-        expect(r.session.isBallOnPlunger(), `cycle ${cycle} rest tick ${i}`).toBe(false);
+        expect(r.session.isBallOnPlunger(), `window ${restTicks} cycle ${cycle} moving tick`).toBe(
+          false,
+        );
       }
-      r.setBallVx(1);
-      r.tick(1);
-      expect(r.session.isBallOnPlunger(), `cycle ${cycle} moving tick`).toBe(false);
     }
   });
 
