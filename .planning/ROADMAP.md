@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 06.3: Fix slingshot deflection on flipper-root shots** (completed 2026-11-24)
 - [x] **Phase 06.4: Address tech debt: narrow-viewport HUD, sling face rim, D-13 wording** (completed 2026-11-24)
 - [x] **Phase 06.4.1: Address tech debt: bar-mode control hints, HUD status min-width, favicon** (completed 2026-11-24)
-- [ ] **Phase 06.4.1.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify**
+- [x] **Phase 06.4.1.1: Address tech debt: ready-only bar hint, 11px type, 06.4.1 re-verify** (completed 2026-11-25)
 
 ## Phase Details
 
@@ -388,7 +388,7 @@ Plans:
 **Goal:** On a narrow window the bar hint "Hold Space to launch · ← → flip" shows only while the ball in play rests on the plunger (including while Space is held) and no status shows, on every serve. A read-only `GameSession.isBallOnPlunger()` getter drives a `data-ready` attribute that HudView writes on change; the `:empty` coupling is gone and the bar keeps one height. No font-size below 12 px remains in `index.html`, guarded by a test. Phase 06.4.1's VERIFICATION, SECURITY and VALIDATION are re-run at HEAD and name jsdom 31.0.1 and the current favicon gate, with the user-approved overrides. `src/physics`, `src/table`, `src/control`, package.json and the lockfile stay byte-identical; determinism replays stay bit-identical. Source: `.planning/v1.0-MILESTONE-AUDIT.md` tech debt items 1-3; decisions in `06.4.1.1-CONTEXT.md`.
 **Requirements**: TBD
 **Depends on:** Phase 06.4.1
-**Plans:** 7/7 plans executed (4 waves + gap closure)
+**Plans:** 7/7 plans complete (4 waves + gap closure)
 
 Plans:
 **Wave 1**
